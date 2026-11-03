@@ -22,9 +22,10 @@ import { useT } from '../lib/i18n'
  * hiding it: a missing control invites the question, a greyed one answers it.
  */
 export default function ThinkingLevelSlider({
-  value, pinned, supported = true, onChange, compact = false,
+  value, pinned, supported = true, onChange, compact = false, options,
 }: {
   value: ThinkingLevel
+  options?: ThinkingLevel[]
   /** The owner's own choice vs. the inherited global default — the default is
    *  drawn dimmer, so a picker full of models reads as "these two I've set". */
   pinned?: boolean
@@ -38,7 +39,9 @@ export default function ThinkingLevelSlider({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ right: number; bottom: number } | null>(null)
-  const idx = Math.max(0, THINKING_LEVELS.indexOf(value))
+  const levels = options?.length ? options : THINKING_LEVELS
+  const idx = Math.max(0, levels.indexOf(value))
+  const label = (t.thinkingLevel.names as Record<string, string>)[value] ?? value
   const tint = supported
     ? (pinned ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-bright)')
     : 'var(--hb-icon-dim)'
@@ -64,11 +67,11 @@ export default function ThinkingLevelSlider({
       <button
         ref={buttonRef}
         type="button"
-        disabled={!supported}
+        disabled={!supported || levels.length < 2}
         onClick={toggle}
         className="hb-glass-xs"
         title={supported
-          ? t.thinkingLevel.hint(t.thinkingLevel.names[value], pinned ? t.thinkingLevel.pinned : t.thinkingLevel.inherited)
+          ? t.thinkingLevel.hint(label, pinned ? t.thinkingLevel.pinned : t.thinkingLevel.inherited)
           : t.thinkingLevel.unsupported}
         aria-expanded={open}
         style={{
@@ -80,7 +83,7 @@ export default function ThinkingLevelSlider({
       >
         <span>{t.thinkingLevel.label}</span>
         <span style={{ color: supported ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)' }}>
-          {supported ? t.thinkingLevel.names[value] : t.thinkingLevel.na}
+          {supported ? label : t.thinkingLevel.na}
         </span>
       </button>
       {open && pos && createPortal(
@@ -88,7 +91,7 @@ export default function ThinkingLevelSlider({
           position: 'fixed', right: pos.right, bottom: pos.bottom, zIndex: 9952,
           padding: '0.65rem 0.75rem', animation: 'dropDown 0.12s ease',
         }}>
-          <ThinkingLevelSlider value={value} pinned={pinned} supported={supported} onChange={onChange} />
+          <ThinkingLevelSlider value={value} pinned={pinned} supported={supported} options={options} onChange={onChange} />
         </div>,
         document.body,
       )}
@@ -99,22 +102,22 @@ export default function ThinkingLevelSlider({
     <div
       style={{ display: 'flex', alignItems: 'center', gap: compact ? '0.4rem' : '0.55rem' }}
       title={supported
-        ? t.thinkingLevel.hint(t.thinkingLevel.names[value], pinned ? t.thinkingLevel.pinned : t.thinkingLevel.inherited)
+        ? t.thinkingLevel.hint(label, pinned ? t.thinkingLevel.pinned : t.thinkingLevel.inherited)
         : t.thinkingLevel.unsupported}
     >
       <div style={{ position: 'relative', width: 150, height: 28, opacity: supported ? 1 : 0.4 }}>
         <input
           className="thinking-range"
-          type="range" min={0} max={THINKING_LEVELS.length - 1} step={1}
-          value={idx} disabled={!supported}
+          type="range" min={0} max={Math.max(1, levels.length - 1)} step={1}
+          value={idx} disabled={!supported || levels.length < 2}
           aria-label={t.thinkingLevel.label}
-          onChange={event => onChange(THINKING_LEVELS[Number(event.target.value)])}
+          onChange={event => onChange(levels[Number(event.target.value)])}
           style={{
-            background: `linear-gradient(to right, ${tint} 0%, ${tint} ${(idx / (THINKING_LEVELS.length - 1)) * 100}%, rgba(var(--hb-accent-rgb),0.18) ${(idx / (THINKING_LEVELS.length - 1)) * 100}%, rgba(var(--hb-accent-rgb),0.18) 100%)`,
+            background: `linear-gradient(to right, ${tint} 0%, ${tint} ${(idx / Math.max(1, levels.length - 1)) * 100}%, rgba(var(--hb-accent-rgb),0.18) ${(idx / Math.max(1, levels.length - 1)) * 100}%, rgba(var(--hb-accent-rgb),0.18) 100%)`,
           }}
         />
         <div className="thinking-range-ticks" aria-hidden="true">
-          {THINKING_LEVELS.map(level => <i key={level} />)}
+          {levels.map(level => <i key={level} />)}
         </div>
       </div>
       <span style={{
@@ -123,7 +126,7 @@ export default function ThinkingLevelSlider({
         color: supported ? tint : 'var(--hb-icon-dim)',
         minWidth: compact ? 30 : 38, userSelect: 'none',
       }}>
-        {supported ? t.thinkingLevel.names[value] : t.thinkingLevel.na}
+        {supported ? label : t.thinkingLevel.na}
       </span>
     </div>
   )

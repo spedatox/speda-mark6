@@ -594,9 +594,9 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
   )
 }
 
-function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned, thinkingSupported, onThinking, onAttach, onToggleBudget, onVoice, onLanguage }: {
+function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned, thinkingSupported, thinkingOptions, onThinking, onAttach, onToggleBudget, onVoice, onLanguage }: {
   budget: boolean; listening: boolean; language: Locale
-  thinking: ThinkingLevel; thinkingPinned?: boolean; thinkingSupported: boolean
+  thinking: ThinkingLevel; thinkingPinned?: boolean; thinkingSupported: boolean; thinkingOptions?: ThinkingLevel[]
   onThinking: (level: ThinkingLevel) => void
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
   onLanguage: (next: Locale) => void
@@ -710,12 +710,12 @@ function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned
             onClick={() => onLanguage(LOCALES.find(l => l.value !== language)?.value ?? 'en')}
           />
           <MenuRow icon={<span style={{ fontSize: '0.72rem' }}>◇</span>} label={t.thinkingLevel.label}
-            value={thinkingSupported ? t.thinkingLevel.names[thinking] : t.thinkingLevel.na}
+            value={thinkingSupported ? ((t.thinkingLevel.names as Record<string, string>)[thinking] ?? thinking) : t.thinkingLevel.na}
             valueColor={thinkingSupported ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)'}
             onClick={() => thinkingSupported && setThinkingOpen(v => !v)} />
           {thinkingOpen && thinkingSupported && (
             <div style={{ padding: '0.55rem 0.85rem 0.7rem', borderTop: '1px solid rgba(var(--hb-accent-rgb),0.12)' }}>
-              <ThinkingLevelSlider value={thinking} pinned={thinkingPinned} supported onChange={onThinking} />
+              <ThinkingLevelSlider value={thinking} pinned={thinkingPinned} supported options={thinkingOptions} onChange={onThinking} />
             </div>
           )}
           {/* Available while streaming too — that is when barge-in happens. */}
@@ -810,7 +810,7 @@ export default function InputBar({
   // forever no matter how many times it was set — the write reaching the server
   // each time, invisibly.
   const [thinkingSet, setThinkingSet] = useState<Record<string, ThinkingLevel>>({})
-  const activeThinking = thinkingSet[settings.model] ?? activeModel?.thinking ?? 'medium'
+  const activeThinking = thinkingSet[settings.model] ?? activeModel?.thinking ?? 'default'
   const activePinned = settings.model in thinkingSet || activeModel?.thinking_pinned
 
   const setThinking = useCallback((modelId: string, level: ThinkingLevel) => {
@@ -822,7 +822,18 @@ export default function InputBar({
     setThinkingSet(prev => ({ ...prev, [modelId]: level }))
     setModels(prev => prev.map(m =>
       m.id === modelId ? { ...m, thinking: level, thinking_pinned: true } : m))
-    setModelThinking(config, modelId, level).catch(() => {})
+    setModelThinking(config, modelId, level).then(ack => {
+      if (ack) {
+        setThinkingSet(prev => ({ ...prev, [modelId]: ack.thinking }))
+        return
+      }
+      setThinkingSet(prev => {
+        const next = { ...prev }
+        if (next[modelId] === level) delete next[modelId]
+        return next
+      })
+      fetchModels(config).then(setModels).catch(() => {})
+    })
   }, [config])
   // The voice catalogue is a separate call: Azure's list is a live per-region
   // lookup that can fail on its own, and a slow or dead voice endpoint must not
@@ -1177,6 +1188,7 @@ export default function InputBar({
                   thinking={activeThinking}
                   thinkingPinned={activePinned}
                   thinkingSupported={activeModel?.thinking_supported !== false}
+                  thinkingOptions={activeModel?.thinking_options}
                   onThinking={lvl => setThinking(settings.model, lvl)}
                   onAttach={() => fileInputRef.current?.click()}
                   onToggleBudget={toggleBudget}
@@ -1241,7 +1253,7 @@ export default function InputBar({
                   such a model explains why the control went dead instead of
                   silently removing it from the row. */}
               {!isMobile && <ThinkingLevelSlider compact value={activeThinking} pinned={activePinned}
-                supported={activeModel?.thinking_supported !== false}
+                supported={activeModel?.thinking_supported !== false} options={activeModel?.thinking_options}
                 onChange={lvl => setThinking(settings.model, lvl)} />}
               <ModelPicker
                 models={models}

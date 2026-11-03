@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import FormSelect from './FormSelect'
 import { useCallback, useEffect, useState } from 'react'
 import {
   getHouseParty, setHouseParty, getLockdown, standDownLockdown,
@@ -318,12 +319,12 @@ export default function ProtocolsTab({ config, onEngageLockdown }: {
         <Readout title={t.protocolsTab.restoreBackup}>
           <div style={{ fontSize: '0.8125rem', lineHeight: 1.6 }}>{t.protocolsTab.restoreHint}</div>
           {archiveError && <div>{t.protocolsTab.restoreListFailed}</div>}
-          <select aria-label={t.protocolsTab.restoreBackup} value={selected}
+          <FormSelect aria-label={t.protocolsTab.restoreBackup} value={selected}
             disabled={restoring || backing || confirmRestore || archives.length === 0}
-            onChange={e => setSelected(e.target.value)}
+            onValueChange={value => setSelected(value)}
             style={{ width: '100%', padding: 8, color: 'var(--hb-text)', background: 'var(--hb-bg)' }}>
             {archives.map(f => <option key={f.id} value={f.id}>{f.name} · {f.mb} MB · {f.created}</option>)}
-          </select>
+          </FormSelect>
           {confirmRestore ? (
             <>
               <div style={{ color: '#e5897c', lineHeight: 1.6 }}>

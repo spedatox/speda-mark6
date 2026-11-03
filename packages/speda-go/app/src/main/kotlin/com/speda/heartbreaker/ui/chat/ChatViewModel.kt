@@ -18,6 +18,12 @@ import com.speda.heartbreaker.domain.Role
 import com.speda.heartbreaker.domain.UploadedFile
 import com.speda.heartbreaker.domain.Watchdog
 import com.speda.heartbreaker.domain.reduce
+import com.speda.heartbreaker.domain.*
+import com.speda.heartbreaker.data.watchSessionWorkers
+import com.speda.heartbreaker.data.WorkerCard
+import com.speda.heartbreaker.data.ApiFailure
+import com.speda.heartbreaker.data.ClientContext
+import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.i18n.AppStrings
 import com.speda.heartbreaker.i18n.Tr
 import kotlinx.collections.immutable.toPersistentList
@@ -42,6 +48,8 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
 import java.util.UUID
 
 /**
@@ -63,6 +71,37 @@ class ChatViewModel(
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
+    private val protocolJson = Json { ignoreUnknownKeys = true }
+    private var viewEpoch = 0L
+    private val _viewScope = MutableStateFlow(0L)
+    val viewScope = _viewScope.asStateFlow()
+    private var sessionLoadJob: Job? = null
+    private var roomJob: Job? = null
+    private var workerFeedJob: Job? = null
+    private var feedSession: Int? = null
+    private val _roomError = MutableStateFlow<String?>(null)
+    val roomError = _roomError.asStateFlow()
+    private val _roomConnection = MutableStateFlow<String?>(null)
+    val roomConnection = _roomConnection.asStateFlow()
+    private val _workerStatus = MutableStateFlow<String?>(null)
+    val workerStatus = _workerStatus.asStateFlow()
+    private val _membershipBusy = MutableStateFlow(false)
+    val membershipBusy = _membershipBusy.asStateFlow()
+    var canvasEnabled = true
+    var canvasMaxPanels = 10
+    private val steering by lazy {
+        LiveSteering(viewModelScope,
+            target = {
+                val cfg = state.value.config
+                val rid = runId
+                if (cfg == null || rid == null || !state.value.isStreaming) null else SteeringTarget(cfg, rid,
+                    state.value.activeSessionId, state.value.messages.lastOrNull { it.isStreaming && it.coordinationStepId != null }?.coordinationStepId, viewEpoch)
+            },
+            sameView = { it.view == viewEpoch && it.config == state.value.config && it.sessionId == state.value.activeSessionId },
+            send = { source, text, id -> api.steerRun(source.config, source.requestId, text, id, source.stepId) },
+            accepted = { source, text, id -> dispatch(ChatAction.AddUserMessage(ChatMessage("steering:$id", Role.User, text, sessionId = source.sessionId))) },
+            notice = { _roomError.value = it })
+    }
 
     /* ── Voice ───────────────────────────────────────────────────────────────
      * Whether replies are SPOKEN. It rides here rather than in [ChatState]
@@ -89,6 +128,8 @@ class ChatViewModel(
     /** The speaker for the turn in flight. One per turn: it holds the fence
      *  state of the reply it is filtering, so it can never be reused. */
     private var speaker: VoiceSpeaker? = null
+    private val speechChain = mutableSetOf<VoiceSpeaker>()
+    private var spokenStep: String? = null
     private data class VoiceRecording(val text: String, val clips: List<ByteArray>)
     private val voiceRecordings = linkedMapOf<String, VoiceRecording>()
 
@@ -113,13 +154,14 @@ class ChatViewModel(
         stopSpeaking()
         val recording = voiceRecordings[messageId]?.takeIf { it.text == message.content }
         speaker = VoiceSpeaker(
-            api, cfg, cfg.agentId, viewModelScope, levels.sessionId,
+            api, cfg, message.speaker ?: cfg.agentId, viewModelScope, levels.sessionId,
             replayAudio = recording?.clips,
             onRecording = { text, clips -> rememberVoice(messageId, text, clips) },
         ) { st ->
             _voiceState.value = st
             if (st == VoiceSpeaker.State.IDLE) levels.stop()
         }
+        speaker?.let { speechChain.add(it) }
         levels.start()
         _voiceState.value = if (recording == null) VoiceSpeaker.State.THINKING else VoiceSpeaker.State.SPEAKING
         if (recording == null) {
@@ -136,10 +178,31 @@ class ChatViewModel(
 
     /** Cut playback without leaving voice mode — the owner has heard enough. */
     fun stopSpeaking() {
-        speaker?.stop()
+        (speechChain.toList() + listOfNotNull(speaker)).distinct().forEach { it.stop() }
+        speechChain.clear()
         speaker = null
+        spokenStep = null
         levels.stop()
         _voiceState.value = VoiceSpeaker.State.IDLE
+    }
+
+    private fun roomSpeaker(step: String?, agentId: String, cfg: AppConfig) {
+        if (!_voiceOn.value || spokenStep == step && speaker != null) return
+        val previous = speaker
+        previous?.finish()
+        var slot: VoiceSpeaker? = null
+        slot = VoiceSpeaker(api, cfg, agentId, viewModelScope, levels.sessionId,
+            onRecording = { text, clips -> rememberVoice("coord:$step", text, clips) },
+            waitForPlayback = { previous?.awaitPlayback() }) { st ->
+            if (st == VoiceSpeaker.State.IDLE) speechChain.remove(slot)
+            if (st != VoiceSpeaker.State.IDLE || speaker === slot) {
+                _voiceState.value = st
+                if (st == VoiceSpeaker.State.IDLE) levels.stop() else levels.start()
+            }
+        }
+        speaker = slot
+        speechChain.add(slot)
+        spokenStep = step
     }
 
     /**
@@ -230,6 +293,8 @@ class ChatViewModel(
     /** Point the engine at an agent. Cancels any in-flight turn and reloads. */
     fun onConfig(config: AppConfig) {
         if (state.value.config == config) return
+        leaveView()
+        steering.reset()
         stopSpeaking()
         val previous = state.value.config
         if (previous?.apiBase != config.apiBase || previous?.apiKey != config.apiKey) voiceRecordings.clear()
@@ -245,6 +310,7 @@ class ChatViewModel(
 
     /** [projectId] binds the new chat to a project; null starts a loose one. */
     fun newChat(projectId: Int? = null) {
+        leaveView()
         stopSpeaking()
         activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
@@ -278,7 +344,11 @@ class ChatViewModel(
 
     fun selectSession(sessionId: Int, projectId: Int? = null) {
         val cfg = state.value.config ?: return
-        if (sessionId != state.value.activeSessionId) stopSpeaking()
+        if (sessionId == state.value.activeSessionId) return
+        stopSpeaking()
+        leaveView()
+        val epoch = viewEpoch
+        dispatch(ChatAction.SelectSession(sessionId, emptyList(), projectId))
         activeRunsWatcherJob?.cancel()
         reattachJob?.cancel()
         // Abort-on-switch: if a local send is streaming for ANOTHER session, drop
@@ -298,16 +368,22 @@ class ChatViewModel(
             if (rid != null) attached.remove(rid)
             sendJob?.cancel(); runId = null; turnSessionId = null; turnOriginSessionId = null; turnInFlight = false
         }
-        viewModelScope.launch {
-            val server = api.fetchMessages(cfg, sessionId)
-            val messages = if (server.isNotEmpty()) {
+        sessionLoadJob = viewModelScope.launch {
+            val messages = try {
+                val server = api.fetchMessages(cfg, sessionId)
+                if (viewEpoch != epoch || state.value.config != cfg) return@launch
                 cache.save(cfg.agentId, sessionId, server)
                 server
-            } else {
-                cache.load(cfg.agentId, sessionId) ?: emptyList()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (viewEpoch != epoch || state.value.config != cfg) return@launch
+                _roomConnection.value = error.message
+                if (error is ApiFailure && !error.retryable) emptyList() else cache.load(cfg.agentId, sessionId) ?: emptyList()
             }
+            if (viewEpoch != epoch || state.value.config != cfg) return@launch
             dispatch(ChatAction.SelectSession(sessionId, messages, projectId))
             startActiveRunsWatcher(sessionId, cfg)
+            startSessionFeeds(sessionId, cfg)
         }
     }
 
@@ -337,9 +413,18 @@ class ChatViewModel(
 
     // ── Send / stop ────────────────────────────────────────────────────────────
 
-    fun send(text: String, opts: IgorApi.StreamOpts = IgorApi.StreamOpts()) {
-        val cfg = state.value.config ?: return
-        if (state.value.isStreaming) return
+    fun send(text: String, opts: IgorApi.StreamOpts = IgorApi.StreamOpts()): Boolean {
+        val cfg = state.value.config ?: return false
+        if (state.value.isStreaming) return false
+        val targets = Regex("(?<![\\p{L}\\p{N}_])@([\\p{L}]+)").findAll(text).map { canonicalRoomAgent(it.groupValues[1].lowercase()) }
+            .filter { id -> Brands.ROSTER.map(::canonicalRoomAgent).contains(id) }.distinct().toList()
+        if (targets.size > 1) { _roomError.value = "Address one participant per message."; return false }
+        val target = opts.addressedAgentId ?: targets.firstOrNull()
+        if (target != null && target !in (state.value.room?.members ?: listOf(canonicalRoomAgent(cfg.agentId)))) {
+            _roomError.value = "Summon this participant before addressing them."; return false
+        }
+        _roomError.value = null
+        val projectAtSend = state.value.activeProjectId
         userStopped = false
 
         if (!opts.regenerate) {
@@ -385,15 +470,17 @@ class ChatViewModel(
         myJob = viewModelScope.launch {
             try {
                 // Resolve ambient context (platform + opt-in location) for THIS turn.
-                val cc = runCatching { clientContextProvider?.invoke() }.getOrNull()
-                val sendOpts = (if (cc != null) opts.copy(clientContext = cc) else opts)
+                val cc = try { clientContextProvider?.invoke() } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null } ?: opts.clientContext ?: ClientContext("android", "Android", "", "", "", voice = _voiceOn.value)
+                val sendOpts = opts.copy(clientContext = cc, addressedAgentId = target,
+                    canvas = _voiceOn.value && canvasEnabled, canvasMaxPanels = canvasMaxPanels)
                     // The workspace this chat belongs to. Only read by the backend
                     // on the turn that CREATES the session — a chat's project is
                     // fixed at birth — so sending it every turn is harmless, and
                     // means a chat started from a project is bound the moment it
                     // exists. Read from the STORE, never from the caller, so one
                     // path decides which workspace a turn is written into.
-                    .copy(requestId = requestId, projectId = state.value.activeProjectId)
+                    .copy(requestId = requestId, projectId = projectAtSend)
                 collectStream(
                     flow = api.streamChat(if (opts.regenerate) "" else text, sessionAtSend, cfg, sendOpts),
                     assistantId = assistantId,
@@ -417,7 +504,96 @@ class ChatViewModel(
             }
         }
         sendJob = myJob
+        return true
     }
+
+    private fun leaveView() {
+        viewEpoch++
+        _viewScope.value = viewEpoch
+        sessionLoadJob?.cancel(); roomJob?.cancel(); workerFeedJob?.cancel()
+        feedSession = null
+        _roomError.value = null; _workerStatus.value = null
+        _roomConnection.value = null
+        _membershipBusy.value = false
+    }
+
+    private fun startSessionFeeds(sessionId: Int, cfg: AppConfig) {
+        if (feedSession == sessionId && workerFeedJob?.isActive == true) return
+        roomJob?.cancel(); workerFeedJob?.cancel()
+        feedSession = sessionId
+        val epoch = viewEpoch
+        fun current() = viewEpoch == epoch && state.value.config == cfg && state.value.activeSessionId == sessionId
+        roomJob = viewModelScope.launch {
+            var cursor = 0L
+            var room: RoomInfo? = null
+            while (isActive && current()) {
+                try {
+                    room = room ?: api.fetchSessionRoom(cfg, sessionId)
+                    val bound = room
+                    if (bound != null) {
+                        val page = api.fetchRoomEvents(cfg, bound.id, cursor)
+                        if (!current()) return@launch
+                        dispatch(ChatAction.SetRoom(page.room, sessionId))
+                        // Raw Coordinator events include private consultations. Only membership notices belong here.
+                        page.events.filter { it.kind == "membership" }.forEach { dispatch(ChatAction.RoomFrame(it, "", sessionId)) }
+                        cursor = page.nextCursor
+                        _roomConnection.value = null
+                        if (page.events.size == 200) continue
+                    }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { if (current()) _roomConnection.value = error.message }
+                delay(2500)
+            }
+        }
+        workerFeedJob = viewModelScope.launch {
+            val pending = linkedMapOf<String, WorkerCard>()
+            fun flush() {
+                if (!current()) return
+                pending.entries.toList().forEach { (id, card) ->
+                    val found = state.value.messages.any { it.id == card.parentMessage || it.coordinationStepId == card.parentStep }
+                    if (found || card.parentMessage == null) {
+                        dispatch(ChatAction.WorkerSnapshot(sessionId, card.parentStep, card.parentMessage, card.run, card.parentMessage == null))
+                        pending.remove(id)
+                    }
+                }
+            }
+            val flusher = launch { while (isActive) { delay(16); flush() } }
+            try {
+                watchSessionWorkers({ api.snapshotSessionWorkers(cfg, sessionId) }, { api.attachSessionWorkers(cfg, sessionId, it) }, ::current,
+                    { card ->
+                        val id = card.run.executionId ?: card.run.id
+                        pending[id] = card
+                        if (pending.size > 128) throw ApiFailure("Reload history to recover more worker activity.", false)
+                    }, { if (current()) _workerStatus.value = it })
+            } finally { flusher.cancel(); flush() }
+        }
+    }
+
+    fun changeMember(action: String, agentId: String) {
+        if (_membershipBusy.value || state.value.isStreaming) return
+        val cfg = state.value.config ?: return
+        val room = state.value.room ?: return
+        val sid = state.value.activeSessionId ?: return
+        val epoch = viewEpoch
+        _membershipBusy.value = true
+        viewModelScope.launch {
+            try {
+                val next = api.changeRoomMember(cfg, room, action, agentId)
+                if (epoch == viewEpoch) { dispatch(ChatAction.SetRoom(next, sid)); _roomError.value = null }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (epoch == viewEpoch) _roomError.value = error.message
+                // Refresh a stale version; never automatically replay a membership write.
+                try {
+                    val next = api.fetchSessionRoom(cfg, sid)
+                    if (next != null && epoch == viewEpoch) dispatch(ChatAction.SetRoom(next, sid))
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { /* Retain the original write failure. */ }
+            } finally { if (epoch == viewEpoch) _membershipBusy.value = false }
+        }
+    }
+
+    suspend fun steer(text: String): Boolean = steering.submit(text)
 
     // ── Message actions (delete / regenerate / edit-and-resend) ─────────────────
 
@@ -435,10 +611,9 @@ class ChatViewModel(
         if (st.isStreaming) return
         val idx = st.messages.indexOfFirst { it.id == assistantId }
         if (idx <= 0) return
-        val userMsg = st.messages.getOrNull(idx - 1) ?: return
-        if (userMsg.role != Role.User) return
+        if (st.messages.take(idx).none { it.role == Role.User }) return
         dispatch(ChatAction.TruncateFrom(assistantId))
-        send("", defaultOpts.copy(keepMessages = idx, regenerate = true))
+        send("", defaultOpts.copy(keepMessages = historyMessageCount(st.messages.take(idx)), regenerate = true))
     }
 
     /**
@@ -452,7 +627,7 @@ class ChatViewModel(
         val idx = st.messages.indexOfFirst { it.id == userId }
         if (idx < 0) return
         dispatch(ChatAction.TruncateFrom(userId))
-        send(newContent, defaultOpts.copy(keepMessages = idx))
+        send(newContent, defaultOpts.copy(keepMessages = historyMessageCount(st.messages.take(idx))))
     }
 
     /** Cancel the detached run on the backend, then abort the local fetch. */
@@ -471,6 +646,7 @@ class ChatViewModel(
     }
 
     override fun onCleared() {
+        leaveView()
         // Nothing keeps talking into a torn-down screen.
         stopSpeaking()
         activeRunsWatcherJob?.cancel()
@@ -598,6 +774,10 @@ class ChatViewModel(
         onDone: suspend (Int) -> Unit,
     ) = coroutineScope {
         val scope = this
+        val epoch = viewEpoch
+        val sourceConfig = state.value.config
+        var roomFormat = false
+        fun visible() = epoch == viewEpoch && state.value.config == sourceConfig
         val pending = StringBuilder()
         var charsSoFar = 0
         var settled = false
@@ -625,16 +805,15 @@ class ChatViewModel(
             val c = pending.toString()
             pending.setLength(0)
             charsSoFar += c.length
-            dispatch(ChatAction.AppendChunk(assistantId, c))
+            if (visible()) dispatch(ChatAction.AppendChunk(assistantId, c))
         }
 
         val flusher = launch { while (isActive) { delay(16); flush() } }
 
-        val watchdog = if (watchdogModel != null) launch {
-            val model = Watchdog.modelLabel(watchdogModel, strings)
+        val watchdog = launch {
+            val model = Watchdog.modelLabel(watchdogModel.orEmpty(), strings)
             while (isActive) {
                 delay(Watchdog.TICK_MS)
-                if (gotContent) continue // tokens flowing — the cursor is the status now
                 val idle = System.currentTimeMillis() - lastActivity
                 if (idle >= streamDeadMillis) {
                     timedOut = true
@@ -644,26 +823,26 @@ class ChatViewModel(
                     dispatch(ChatAction.SetStatus(assistantId, Watchdog.stallStatus(model, Watchdog.elapsedSeconds(startedAt, System.currentTimeMillis()), strings)))
                 }
             }
-        } else {
-            null
         }
 
         var currentFlow = flow
         var reattachAttempts = 0
 
-        while (true) {
+        try { while (true) {
             try {
                 currentFlow.collect { event ->
+                    if (!visible()) return@collect
                     lastActivity = System.currentTimeMillis()
                     when (event.type) {
                         "start" -> {
                             gotStart = true
+                            roomFormat = (event.data as? JsonObject)?.get("room")?.let { it !is JsonNull } == true
                             stopSpeaking()
                             // A fresh speaker per turn: it carries the fence
                             // state of the reply it filters, so reusing one
                             // would have it judging turn N+1 against whether
                             // turn N ended inside a code block.
-                            if (_voiceOn.value) {
+                            if (_voiceOn.value && !roomFormat) {
                                 val cfg = state.value.config
                                 if (cfg != null) {
                                     // viewModelScope, NOT this turn's stream
@@ -689,14 +868,41 @@ class ChatViewModel(
                                     // enabled is a hardware effect held open
                                     // across an idle conversation.
                                     levels.start()
+                                    speaker?.let { speechChain.add(it) }
                                 }
                             }
                             runId = event.requestId
                             if (event.sessionId != 0) {
                                 turnSessionId = event.sessionId
                                 dispatch(ChatAction.TagMessageSession(assistantId, event.sessionId))
+                                (event.data as? JsonObject)?.get("room")?.takeUnless { it is JsonNull }?.let {
+                                    roomFormat = true
+                                    dispatch(ChatAction.SetRoom(protocolJson.decodeFromJsonElement<RoomInfo>(it), event.sessionId))
+                                }
+                                sourceConfig?.let {
+                                    startSessionFeeds(event.sessionId, it)
+                                    if (activeRunsWatcherJob?.isActive != true) startActiveRunsWatcher(event.sessionId, it)
+                                }
                             }
                             dispatch(ChatAction.SetStatus(assistantId, strings.chatMain.statusThinking))
+                        }
+                        "room_event" -> {
+                            roomFormat = true
+                            val roomEvent = protocolJson.decodeFromJsonElement<RoomEvent>(event.data)
+                            val sid = event.sessionId.takeIf { it != 0 } ?: turnSessionId ?: fallbackSessionId
+                            val prior = state.value.messages.firstOrNull { it.coordinationStepId == roomEvent.stepId && !it.isWorkerAnchor }
+                            val fresh = roomEvent.sequence > maxOf(prior?.roomEventSequence ?: 0, prior?.roomSequence ?: 0)
+                            if (roomEvent.kind == "speaker_started" && roomEvent.payload.roomText("mode") != "consult" && fresh) {
+                                sourceConfig?.let { roomSpeaker(roomEvent.stepId, roomEvent.speaker, it) }
+                            }
+                            dispatch(ChatAction.RoomFrame(roomEvent, assistantId, sid))
+                            if (fresh && roomEvent.kind == "delta") {
+                                gotContent = true
+                                sourceConfig?.let { roomSpeaker(roomEvent.stepId, roomEvent.speaker, it) }
+                                roomEvent.payload.roomText("text")?.let { speaker?.feed(it) }
+                            }
+                            if (roomEvent.kind == "tool") gotTool = true
+                            if (fresh && roomEvent.kind == "message") speaker?.finish()
                         }
                         // A model's reasoning, streamed as it's produced and
                         // never part of the answer. Display-only — see
@@ -744,7 +950,10 @@ class ChatViewModel(
                         // this turn. Goes to its own panel, never into `content`
                         // — see ChatAction.Subagent's doc for why.
                         "subagent" ->
-                            (event.data as? JsonObject)?.let { dispatch(ChatAction.Subagent(assistantId, it)) }
+                            (event.data as? JsonObject)?.let { data ->
+                                val parent = state.value.messages.lastOrNull { it.isStreaming && it.coordinationStepId != null }?.id ?: assistantId
+                                dispatch(ChatAction.Subagent(parent, data))
+                            }
                         // Speda armed a launch project. Unlike `house_party_auth`
                         // below, this one IS handled here: the phone draws the
                         // countdown, so the backend permits arming from it
@@ -771,7 +980,10 @@ class ChatViewModel(
                             // not, and cutting it here would clip the last
                             // sentence of every reply.
                             speaker?.finish()
+                            if (roomFormat && state.value.messages.firstOrNull { it.id == assistantId }?.content.isNullOrEmpty())
+                                dispatch(ChatAction.DeleteMessage(assistantId))
                             dispatch(ChatAction.FinishMessage(assistantId, event.sessionId))
+                            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(event.sessionId.takeIf { it != 0 } ?: turnSessionId ?: fallbackSessionId))
                             onDone(event.sessionId)
                         }
                         "error" -> {
@@ -779,19 +991,23 @@ class ChatViewModel(
                             // Nothing half-spoken survives a failed turn.
                             stopSpeaking()
                             dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: strings.chatMain.turnFailed))
+                            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, strOf(event.data) ?: strings.chatMain.turnFailed))
                         }
                     }
                 }
                 // Stream closed without a terminal — finalize so the bubble never sticks.
-                if (!settled) { flush(); settled = true; dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId)) }
+                if (!settled) throw java.io.IOException("Connection closed before the turn was confirmed")
                 break
             } catch (e: CancellationException) {
                 flush()
                 if (timedOut) {
+                    runId?.let { attached.remove(it) }
                     dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
+                    if (visible() && roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
                 } else if (userStopped) {
                     if (!settled) {
                         dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                        if (visible() && roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                     }
                 } else {
                     // View switch, agent switch, or background abort: backend turn is STILL running!
@@ -808,6 +1024,17 @@ class ChatViewModel(
                 // being unreachable, and let the transcript reload show it.
                 flush(); settled = true
                 dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                if (visible() && roomFormat) {
+                    val sid = turnSessionId ?: fallbackSessionId
+                    dispatch(ChatAction.FinishRoomTurn(sid))
+                    sourceConfig?.let { cfg ->
+                        try {
+                            val rows = api.fetchMessages(cfg, sid)
+                            if (visible() && state.value.activeSessionId == sid) dispatch(ChatAction.SelectSession(sid, rows))
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) { if (visible()) _roomConnection.value = error.message }
+                    }
+                }
                 break
             } catch (e: java.net.SocketException) {
                 if (reattach != null && reattachAttempts < streamReconnectAttempts) {
@@ -827,15 +1054,18 @@ class ChatViewModel(
                 if (stillRunning) {
                     if (liveId != null) attached.remove(liveId)
                     dispatch(ChatAction.DeleteMessage(assistantId))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else if (softLanding) {
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId, strings.chatMain.networkError))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, strings.chatMain.networkError))
                 }
                 break
             } catch (e: Exception) {
                 val msg = e.message.orEmpty()
-                val net = NET_ERROR.containsMatchIn(msg)
+                val net = NET_ERROR.containsMatchIn(msg) || e is java.io.IOException && (e !is ApiFailure || e.retryable)
                 if (net && reattach != null && reattachAttempts < streamReconnectAttempts) {
                     reattachAttempts++
                     gotContent = false; gotTool = false; thinkingStartedAt = null
@@ -858,21 +1088,23 @@ class ChatViewModel(
                 if (net && stillRunning) {
                     if (liveId != null) attached.remove(liveId)
                     dispatch(ChatAction.DeleteMessage(assistantId))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else if (net && softLanding) {
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else {
                     dispatch(ChatAction.ErrorMessage(assistantId,
                         if (net) strings.chatMain.networkError
                         else msg.ifEmpty { strings.chatMain.requestFailed }))
+                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId,
+                        if (net) strings.chatMain.networkError else msg.ifEmpty { strings.chatMain.requestFailed }))
                 }
                 break
             }
-        }
-        // The finally block below runs once, after the loop exits or the scope is cancelled.
-        try {
-            // no-op — the block below is the actual finally
-        } finally {
-            watchdog?.cancel(); flusher.cancel(); flush()
+        } } finally {
+            watchdog.cancel(); flusher.cancel(); flush()
+            if (visible() && roomFormat && !settled && !turnInFlight && state.value.isStreaming)
+                dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, strings.chatMain.networkError))
         }
     }
 

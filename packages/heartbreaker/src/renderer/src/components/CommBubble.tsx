@@ -8,7 +8,7 @@ import type { AgentCommEntry } from '../lib/api'
 import { attachLegionStream } from '../lib/api'
 import type { AppConfig, SubagentRun } from '../lib/types'
 import { foldLegionEvent } from '../lib/subagentFold'
-import { agentColor, fmtCommTime } from '../lib/agents'
+import { agentDisplayName, agentColor, fmtCommTime } from '../lib/agents'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
 
@@ -101,7 +101,7 @@ export function AvatarStack({ ids, size = 28, max = 5 }: {
       {shown.map((id, i) => (
         <span
           key={id}
-          title={id}
+          title={agentDisplayName(id)}
           className="hb-tile"
           style={{
             width: size, height: size, flexShrink: 0,
@@ -271,7 +271,7 @@ export function AgentSay({ id, commander, compact = false, head = true, badge, f
             fontSize: compact ? '0.78rem' : '0.8125rem', color: c,
             marginBottom: 4, fontWeight: 600, textTransform: 'capitalize',
           }}>
-            {id}
+            {agentDisplayName(id)}
           </div>
         )}
         <div
@@ -341,7 +341,7 @@ export function commMessages(entries: AgentCommEntry[]): CommMsg[] {
       key: `${e.id}:task`, agent: e.from_agent, text: e.task,
       at: started, seq: 0, outbound: true,
       party: e.protocol === 'house_party', broadcast: e.kind === 'broadcast',
-      copyText: result ? `${e.task}\n\n--- ${e.to_agent.toUpperCase()} ---\n${result}` : e.task,
+      copyText: result ? `${e.task}\n\n--- ${agentDisplayName(e.to_agent).toUpperCase()} ---\n${result}` : e.task,
     })
 
     if (e.status === 'running') {
@@ -510,7 +510,7 @@ export function LiveCommProgress({
         <span style={{ flex: 1 }} />
         <button
           onClick={handleOpenChat}
-          title={`Open ${agent}'s chat window`}
+          title={`Open ${agentDisplayName(agent)}'s chat window`}
           style={{
             display: 'flex',
             alignItems: 'center',

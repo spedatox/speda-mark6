@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { createContext, useContext } from 'react'
-import type { ChatMessage, Session, AppConfig } from '../lib/types'
+import { foldLegionEvent } from '../lib/subagentFold'
+import { mergeWorkerHistory, consolidateWorkerAnchors, upsertWorkerMessage } from '../lib/workerState'
+import type { ChatMessage, Session, AppConfig, SubagentRun } from '../lib/types'
 
 export interface TokenUsage {
   input: number
@@ -71,7 +73,8 @@ export type ChatAction =
   | { type: 'THINKING_DONE'; payload: { id: string; ms: number } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'REWIND_MESSAGE'; payload: { id: string; status: string } }
-  | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
+  | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number; stepId?: string } }
+  | { type: 'WORKER_SNAPSHOT'; payload: { id: string; sessionId: number; run: SubagentRun; parentStepId?: string; create?: boolean } }
   | { type: 'SET_MESSAGE_TRIGGER'; payload: { id: string; trigger: import('../lib/types').TriggerMeta } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
   | { type: 'SUBAGENT'; payload: { id: string; event: Record<string, unknown> } }
@@ -90,7 +93,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, config: action.payload }
 
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.payload, sessionsLoaded: true }
+      return { ...state, sessions: action.payload, sessionsLoaded: true,
+        activeProjectId: action.payload.find(s => s.id === state.activeSessionId)?.project_id ?? state.activeProjectId }
 
     case 'SESSIONS_LOADING':
       return { ...state, sessions: [], sessionsLoaded: false }
@@ -107,6 +111,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           !action.payload.messages.some(p => p.id === m.id)
       )
       const opened = state.sessions.find(s => s.id === action.payload.sessionId)
+      const anchors = state.activeSessionId === action.payload.sessionId ? state.messages.filter(message => message.isWorkerAnchor) : []
       return {
         ...state,
         activeSessionId: action.payload.sessionId,
@@ -114,7 +119,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         // and the header always name the workspace the transcript was written
         // in rather than whichever one happened to be open a moment ago.
         activeProjectId: action.payload.projectId ?? opened?.project_id ?? null,
-        messages: [...action.payload.messages, ...kept],
+        messages: consolidateWorkerAnchors([...mergeWorkerHistory(action.payload.messages, state.activeSessionId === action.payload.sessionId ? state.messages : []), ...kept, ...anchors]),
         isStreaming: kept.length > 0,
         tokenUsage: {
           input: opened?.tokens_in ?? 0,
@@ -127,9 +132,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         activeSessionId: state.activeSessionId ?? action.payload.sessionId,
-        messages: state.messages.map(m =>
-          m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId } : m
-        ),
+        messages: consolidateWorkerAnchors(state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId,
+            coordinationStepId: action.payload.stepId ?? m.coordinationStepId } : m
+        )),
       }
 
     // Provenance for a turn this client did not send — a background job
@@ -242,16 +248,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ),
       }
 
+    case 'WORKER_SNAPSHOT': {
+      if (state.activeSessionId !== action.payload.sessionId) return state
+      const { id, sessionId, run, parentStepId, create } = action.payload
+      return { ...state, messages: upsertWorkerMessage(state.messages, id, sessionId, run, parentStepId, create) }
+    }
+
     case 'SUBAGENT': {
       // One reducer case for every phase, because they all fold into the same
       // run keyed by id — several delegations can be in flight at once and
-      // their frames interleave.
-      const e = action.payload.event as {
-        id: string; agent?: string; label?: string; phase?: string
-        prompt?: string; text?: string; tool?: string; input?: unknown
-        result?: string; error?: string; report?: string; ok?: boolean
-        source?: 'legion' | 'peer' | 'forge'; tool_call_id?: string
-      }
+      // their frames interleave. The actual fold is shared with the Legion
+      // tray's standalone (message-less) background-run tracking — see
+      // lib/subagentFold.ts.
+      const e = action.payload.event as { id?: string }
       if (!e?.id) return state
       return {
         ...state,
@@ -259,38 +268,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (m.id !== action.payload.id) return m
           const runs = m.subagents ?? []
           const i = runs.findIndex(r => r.id === e.id)
-          const run: import('../lib/types').SubagentRun = i >= 0
-            ? { ...runs[i], steps: [...runs[i].steps] }
-            : { id: e.id, agent: e.agent ?? '', label: e.label ?? '',
-                running: true, steps: [], source: e.source }
-
-          if (e.source) run.source = e.source
-
-          if (e.phase === 'started') {
-            run.prompt = e.prompt
-            run.running = true
-          } else if (e.phase === 'text' && e.text) {
-            const last = run.steps[run.steps.length - 1]
-            // Coalesce streamed deltas into one step rather than one per token.
-            if (last?.kind === 'text') last.text = (last.text ?? '') + e.text
-            else run.steps.push({ kind: 'text', text: e.text })
-          } else if (e.phase === 'tool') {
-            if (e.tool_call_id) {
-              run.steps.push({ kind: 'tool', tool: e.tool, input: e.input, toolCallId: e.tool_call_id })
-            }
-          } else if (e.phase === 'tool_result') {
-            const k = e.tool_call_id
-              ? run.steps.findIndex(step => step.kind === 'tool' && step.toolCallId === e.tool_call_id)
-              : -1
-            if (k >= 0) {
-              run.steps[k] = { ...run.steps[k], result: e.error ?? e.result }
-            }
-          } else if (e.phase === 'finished') {
-            run.running = false
-            run.ok = e.ok !== false
-            run.report = e.report
-          }
-
+          const run = foldLegionEvent(i >= 0 ? runs[i] : null, action.payload.event)
           const next = i >= 0 ? runs.map((r, k) => (k === i ? run : r)) : [...runs, run]
           return { ...m, subagents: next }
         }),

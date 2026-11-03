@@ -29,16 +29,16 @@ object Brands {
     const val DEFAULT_AGENT = "speda"
 
     /** One entry per agent — verbatim from profile/brands.ts. */
-    val BRANDS: Map<String, Brand> = linkedMapOf(
+    val BRANDS: Map<String, Brand> = aliasMap(linkedMapOf(
         "speda" to Brand("speda", "Speda", "Mark VI", "Ahmet Erol", "Main Assistant", "S", "#36abca"),
         "ultron" to Brand("ultron", "Ultron", "Mark III", "Ahmet Erol", "Academy and Work Operations", "U", "#9e9e9e"),
         "scourge" to Brand("scourge", "Scourge", "Mark II", "Ahmet Erol", "Cyber Security & Threat Intelligence", "C", "#d8483c"),
         "sentinel" to Brand("sentinel", "Sentinel", "Mark II", "Ahmet Erol", "Finance & Budget Intelligence", "S", "#d99c44"),
         "atomix" to Brand("atomix", "Atomix", "Mark I", "Ahmet Erol", "Personal Health & Wellness", "A", "#3fae74"),
-        "nightcrawler" to Brand("nightcrawler", "NightCrawler", "Mark III", "Ahmet Erol", "OSINT & Web Surveillance", "N", "#9165e6"),
+        "nightcrawler" to Brand("nightcrawler", "Friday", "Mark III", "Ahmet Erol", "OSINT & Web Surveillance", "F", "#9165e6"),
         "optimus" to Brand("optimus", "Optimus", "Mark III", "Ahmet Erol", "Systems, Code & Infrastructure", "O", "#2f4f8f"),
         "orion" to Brand("orion", "Orion", "Mark I", "Ahmet Erol", "Mark VI Maintenance & Memory Custodian", "O", "#e0703a"),
-    )
+    ))
 
     /**
      * The House Party Protocol brand — deliberately NOT in [BRANDS] so it never
@@ -63,7 +63,7 @@ object Brands {
     /** Comms-UI accent per agent (lib/agents.ts AGENT_COLORS). Includes the
      *  broadcast/warroom amber which is not a switchable brand. */
     val AGENT_COLORS: Map<String, String> = mapOf(
-        "speda" to "#36abca", "sentinel" to "#d99c44", "nightcrawler" to "#9165e6",
+        "speda" to "#36abca", "sentinel" to "#d99c44", "nightcrawler" to "#9165e6", "friday" to "#9165e6",
         "ultron" to "#9e9e9e", "scourge" to "#d8483c", "atomix" to "#3fae74",
         "optimus" to "#2f4f8f", "orion" to "#e0703a", "all" to "#f2b75c", "warroom" to "#f2b75c",
     )
@@ -86,5 +86,11 @@ object Brands {
 
     fun agentColor(id: String): String = AGENT_COLORS[id] ?: "#5d7f8a"
 
-    fun monogram(id: String): String = id.take(2).uppercase()
+    fun monogram(id: String): String = (if (id == "nightcrawler" || id == "friday") "Friday" else id).take(2).uppercase()
+}
+
+/** Alias reads preserve the historical key and avoid duplicate enumeration. */
+internal fun <V> aliasMap(values: Map<String, V>): Map<String, V> = object : Map<String, V> by values {
+    override fun get(key: String): V? = values[if (key == "friday") "nightcrawler" else key]
+    override fun containsKey(key: String): Boolean = values.containsKey(if (key == "friday") "nightcrawler" else key)
 }

@@ -1,345 +1,86 @@
-// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { buildWidgetDocument, WIDGET_THEME_DEFAULTS } from '../lib/widgetDocument'
+import CodeBlock from './CodeBlock'
+import { useRenderSurface } from '../lib/renderSurface'
 
-import { useEffect, useRef, useState } from 'react'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+export default function WidgetFrame({ language, children }: { language: string; children: string }) {
+  const { canvas } = useRenderSurface()
+  const svgMinWidth = useMemo(() => {
+    if (!canvas || (language !== 'svg' && !children.trim().startsWith('<svg'))) return 0
+    const viewBox = /viewBox=["']\s*[\d.-]+[ ,]+[\d.-]+[ ,]+([\d.]+)/i.exec(children)
+    const fonts = [...children.matchAll(/font-size\s*(?:=\s*["']|:\s*)([\d.]+)/gi)].map(m => +m[1]).filter(n => n >= 6)
+    return Math.min(5000, Math.max(560, (Number(viewBox?.[1]) || 720) * Math.max(1, 14 / Math.min(16, ...fonts))))
+  }, [canvas, language, children])
+  const [height, setHeight] = useState(180)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState('')
+  const [showCode, setShowCode] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [theme, setTheme] = useState(WIDGET_THEME_DEFAULTS)
+  const [revision, setRevision] = useState(0)
+  const host = useRef<HTMLDivElement>(null)
+  const frame = useRef<HTMLIFrameElement>(null)
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>()
+  const channel = useRef(`widget-${crypto.randomUUID()}`)
+  const document = useMemo(() => buildWidgetDocument(children, theme), [children, theme])
+  const hostUrl = useMemo(() => new URL(`${import.meta.env.BASE_URL}widget-host.html`, window.location.href).href, [])
 
-const BASE_STYLES = `
-<style>
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: transparent; }
-  body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 14px; line-height: 1.6; color: var(--hb-text);
-    -webkit-font-smoothing: antialiased;
-  }
-  :root {
-    --bg-primary: #080b10; --bg-sidebar: #0e1319;
-    --bg-hover: rgba(190,215,235,0.06); --bg-active: rgba(var(--hb-accent-rgb),0.16);
-    --text-primary: var(--hb-text); --text-secondary: var(--hb-text-dim); --text-muted: var(--hb-text-faint);
-    --border: rgba(219,230,236,0.08); --border-focus: rgba(var(--hb-accent-rgb),0.30);
-    --accent: var(--hb-cyan); --accent-hover: var(--hb-cyan-bright);
-  }
-</style>`
+  useEffect(() => {
+    if (!host.current) return
+    const style = getComputedStyle(host.current)
+    const next = Object.fromEntries(Object.entries(WIDGET_THEME_DEFAULTS).map(([key, fallback]) => [key, style.getPropertyValue(key).trim() || fallback]))
+    setTheme(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next)
+  }, [children])
 
-const RESIZE_SCRIPT = `
-<script>
-  (function() {
-    function measure() {
-      var b = document.body, d = document.documentElement;
-      return Math.max(
-        b ? b.scrollHeight : 0, b ? b.offsetHeight : 0,
-        d ? d.scrollHeight : 0, d ? d.offsetHeight : 0
-      );
-    }
-    var last = 0;
-    function postHeight() {
-      var h = measure();
-      if (h && h !== last) {
-        last = h;
-        window.parent.postMessage({ type: 'speda-widget-resize', height: h }, '*');
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.channel !== channel.current) return
+      if (event.data.type === 'speda-widget-resize' && Number.isFinite(event.data.height)) {
+        setHeight(Math.min(1400, Math.max(48, event.data.height)))
+        setLoaded(true)
       }
+      if (event.data.type === 'speda-widget-error') { setError(String(event.data.message)); setLoaded(true) }
     }
-    window.addEventListener('load', postHeight);
-    window.addEventListener('resize', postHeight);
-    if (window.ResizeObserver) {
-      var ro = new ResizeObserver(postHeight);
-      ro.observe(document.documentElement);
-      if (document.body) ro.observe(document.body);
-    }
-    // Aggressive early polling — catches charts/images that render after load
-    [50, 150, 300, 600, 1000, 1600, 2400].forEach(function(t) { setTimeout(postHeight, t); });
-  })();
-</script>`
-
-function buildSrcdoc(raw: string): string {
-  const trimmed = raw.trim()
-  const isFullDoc = /^<!DOCTYPE\s/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)
-  if (isFullDoc) {
-    let doc = trimmed
-    if (/<head>/i.test(doc)) {
-      doc = doc.replace(/<head>/i, `<head>${BASE_STYLES}`)
-    } else if (/<body/i.test(doc)) {
-      doc = doc.replace(/<body/i, `<head>${BASE_STYLES}</head><body`)
-    } else if (/<html[\s>]/i.test(doc)) {
-      doc = doc.replace(/(<html[^>]*>)/i, `$1<head>${BASE_STYLES}</head>`)
-    } else {
-      doc = BASE_STYLES + doc
-    }
-    // Bulletproof script injection — try </body>, then </html>, else append.
-    if (/<\/body>/i.test(doc))      return doc.replace(/<\/body>/i, `${RESIZE_SCRIPT}</body>`)
-    if (/<\/html>/i.test(doc))      return doc.replace(/<\/html>/i, `${RESIZE_SCRIPT}</html>`)
-    return doc + RESIZE_SCRIPT
-  }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">${BASE_STYLES}</head><body>${trimmed}${RESIZE_SCRIPT}</body></html>`
-}
-
-/**
- * Cinematic SVG reveal: stroked paths/lines "draw" themselves via stroke-dashoffset,
- * then filled shapes and text fade up in a staggered cascade. Runs once per render.
- */
-function animateSvgDrawIn(container: HTMLElement) {
-  const svg = container.querySelector('svg')
-  if (!svg) return
-
-  const STROKE_SEL = 'path, line, polyline, polygon'
-  const FADE_SEL   = 'text, circle, ellipse, rect, image'
-
-  // 1. Draw stroked geometry
-  const strokeEls = Array.from(svg.querySelectorAll<SVGGeometryElement>(STROKE_SEL))
-  strokeEls.forEach((el, i) => {
-    let len = 0
-    try { len = el.getTotalLength?.() ?? 0 } catch { len = 0 }
-    // Skip degenerate or absurdly long geometry (perf guard)
-    if (!len || len > 12000) return
-    // Only animate if it actually has a visible stroke
-    const stroke = getComputedStyle(el).stroke
-    if (!stroke || stroke === 'none') return
-
-    el.style.transition = 'none'
-    el.style.strokeDasharray = `${len}`
-    el.style.strokeDashoffset = `${len}`
-    // next frame → release the offset so it draws
-    requestAnimationFrame(() => {
-      el.style.transition = `stroke-dashoffset 0.85s cubic-bezier(0.4,0,0.2,1) ${0.04 * i}s`
-      el.style.strokeDashoffset = '0'
-    })
-  })
-
-  // 2. Fade + rise fills, points, labels — after the lines begin drawing
-  const fadeEls = Array.from(svg.querySelectorAll<SVGElement>(FADE_SEL))
-  fadeEls.forEach((el, i) => {
-    el.style.opacity = '0'
-    el.style.transform = 'translateY(4px)'
-    el.style.transformBox = 'fill-box'
-    el.style.transformOrigin = 'center'
-    requestAnimationFrame(() => {
-      el.style.transition = `opacity 0.45s ease ${0.25 + 0.025 * i}s, transform 0.45s cubic-bezier(0.16,1,0.3,1) ${0.25 + 0.025 * i}s`
-      el.style.opacity = '1'
-      el.style.transform = 'translateY(0)'
-    })
-  })
-}
-
-interface Props { language: string; children: string }
-
-export default function WidgetFrame({ language, children }: Props) {
-  const [height, setHeight]           = useState(200)
-  const [frameLoaded, setFrameLoaded] = useState(false)
-  const [showCode, setShowCode]       = useState(false)
-  const [hovered, setHovered]         = useState(false)
-  const [copied, setCopied]           = useState(false)
-  const frameId = useRef(`wf-${Math.random().toString(36).slice(2)}`)
-  const svgHostRef = useRef<HTMLDivElement>(null)
-
-  const isSvg = language === 'svg' || (language === 'html' && children.trim().startsWith('<svg'))
-
-  // Only commit markup to the DOM once it looks COMPLETE. During streaming the
-  // code grows each chunk; injecting every partial frame is what makes the SVG
-  // blink/redraw. We hold the last complete version and render only that.
-  const isComplete = (() => {
-    const t = children.trim()
-    if (isSvg) return /<\/svg>/i.test(t)
-    if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) return /<\/html>/i.test(t)
-    return true // plain fragments have no clear terminator — render as-is
-  })()
-  const [stableContent, setStableContent] = useState(isComplete ? children : '')
+    window.addEventListener('message', receive)
+    return () => window.removeEventListener('message', receive)
+  }, [])
+  useEffect(() => () => clearTimeout(copyTimer.current), [])
   useEffect(() => {
-    if (isComplete) setStableContent(children)
-  }, [isComplete, children])
+    if (loaded) return
+    const timeout = setTimeout(() => {
+      setError('Preview did not initialize. Open the source or reset to try again.')
+      setLoaded(true)
+    }, 8000)
+    return () => clearTimeout(timeout)
+  }, [document, loaded, revision])
 
-  useEffect(() => { setFrameLoaded(false); setHeight(420) }, [stableContent])
-
-  // Animate the draw-in cascade ONCE, when the complete SVG is committed —
-  // never on partial streaming frames.
-  useEffect(() => {
-    if (!isSvg || !stableContent) return
-    const id = setTimeout(() => {
-      if (svgHostRef.current) animateSvgDrawIn(svgHostRef.current)
-    }, 60)
-    return () => clearTimeout(id)
-  }, [isSvg, stableContent])
-
-  useEffect(() => {
-    if (isSvg) return
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'speda-widget-resize' && typeof e.data.height === 'number')
-        setHeight(Math.min(Math.max(e.data.height + 16, 120), 900))
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [isSvg])
-
-  const copy = () => {
-    navigator.clipboard.writeText(children).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+  const sendDocument = () => {
+    setError('')
+    frame.current?.contentWindow?.postMessage({ type: 'speda-widget-init', channel: channel.current, document }, '*')
   }
+  const reset = () => { setLoaded(false); setRevision(n => n + 1); sendDocument() }
+  useEffect(() => { setLoaded(false); sendDocument() }, [document])
 
-  // A hover control on the deck is a glass pill at reading size. It used to be
-  // a 0.64rem Rajdhani cap with 0.14em tracking on an opaque slab — a rack
-  // label sitting on top of a rendered widget.
-  const btnBase: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 6,
-    height: 30, padding: '0 12px',
-    border: '1px solid rgba(255,255,255,0.12)',
-    background: 'var(--glass-menu)',
-    backdropFilter: 'blur(20px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14)',
-    color: 'var(--hb-text-dim)',
-    fontSize: '0.8125rem',
-    fontFamily: 'var(--font-read)',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-    userSelect: 'none',
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(children); setCopied(true)
+      clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(false), 1800)
+    } catch { setError('Copy unavailable. Open the source to select it.') }
   }
-
-  return (
-    <div
-      style={{ position: 'relative', margin: '0.625rem 0' }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* ── Render area — no chrome, feels like part of the message ── */}
-      {isSvg ? (
-        stableContent ? (
-          <div
-            ref={svgHostRef}
-            className="hb-widget-round"
-            style={{
-              overflowX: 'auto',
-              animation: 'fadeIn 0.3s ease both',
-            }}
-            dangerouslySetInnerHTML={{ __html: stableContent }}
-          />
-        ) : (
-          // Streaming — SVG not closed yet. Calm placeholder, no flicker.
-          <div className="hb-widget-round" style={{
-            minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 6, background: 'rgba(255,255,255,0.015)',
-          }}>
-            {[0, 0.18, 0.36].map((delay, i) => (
-              <span key={i} style={{
-                width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)',
-                animation: `skeletonPulse 1.1s ease ${delay}s infinite`,
-              }} />
-            ))}
-          </div>
-        )
-      ) : (
-        <div className="hb-widget-round" style={{
-          position: 'relative',
-          overflow: 'hidden',
-          animation: 'widgetEntrance 0.4s cubic-bezier(0.16,1,0.3,1) both',
-        }}>
-          {/* Skeleton dots while iframe loads */}
-          {!frameLoaded && (
-            <div className="hb-widget-round" style={{
-              position: 'absolute', inset: 0, minHeight: 240,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: 6, pointerEvents: 'none', background: 'rgba(255,255,255,0.015)',
-            }}>
-              {[0, 0.18, 0.36].map((delay, i) => (
-                <span key={i} style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: 'var(--accent)',
-                  animation: `skeletonPulse 1.1s ease ${delay}s infinite`,
-                }} />
-              ))}
-            </div>
-          )}
-
-          <iframe
-            key={frameId.current}
-            srcDoc={buildSrcdoc(stableContent || children)}
-            sandbox="allow-scripts allow-downloads allow-same-origin allow-forms"
-            className="hb-widget-round"
-            scrolling="no"
-            onLoad={() => setTimeout(() => setFrameLoaded(true), 120)}
-            style={{
-              width: '100%',
-              height: frameLoaded ? height : 240,
-              border: 'none',
-              display: 'block',
-              background: 'transparent',
-              opacity: frameLoaded ? 1 : 0,
-              transition: 'opacity 0.35s ease, height 0.3s ease',
-              overflow: 'hidden',
-            }}
-            title="widget"
-            allowTransparency
-          />
-        </div>
-      )}
-
-      {/* ── Floating action buttons — appear on hover ─────────────── */}
-      <div style={{
-        position: 'absolute',
-        top: 10, right: 10,
-        display: 'flex', gap: '6px',
-        opacity: hovered ? 1 : 0,
-        transform: hovered ? 'translateY(0)' : 'translateY(-4px)',
-        transition: 'opacity 0.18s ease, transform 0.18s ease',
-        pointerEvents: hovered ? 'auto' : 'none',
-        zIndex: 10,
-      }}>
-        {/* Toggle code */}
-        <button
-          onClick={() => setShowCode(s => !s)}
-          style={{
-            ...btnBase,
-            color: showCode ? 'var(--hb-cyan-bright)' : 'var(--hb-text-dim)',
-            borderColor: showCode ? 'rgba(var(--hb-accent-rgb),0.5)' : 'rgba(var(--hb-accent-rgb),0.3)',
-            background: showCode ? 'rgba(var(--hb-accent-rgb),0.14)' : 'rgba(6,14,19,0.82)',
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-          </svg>
-          {showCode ? 'Hide' : 'Code'}
-        </button>
-
-        {/* Copy */}
-        <button onClick={copy} style={{ ...btnBase, color: copied ? 'var(--hb-green)' : 'var(--hb-text-dim)' }}>
-          {copied
-            ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          }
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-
-      {/* ── Code panel — slides in below the render ──────────────── */}
-      {showCode && (
-        <div className="hb-widget-round" style={{
-          marginTop: '0.5rem',
-          overflow: 'hidden',
-          border: '1px solid var(--border)',
-          animation: 'fadeSlideIn 0.2s ease both',
-        }}>
-          <SyntaxHighlighter
-            language={language || 'text'}
-            style={vscDarkPlus}
-            customStyle={{
-              margin: 0,
-              padding: '1rem 1.125rem',
-              background: 'var(--bg-code)',
-              fontSize: '0.8rem',
-              lineHeight: 1.65,
-              borderRadius: 0,
-              maxHeight: 360,
-              overflow: 'auto',
-            }}
-            codeTagProps={{ style: { fontFamily: "'JetBrains Mono','Fira Code',monospace" } }}
-          >
-            {children}
-          </SyntaxHighlighter>
-        </div>
-      )}
+  return <div ref={host} className="hb-inline-widget">
+    <div className="hb-widget-toolbar">
+      <span>{language === 'svg' ? 'Visualization' : 'Interactive'}</span>
+      <button onClick={() => setShowCode(s => !s)} aria-expanded={showCode}>{showCode ? 'Hide source' : 'Source'}</button>
+      <button onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+      <button onClick={reset} title="Reset widget to its initial values">Reset</button>
     </div>
-  )
+    {!loaded && <div className="hb-widget-loading" role="status">Preparing preview…</div>}
+    <div className="hb-widget-preview" style={{ overflowX: 'auto' }}>
+      <iframe ref={frame} src={hostUrl} sandbox="allow-scripts" title={language === 'svg' ? 'Inline visualization' : 'Interactive widget'}
+        onLoad={sendDocument} style={{ width: '100%', minWidth: svgMinWidth, height, border: 0, display: 'block', background: 'transparent', opacity: loaded ? 1 : 0 }} />
+    </div>
+    {error && <div className="hb-widget-error" role="status">{error}</div>}
+    {showCode && <CodeBlock language={language}>{children}</CodeBlock>}
+  </div>
 }

@@ -6,11 +6,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import type { ChatMessage, FileMeta, ToolBadge } from '../lib/types'
+import type { ChatMessage, FileMeta, ToolBadge, SubagentRun } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
+import { SubagentPanel } from './SubagentPanel'
+import SubagentDetailView from './SubagentDetailView'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
@@ -915,6 +917,7 @@ interface Props {
 /* ── Component ───────────────────────────────────────────────────────────── */
 export default function Message({ message, onDelete, onRegenerate, onEditAndResend }: Props) {
   const { settings } = useSettings()
+  const [selectedSubagent, setSelectedSubagent] = useState<SubagentRun | null>(null)
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [thumbUp, setThumbUp] = useState(false)
@@ -1204,6 +1207,9 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             <WorkingStatus tools={message.tools} status={message.status} />
           )
         ) : null}
+
+        {message.subagents?.length ? <SubagentPanel runs={message.subagents} onSelect={setSelectedSubagent} /> : null}
+        {selectedSubagent && <SubagentDetailView key={selectedSubagent.id} run={message.subagents?.find(run => run.id === selectedSubagent.id) ?? selectedSubagent} onClose={() => setSelectedSubagent(null)} />}
 
         {message.isError && (
           <div style={{

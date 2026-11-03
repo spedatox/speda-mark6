@@ -44,6 +44,11 @@ import com.speda.heartbreaker.designsystem.brand.Brands
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HudStrip
+import com.speda.heartbreaker.ui.HbGlassButton
+import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
+import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.ui.comms.AgentCommsScreen
 import com.speda.heartbreaker.data.SkyfallArm
 import com.speda.heartbreaker.ui.skyfall.SkyfallCountdown
@@ -97,8 +102,21 @@ fun ChatScreen(
     LaunchedEffect(config) { vm.onConfig(config) }
 
     val state by vm.state.collectAsStateWithLifecycle()
+    val viewScope by vm.viewScope.collectAsStateWithLifecycle()
     val settings by graph.settings.settings.collectAsStateWithLifecycle(initialValue = HbSettings())
     var replyQuotes by remember(config, state.activeSessionId, state.activeProjectId) { mutableStateOf<List<String>>(emptyList()) }
+    var replyTarget by remember(config, state.activeSessionId) { mutableStateOf<ChatMessage?>(null) }
+    var addressedAgent by remember(config, state.activeSessionId) { mutableStateOf<String?>(null) }
+    var roomActions by remember(config, state.activeSessionId) { mutableStateOf(false) }
+    val roomError by vm.roomError.collectAsStateWithLifecycle()
+    val roomConnection by vm.roomConnection.collectAsStateWithLifecycle()
+    val workerStatus by vm.workerStatus.collectAsStateWithLifecycle()
+    val membershipBusy by vm.membershipBusy.collectAsStateWithLifecycle()
+    val palette = LocalHbPalette.current
+    LaunchedEffect(state.room?.members) {
+        if (addressedAgent != null && addressedAgent !in state.room?.members.orEmpty()) addressedAgent = null
+        if (replyTarget?.speaker != null && replyTarget?.speaker !in state.room?.members.orEmpty()) replyTarget = null
+    }
     val health by remember(config) { graph.health.poll(config.apiBase, config.apiKey) }
         .collectAsStateWithLifecycle(initialValue = Health.Offline)
 
@@ -152,6 +170,7 @@ fun ChatScreen(
     // The board's settings live on the backend so the agent's brief and the
     // surface that renders it cannot disagree about the window ceiling.
     var canvas by remember { mutableStateOf(CanvasSettings()) }
+    LaunchedEffect(canvas, voiceOn) { vm.canvasEnabled = canvas.enabled; vm.canvasMaxPanels = canvas.maxPanels }
     /** Which answer voice mode is showing; null follows the newest. A different
      *  session is a different set of answers, so a stale index there would land
      *  on someone else's turn. */
@@ -241,7 +260,12 @@ fun ChatScreen(
             AppHeader(
                 sessionTitle = activeTitle,
                 onToggleSidebar = { drawerOpen = true },
+                onRoomActions = if (state.activeSessionId != null) ({ roomActions = true }) else null,
+                roomActionsLabel = if (settings.locale == "tr") "Sohbet katılımcıları" else "Conversation participants",
             )
+            state.room?.takeIf { it.members.size > 1 }?.let { room ->
+                RoomMembers(room, addressedAgent, { addressedAgent = it }, { roomActions = true }, settings.locale == "tr")
+            }
 
             // No transcript capture: every glass surface uses the inexpensive fill.
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -251,7 +275,7 @@ fun ChatScreen(
                     // current answer's evidence and the words as they are said.
                     if (voiceOn) {
                         val answers = remember(state.messages) {
-                            state.messages.filter { it.role == com.speda.heartbreaker.domain.Role.Assistant }
+                            state.messages.filter { it.role == com.speda.heartbreaker.domain.Role.Assistant && it.roomNotice == null && !it.isWorkerAnchor }
                         }
                         val voiceState by vm.voiceState.collectAsStateWithLifecycle()
                         // null pins to the NEWEST, and that is the default rather
@@ -273,6 +297,7 @@ fun ChatScreen(
                             captionLines = canvas.captionLines,
                             maxPanels = canvas.maxPanels,
                             activityAfterMs = canvas.activityAfterMs,
+                            canvasEnabled = canvas.enabled,
                             answerIndex = idx,
                             answerCount = answers.size,
                             onAnswer = { i ->
@@ -304,7 +329,10 @@ fun ChatScreen(
                                         message,
                                         config = config,
                                         downloader = graph.downloader,
+                                        api = graph.api,
                                         showThinking = settings.showThinking,
+                                        turkish = settings.locale == "tr",
+                                        onReply = if (message.roomSequence != null && message.roomNotice == null && !message.isWorkerAnchor) ({ replyTarget = message }) else null,
                                         onDelete = { vm.deleteMessage(message.id) },
                                         onRegenerate = if (message.role == com.speda.heartbreaker.domain.Role.Assistant) {
                                             { vm.regenerate(message.id, turnOpts(settings)) }
@@ -324,6 +352,10 @@ fun ChatScreen(
             // Skyfall gets its own screen: the decision is answered by a button,
             // not by scrolling to find it.
             val fastArrivalAsk by vm.pendingAsk.collectAsStateWithLifecycle()
+            (roomError ?: roomConnection ?: workerStatus)?.let { HbText(it, style = HbType.read, color = palette.textDim, modifier = Modifier.padding(horizontal = 12.dp)) }
+            replyTarget?.let { target ->
+                HbGlassButton((if (settings.locale == "tr") "Yanıt: " else "Replying to: ") + roomName(target.speaker ?: state.room?.lead ?: agentId) + " ×", onClick = { replyTarget = null })
+            }
             PendingAsksTray(
                 config = config,
                 api = graph.api,
@@ -332,6 +364,8 @@ fun ChatScreen(
             )
 
             Composer(
+                draftScope = listOf(config, viewScope),
+                onSteer = { vm.steer(it) },
                 replyQuotes = replyQuotes,
                 onRemoveQuote = { index -> replyQuotes = replyQuotes.filterIndexed { i, _ -> i != index } },
                 isStreaming = state.isStreaming,
@@ -356,7 +390,10 @@ fun ChatScreen(
                     models = models.map {
                         if (it.id == modelId) it.copy(thinking = level, thinkingPinned = true) else it
                     }
-                    scope.launch { graph.api.setModelThinking(config, modelId, level) }
+                    scope.launch {
+                        graph.api.setModelThinking(config, modelId, level)
+                        models = graph.api.fetchModels(config)
+                    }
                 },
                 language = settings.locale,
                 onLanguageChange = { next ->
@@ -364,28 +401,27 @@ fun ChatScreen(
                         // Local half first, so the interface has already changed
                         // language before the request lands.
                         graph.settings.setLocale(next)
-                        // Backend half — `agent_language` is what stamps the hard
-                        // contract into every agent's system prompt and what the
-                        // speech locales are derived from. Best-effort on the
-                        // same terms as the desktop: a failed PUT leaves the
-                        // agent writing the previous language until the next
-                        // attempt, which is visible on the very next reply.
-                        graph.api.saveConfig(config, mapOf("agent_language" to JsonPrimitive(next)))
+                        // Stage the backend preference; Configuration provides the
+                        // explicit restart action. Local speech uses its own locale.
+                        graph.api.saveConfigPreferences(config, mapOf("agent_language" to JsonPrimitive(next)))
                     }
                 },
                 onSend = { text, images, docs ->
                     val contextualText = if (replyQuotes.isEmpty()) text else
                         "Reply context (selected chat excerpts):\n" + replyQuotes.joinToString("\n\n") { quote -> quote.lines().joinToString("\n") { "> $it" } } + "\n\n" + text
-                    replyQuotes = emptyList()
-                    vm.send(
+                    val accepted = vm.send(
                         contextualText,
                         IgorApi.StreamOpts(
                             model = settings.model.ifEmpty { null },
                             systemPrompt = settings.systemPrompt.ifBlank { null },
                             images = images,
                             documents = docs,
+                            addressedAgentId = addressedAgent ?: replyTarget?.speaker,
+                            replyTo = replyTarget?.roomSequence,
                         ),
                     )
+                    if (accepted) { replyQuotes = emptyList(); replyTarget = null }
+                    accepted
                 },
                 onStop = { vm.stop() },
                 modifier = Modifier.navigationBarsPadding(),
@@ -416,6 +452,8 @@ fun ChatScreen(
             onToggleComms = { drawerOpen = false; commsOpen = true },
             onToggleBoard = { drawerOpen = false; boardOpen = true },
         )
+        if (roomActions) RoomActions(state.room, state.isStreaming || membershipBusy, roomError, settings.locale == "tr",
+            { action, id -> vm.changeMember(action, id) }, { roomActions = false })
 
         // Full-screen projects sheet; back closes it, exactly like settings.
         if (projectsOpen) {

@@ -11,6 +11,8 @@ import com.speda.heartbreaker.domain.Project
 import com.speda.heartbreaker.domain.ProjectFile
 import com.speda.heartbreaker.domain.RouteGeometry
 import com.speda.heartbreaker.domain.Session
+import com.speda.heartbreaker.domain.RoomInfo
+import com.speda.heartbreaker.domain.RoomPage
 import com.speda.heartbreaker.domain.parseAircraftSpec
 import com.speda.heartbreaker.domain.parsePlaceSet
 import com.speda.heartbreaker.domain.parseRouteGeometry
@@ -40,6 +42,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -90,6 +93,10 @@ class IgorApi(
          *  the socket outright, and that almost always happens before the first
          *  event arrives. */
         val requestId: String? = null,
+        val addressedAgentId: String? = null,
+        val replyTo: Long? = null,
+        val canvas: Boolean = false,
+        val canvasMaxPanels: Int = 24,
     )
 
     // ── Streaming ────────────────────────────────────────────────────────────
@@ -104,6 +111,8 @@ class IgorApi(
             put("message", message)
             put("session_id", sessionId) // Int? → JsonNull when null
             opts.model?.let { put("model", it) }
+            opts.addressedAgentId?.let { put("addressed_agent_id", it) }
+            opts.replyTo?.let { put("reply_to", it) }
             opts.systemPrompt?.let { put("system_prompt", it) }
             // Only send the keys that have content — the web omits them entirely.
             if (opts.images.isNotEmpty()) {
@@ -156,6 +165,8 @@ class IgorApi(
                         // explicit "voice": false on every ordinary turn would be a
                         // key of noise on the hot path.
                         if (cc.voice) put("voice", true)
+                        put("canvas", opts.canvas)
+                        if (opts.canvas) put("canvas_max_panels", opts.canvasMaxPanels.coerceIn(1, 24))
                         cc.location?.let { loc ->
                             put(
                                 "location",
@@ -174,6 +185,7 @@ class IgorApi(
         val request = Request.Builder()
             .url("${config.apiBase}/chat/${config.agentId}")
             .header("X-API-Key", config.apiKey)
+            .header("X-Chat-Format", "room-v1")
             .post(body.toString().toRequestBody(jsonMedia))
             .build()
         return streamSse(request)
@@ -188,6 +200,7 @@ class IgorApi(
         val request = Request.Builder()
             .url("${config.apiBase}/chat/attach/$requestId")
             .header("X-API-Key", config.apiKey)
+            .header("X-Chat-Format", "room-v1")
             .get()
             .build()
         return streamSse(request, attach = true)
@@ -195,8 +208,9 @@ class IgorApi(
 
     /** Shared SSE reader. The blocking read runs in a child coroutine so
      *  [awaitClose] can cancel the Call the instant the collector cancels. */
-    private fun streamSse(request: Request, attach: Boolean = false): Flow<SseEvent> = channelFlow {
-        val call = streamClient.newCall(request)
+    private fun streamSse(request: Request, attach: Boolean = false, worker: Boolean = false): Flow<SseEvent> = channelFlow {
+        val client = if (worker) streamClient.newBuilder().readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build() else streamClient
+        val call = client.newCall(request)
         launch(Dispatchers.IO) {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
@@ -207,18 +221,21 @@ class IgorApi(
                     // Only on attach — a 404 from POST /chat means an unknown
                     // agent, which is a real error the owner needs to see.
                     if (attach && response.code == 404) throw AttachGone()
-                    val text = runCatching { response.body?.string() }.getOrNull().orEmpty()
-                    throw IOException(if (text.isNotBlank()) text.take(300) else "HTTP ${response.code}")
+                    val errorSource = response.body?.source()
+                    errorSource?.request(301)
+                    val text = errorSource?.buffer?.let { it.readUtf8(minOf(it.size, 300L)) }.orEmpty()
+                    throw ApiFailure(if (text.isNotBlank()) text.take(300) else "HTTP ${response.code}", response.code == 408 || response.code == 429 || response.code >= 500)
                 }
                 val source = response.body?.source() ?: return@use
-                while (isActive) {
-                    val line = source.readUtf8Line() ?: break
-                    if (!line.startsWith("data: ")) continue
-                    val raw = line.substring(6).trim()
-                    if (raw.isEmpty()) continue
-                    runCatching { json.decodeFromString(SseEvent.serializer(), raw) }
-                        .getOrNull()?.let { send(it) }
+                val decoder = SseDecoder()
+                while (isActive && !source.exhausted()) {
+                    val line = try { source.readUtf8LineStrict(256_000) } catch (error: java.io.EOFException) {
+                        if (source.buffer.size > 256_000) throw ApiFailure("Stream line exceeds the recovery limit", false)
+                        throw error
+                    }
+                    decoder.line(line)?.let { send(it) }
                 }
+                decoder.finish()?.let { send(it) }
             }
             close()
         }
@@ -364,11 +381,54 @@ class IgorApi(
     }
 
     suspend fun fetchMessages(config: AppConfig, sessionId: Int): List<ChatMessage> = withContext(Dispatchers.IO) {
-        runCatching {
-            getString(config, "/sessions/$sessionId/messages")?.let { body ->
-                MessageJson.parseArray(json.parseToJsonElement(body) as JsonArray)
-            }
-        }.getOrNull() ?: emptyList()
+        val body = checkedJson(config, "/sessions/$sessionId/messages", roomFormat = true, limitBytes = 32 * 1024 * 1024)
+        MessageJson.parseArray(json.parseToJsonElement(body) as JsonArray)
+    }
+
+    suspend fun fetchSessionRoom(config: AppConfig, sessionId: Int): RoomInfo? = withContext(Dispatchers.IO) {
+        val body = checkedJson(config, "/sessions/$sessionId/room?agent_id=${encodePath(config.agentId)}")
+        if (body.trim() == "null") null else json.decodeFromString<RoomInfo>(body)
+    }
+
+    suspend fun fetchRoomEvents(config: AppConfig, roomId: String, after: Long): RoomPage = withContext(Dispatchers.IO) {
+        json.decodeFromString(checkedJson(config, "/coordination/rooms/${encodePath(roomId)}/events?after=$after"))
+    }
+
+    suspend fun changeRoomMember(config: AppConfig, room: RoomInfo, action: String, agentId: String): RoomInfo = withContext(Dispatchers.IO) {
+        require(action in setOf("invite", "dismiss", "handoff"))
+        json.decodeFromString(checkedJson(config, "/coordination/rooms/${encodePath(room.id)}/members", buildJsonObject {
+            put("expected_version", room.version); put("action", action); put("agent_id", agentId)
+        }))
+    }
+
+    suspend fun steerRun(config: AppConfig, requestId: String, text: String, messageId: String, expectedStep: String?): Boolean = withContext(Dispatchers.IO) {
+        val body = checkedJson(config, "/chat/steer/${encodePath(requestId)}", buildJsonObject {
+            put("text", text); put("message_id", messageId); expectedStep?.let { put("expected_step_id", it) }
+        })
+        (json.parseToJsonElement(body).jsonObject["steered"] as? JsonPrimitive)?.booleanOrNull == true
+    }
+
+    suspend fun snapshotSessionWorkers(config: AppConfig, sessionId: Int): WorkerSessionSnapshot = withContext(Dispatchers.IO) {
+        val body = checkedJson(config, "/legion/sessions/$sessionId/snapshot")
+        val element = try { json.parseToJsonElement(body) } catch (_: IllegalArgumentException) { throw ApiFailure("Worker recovery returned malformed JSON", false) }
+        parseWorkerSnapshot(element, sessionId)
+    }
+
+    fun attachSessionWorkers(config: AppConfig, sessionId: Int, after: Long): Flow<SseEvent> = streamSse(
+        Request.Builder().url("${config.apiBase}/legion/sessions/$sessionId/attach?after=$after")
+            .header("X-API-Key", config.apiKey).get().build(), worker = true)
+
+    private fun checkedJson(config: AppConfig, path: String, body: JsonObject? = null, roomFormat: Boolean = false, limitBytes: Int = 1_048_576): String {
+        val builder = Request.Builder().url("${config.apiBase}$path").header("X-API-Key", config.apiKey)
+        if (roomFormat) builder.header("X-Chat-Format", "room-v1")
+        if (body != null) builder.post(body.toString().toRequestBody(jsonMedia))
+        val client = restClient.newBuilder().callTimeout(15, java.util.concurrent.TimeUnit.SECONDS).build()
+        client.newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful) throw ApiFailure("Request failed (${response.code})", response.code == 408 || response.code == 429 || response.code >= 500)
+            val source = response.body?.source() ?: throw ApiFailure("Empty response", false)
+            if (source.request(limitBytes.toLong() + 1)) throw ApiFailure("Response exceeds the recovery limit", false)
+            return source.readUtf8()
+        }
     }
 
     // ── Projects ─────────────────────────────────────────────────────────────
@@ -599,6 +659,10 @@ class IgorApi(
         }
     }
 
+    suspend fun reconnectConnection(config: AppConfig, server: String) = withContext(Dispatchers.IO) {
+        postEmpty(config, "/mcp/servers/${java.net.URLEncoder.encode(server, "UTF-8")}/reconnect")
+    }
+
     suspend fun oauthStatus(config: AppConfig, provider: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/connections/$provider/status")?.let {
@@ -630,11 +694,72 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
-    suspend fun saveConfig(config: AppConfig, values: Map<String, JsonElement>, t: AppStrings = Tr): ConfigSaveResult = withContext(Dispatchers.IO) {
+    suspend fun getConfigSnapshot(config: AppConfig): ConfigSnapshot = withContext(Dispatchers.IO) {
+        json.decodeFromString(configRequest(config, "/config"))
+    }
+
+    suspend fun saveConfig(config: AppConfig, values: Map<String, JsonElement>, revision: Int, requestId: String, reset: List<String>): ConfigSaveResult = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("values", JsonObject(values)); put("expected_revision", revision); put("request_id", requestId)
+            put("reset", kotlinx.serialization.json.JsonArray(reset.map { JsonPrimitive(it) }))
+        }
+        json.decodeFromString(configRequest(config, "/config", "PUT", body))
+    }
+
+    suspend fun saveConfigPreferences(config: AppConfig, values: Map<String, JsonElement>) {
+        // Preferences share the same revisioned store and explicit restart flow.
         runCatching {
-            val body = buildJsonObject { put("values", JsonObject(values)) }
-            putJson(config, "/config", body)?.let { json.decodeFromString<ConfigSaveResult>(it) }
-        }.getOrNull() ?: ConfigSaveResult(rejected = listOf(t.settingsConfig.saveFailedBackend))
+            val snapshot = getConfigSnapshot(config)
+            saveConfig(config, values, snapshot.revision, java.util.UUID.randomUUID().toString(), emptyList())
+        }.onFailure { android.util.Log.w("Configuration", "Backend preference was not saved") }
+    }
+
+    suspend fun getConfigPolicies(config: AppConfig): List<ConfigPolicy> = withContext(Dispatchers.IO) {
+        json.decodeFromString<ConfigPolicies>(configRequest(config, "/config/policies")).policies
+    }
+
+    suspend fun saveConfigPolicy(config: AppConfig, policy: ConfigPolicy, value: JsonObject): List<ConfigPolicy> = withContext(Dispatchers.IO) {
+        val body = buildJsonObject { put("expected_revision", policy.revision); put("value", value) }
+        json.decodeFromString<ConfigPolicies>(configRequest(config, "/config/policies/${encodePath(policy.id)}", "PUT", body)).policies
+    }
+
+    suspend fun restartBackend(config: AppConfig, revision: Int, requestId: String) = withContext(Dispatchers.IO) {
+        configRequest(config, "/config/restart", "POST", buildJsonObject {
+            put("expected_revision", revision); put("request_id", requestId)
+        })
+        Unit
+    }
+
+    suspend fun waitForBackend(config: AppConfig, previousInstance: String) = withContext(Dispatchers.IO) {
+        val client = restClient.newBuilder().callTimeout(2500, java.util.concurrent.TimeUnit.MILLISECONDS).build()
+        val deadline = System.nanoTime() + 90_000_000_000L
+        while (System.nanoTime() < deadline) {
+            val ready = runCatching {
+                client.newCall(Request.Builder().url("${config.apiBase}/health/ready").get().build()).execute().use { res ->
+                    val value = json.parseToJsonElement(res.body?.string().orEmpty()).jsonObject
+                    res.isSuccessful && value["status"]?.jsonPrimitive?.content == "ready" &&
+                        value["instance_id"]?.jsonPrimitive?.content?.let { it.isNotEmpty() && it != previousInstance } == true
+                }
+            }.getOrDefault(false)
+            if (ready) return@withContext
+            kotlinx.coroutines.delay(1000)
+        }
+        throw IOException("Backend readiness was not confirmed. If its API key, address or port changed, update connection settings.")
+    }
+
+    // Configuration writes must report errors and must never be retried implicitly.
+    private fun configRequest(config: AppConfig, path: String, method: String = "GET", body: JsonObject? = null): String {
+        val request = Request.Builder().url("${config.apiBase}$path").header("X-API-Key", config.apiKey)
+            .method(method, body?.toString()?.toRequestBody(jsonMedia)).build()
+        val client = restClient.newBuilder().retryOnConnectionFailure(false).build()
+        client.newCall(request).execute().use { res ->
+            val content = res.body?.string().orEmpty()
+            if (!res.isSuccessful) {
+                val detail = runCatching { json.parseToJsonElement(content).jsonObject["detail"]?.jsonPrimitive?.content }.getOrNull()
+                throw IOException(detail ?: "Configuration request failed (${res.code})")
+            }
+            return content
+        }
     }
 
     suspend fun getMemorySources(config: AppConfig): MemorySources = withContext(Dispatchers.IO) {
@@ -1264,15 +1389,19 @@ class IgorApi(
         headers: Map<String, String>,
         enabled: Boolean,
         note: String,
+        allowedAgents: List<String> = listOf("speda"),
+        readOnlyTools: List<String> = emptyList(),
     ): McpSaveResult = withContext(Dispatchers.IO) {
         runCatching {
             val body = buildJsonObject {
                 put("name", name)
                 put("transport", transport)
-                put("command", command)
-                put("url", url)
-                put("env", buildJsonObject { env.forEach { (k, v) -> put(k, v) } })
-                put("headers", buildJsonObject { headers.forEach { (k, v) -> put(k, v) } })
+                put("command", if (transport == "stdio") command else "")
+                put("url", if (transport == "http") url else "")
+                put("env", buildJsonObject { if (transport == "stdio") env.forEach { (k, v) -> put(k, v) } })
+                put("headers", buildJsonObject { if (transport == "http") headers.forEach { (k, v) -> put(k, v) } })
+                put("allowed_agents", kotlinx.serialization.json.JsonArray(allowedAgents.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                put("read_only_tools", kotlinx.serialization.json.JsonArray(readOnlyTools.map { kotlinx.serialization.json.JsonPrimitive(it) }))
                 put("enabled", enabled)
                 put("note", note)
             }
@@ -1525,6 +1654,36 @@ class IgorApi(
             put("settings", json.encodeToJsonElement(settings))
         }) ?: throw IOException("Could not save personality")
         json.decodeFromString(body)
+    }
+
+    // Durable child controls always address execution_id, never a parent reply.
+    suspend fun fetchWorkerExecutions(config: AppConfig, sessionId: Int? = null): List<WorkerExecution> = withContext(Dispatchers.IO) {
+        val query = if (sessionId == null) "" else "?session_id=$sessionId"
+        val body = getString(config, "/legion/executions$query") ?: throw IOException("Worker history unavailable")
+        json.decodeFromString(body)
+    }
+
+    suspend fun inspectWorkerExecution(config: AppConfig, executionId: String): WorkerExecution = withContext(Dispatchers.IO) {
+        val body = getString(config, "/legion/executions/${encodePath(executionId)}") ?: throw IOException("Worker status unavailable")
+        json.decodeFromString(body)
+    }
+
+    suspend fun interruptWorker(config: AppConfig, executionId: String): JsonObject = withContext(Dispatchers.IO) {
+        val body = postEmpty(config, "/legion/executions/${encodePath(executionId)}/interrupt") ?: throw IOException("Task stop was not confirmed")
+        json.parseToJsonElement(body).jsonObject
+    }
+
+    suspend fun messageWorker(config: AppConfig, executionId: String, text: String, messageId: String): JsonObject = withContext(Dispatchers.IO) {
+        val body = postJson(config, "/legion/executions/${encodePath(executionId)}/messages", buildJsonObject {
+            put("text", text); put("message_id", messageId)
+        }) ?: throw IOException("Task input was not confirmed")
+        json.parseToJsonElement(body).jsonObject
+    }
+
+    fun attachWorkerExecution(config: AppConfig, executionId: String, after: Long = 0): Flow<SseEvent> {
+        val request = Request.Builder().url("${config.apiBase}/legion/executions/${encodePath(executionId)}/attach?after=$after")
+            .header("X-API-Key", config.apiKey).get().build()
+        return streamSse(request, attach = true)
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────

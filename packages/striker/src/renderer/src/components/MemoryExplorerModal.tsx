@@ -137,7 +137,7 @@ export default function MemoryExplorerModal({
       const rel = initialPath.replace(/^\/memories\/?/, '').replace(/\/$/, '')
       if (rel) {
         const parts = rel.split('/')
-        const isFile = rel.endsWith('.md')
+        const isFile = rel.endsWith('.md') || rel.endsWith('.json')
         const dir = isFile ? parts.slice(0, -1).join('/') : rel
         setCurrentDir(dir)
         setHistory(['', dir])

@@ -1,251 +1,138 @@
-// SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import VoicePanelBody from './VoicePanelBody'
 import { GAP, pack, type Placed, type VoicePanel } from '../lib/voicePanels'
-
-/**
- * ════════════════════════════════════════════════════════════════════════════
- *  THE CANVAS — voice mode's presentation board.
- *
- *  Voice mode does not show a document and it does not show a conversation. The
- *  agent PRESENTS: it narrates, and the board carries the evidence it is
- *  narrating about — a figure as a tile, a source as a cutting with its photo,
- *  a person as a file, each in its own window. What is being said runs as a
- *  subtitle under the orb (VoiceMode's caption strip), because a window holding
- *  the sentences the owner is currently hearing is a transcript with a bigger
- *  font, which is the thing this mode exists not to be.
- *
- *  The agent stages these windows itself and places each one in its reply at
- *  the moment its narration reaches it (igor core/surface.py _VOICE_BRIEF), so
- *  the board assembles in step with the voice without anything having to sync
- *  against audio timestamps. Writing order is the cue track.
- *
- *  Three things own a window's geometry:
- *    - the LAYOUT, which packs windows as they materialise (the agent managing
- *      the board), and re-packs whenever a new one arrives;
- *    - the OWNER, who can drag any window anywhere and resize it from its
- *      bottom-right corner. Either gesture PINS the window — the layout stops
- *      touching it — until REFLOW hands the board back; and
- *    - EXTEND, which blows one window up to fill the board and is the only
- *      state that overrides the other two.
- * ════════════════════════════════════════════════════════════════════════════
- */
+import { RenderSurface } from '../lib/renderSurface'
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-
-/** Floor for a hand-resized window. Smaller than this and the grip, the title
- *  and the EXTEND button no longer fit on one row, which loses the only handle
- *  the window can be recovered by. */
-const MIN_W = 200
-const MIN_H = 90
-
-/** A window's own geometry once the owner has touched it. Position and size are
- *  one record because either gesture pins the window — a window the owner has
- *  resized must not then be slid across the board by the next repack. */
 interface Pin { x: number; y: number; w?: number; h?: number }
-
 interface Props {
   panels: VoicePanel[]
   width: number
   height: number
-  /** Top-left corner of the docked orb's keep-out quadrant. */
   reserveX: number
   reserveY: number
-  /** Bumped by the owner's REFLOW — hands every pinned window back to the layout. */
   reflow: number
-  /** Delay between one window's entrance and the next, from Settings → Canvas. */
   stagger: number
-  /** Contents of the ACTIVITY window, if the board is showing one. The board owns
-   *  that window's placement and chrome like any other; only what goes inside it
-   *  comes from outside, because it is driven by the turn's tool events rather
-   *  than by anything in the reply text. */
   activity?: React.ReactNode
 }
 
-export default function VoiceCanvas({
-  panels, width, height, reserveX, reserveY, reflow, stagger, activity,
-}: Props) {
-  /** Windows the owner has moved or resized. Absolute, and immune to the layout. */
+/** A scrollable workspace. Adding evidence grows the board, not smaller type. */
+export default function VoiceCanvas({ panels, width, height, reserveX, reserveY, reflow, stagger, activity }: Props) {
   const [pinned, setPinned] = useState<Record<string, Pin>>({})
   const [z, setZ] = useState<Record<string, number>>({})
-  /** The window currently under a pointer gesture — its transition is killed for
-   *  the duration, because easing a window that is following the cursor is lag. */
   const [held, setHeld] = useState<string | null>(null)
-  /** One window blown up to fill the board — a chart on a laptop needs it. */
   const [full, setFull] = useState<string | null>(null)
+  const restoreScroll = useRef<number | null>(null)
+  const scroll = useRef<HTMLDivElement>(null)
   const topZ = useRef(10)
+  const endGesture = useRef<() => void>()
+  const viewportHeight = Math.max(100, height - 40)
+  const placed = useMemo(() => pack(panels, width, viewportHeight, reserveX, reserveY - 40), [panels, width, viewportHeight, reserveX, reserveY])
+  const contentHeight = Math.max(viewportHeight, ...placed.map(p => (pinned[p.id]?.y ?? p.y) + (pinned[p.id]?.h ?? p.h) + GAP))
+  // On small screens where the orb cannot have its own strip, allow the last
+  // panel to be scrolled completely above it as well.
+  const bottomRoom = reserveX < 600 ? Math.max(0, viewportHeight - Math.max(0, reserveY - 40)) : 0
 
-  const placed = useMemo(
-    () => pack(panels, width, height, reserveX, reserveY),
-    [panels, width, height, reserveX, reserveY],
-  )
-
-  useEffect(() => { setPinned({}); setFull(null) }, [reflow])
-  // A new conversation is a new board.
-  useEffect(() => { if (!panels.length) { setPinned({}); setFull(null) } }, [panels.length])
+  useEffect(() => { setPinned({}); setFull(null); scroll.current?.scrollTo({ top: 0, behavior: 'instant' }) }, [reflow])
+  useEffect(() => {
+    if (!panels.length) { setPinned({}); setFull(null); scroll.current?.scrollTo({ top: 0 }) }
+    else if (full && !panels.some(p => p.id === full)) setFull(null)
+  }, [panels, full])
+  useEffect(() => {
+    if (!full) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setFull(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [full])
+  useEffect(() => () => endGesture.current?.(), [])
+  useLayoutEffect(() => {
+    const el = scroll.current
+    if (!el) return
+    if (full) el.scrollTo({ top: 0, behavior: 'instant' })
+    else if (restoreScroll.current !== null) {
+      el.scrollTo({ top: restoreScroll.current, behavior: 'instant' })
+      restoreScroll.current = null
+    }
+  }, [full])
 
   const raise = useCallback((id: string) => {
-    setZ(prev => (prev[id] === topZ.current ? prev : { ...prev, [id]: ++topZ.current }))
+    setZ(prev => prev[id] === topZ.current ? prev : { ...prev, [id]: ++topZ.current })
   }, [])
+  const arrival = useRef(new Map<string, number>())
+  if (!panels.length) arrival.current.clear()
+  let batch = 0
+  for (const p of panels) if (!arrival.current.has(p.id)) arrival.current.set(p.id, Math.min(batch++, 4))
 
-  /* ── Arrival ──────────────────────────────────────────────────────────────
-   * Windows come in ONE AT A TIME, even when the answer lands in a single burst.
-   * A fast model finishes a whole reply between two frames, so without this the
-   * board simply appears — five windows blinking into existence at once, which
-   * reads as a page load rather than as an assembly.
-   *
-   * Each window's entrance is delayed by its position among the ones that
-   * arrived together, and the delay is remembered per id: a re-render (a drag, a
-   * repack, more text landing in a window) must never replay an entrance that
-   * has already happened. */
-  const arrival = useRef<Map<string, number>>(new Map())
-  const seenCount = useRef(0)
-  {
-    // Assign in render — the delay has to exist on the very first paint of a
-    // window, and an effect runs a frame too late to matter.
-    let batch = 0
-    for (const p of panels) {
-      if (arrival.current.has(p.id)) continue
-      arrival.current.set(p.id, batch++)
-    }
-    if (panels.length === 0 && seenCount.current !== 0) arrival.current.clear()
-    seenCount.current = panels.length
-  }
-
-  /** One pointer gesture, for both the grip and the resize corner. They differ
-   *  only in what the delta is applied to, which is not worth two listeners'
-   *  worth of duplicated setup and teardown. */
   const gesture = useCallback((
-    e: React.PointerEvent, p: Placed, box: { x: number; y: number; w: number; h: number },
+    event: React.PointerEvent, p: Placed, box: { x: number; y: number; w: number; h: number },
     apply: (dx: number, dy: number, from: typeof box) => Pin,
   ) => {
-    if (full) return
-    e.preventDefault()
-    e.stopPropagation()
-    raise(p.id)
-    setHeld(p.id)
-    const originX = e.clientX, originY = e.clientY
-    const from = { ...box }
-    const move = (ev: PointerEvent) => {
-      setPinned(prev => ({ ...prev, [p.id]: apply(ev.clientX - originX, ev.clientY - originY, from) }))
-    }
-    const up = () => {
+    if (full || event.button !== 0) return
+    event.preventDefault(); event.stopPropagation(); endGesture.current?.()
+    raise(p.id); setHeld(p.id)
+    const originX = event.clientX, originY = event.clientY, originScroll = scroll.current?.scrollTop ?? 0
+    const move = (e: PointerEvent) => setPinned(prev => ({ ...prev, [p.id]: apply(e.clientX - originX, e.clientY - originY + (scroll.current?.scrollTop ?? 0) - originScroll, box) }))
+    const end = () => {
       setHeld(null)
       window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      endGesture.current = undefined
     }
+    endGesture.current = end
     window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }, [full, raise])
 
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 2, overflow: 'hidden' }}>
-      {placed.map(p => {
-        const pin = pinned[p.id]
-        const isFull = full === p.id
-        const box = isFull
-          ? { x: GAP, y: GAP, w: width - GAP * 2, h: height - GAP * 2 }
-          : { x: pin?.x ?? p.x, y: pin?.y ?? p.y, w: pin?.w ?? p.w, h: pin?.h ?? p.h }
-        const [main, sub] = [p.title.slice(0, p.title.indexOf('_')), p.title.slice(p.title.indexOf('_'))]
+  const toggle = (id: string) => {
+    if (full === id) setFull(null)
+    else { restoreScroll.current = scroll.current?.scrollTop ?? 0; setFull(id); raise(id) }
+  }
+  const slide = (direction: number) => scroll.current?.scrollBy({ top: direction * viewportHeight * .8, behavior: 'smooth' })
 
-        return (
-          <div
-            key={p.id}
-            onPointerDown={() => raise(p.id)}
-            style={{
-              position: 'absolute',
-              left: box.x, top: box.y, width: box.w, height: box.h,
-              zIndex: (isFull ? 9000 : z[p.id]) ?? 10,
-              display: 'flex', flexDirection: 'column',
-              // Windows GLIDE when the layout moves them — that motion is what
-              // reads as the board being managed rather than redrawn. Killed
-              // while the owner is dragging or resizing, where easing is lag.
-              transition: held === p.id
-                ? 'none'
-                : 'left 0.45s cubic-bezier(0.4,0,0.2,1), top 0.45s cubic-bezier(0.4,0,0.2,1), width 0.45s cubic-bezier(0.4,0,0.2,1), height 0.45s cubic-bezier(0.4,0,0.2,1)',
-              // `both` matters: the window is held invisible through its delay,
-              // so a staggered arrival cannot flash the whole board first.
-              animation: 'widgetEntrance 0.42s ease both',
-              animationDelay: `${(arrival.current.get(p.id) ?? 0) * stagger}ms`,
-            }}
-          >
-            {/* Grip — the title, and the only place a drag starts. Deliberately
-                not the body: a drag that begins on a chart fights its tooltip. */}
-            <div
-              onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
-                // Never let a window be dragged fully off the board — the grip
-                // has to stay reachable or it is gone for good.
-                x: clamp(from.x + dx, 90 - from.w, width - 90),
-                y: clamp(from.y + dy, 0, height - 34),
-                w: from.w, h: from.h,
-              }))}
-              style={{
-                height: 22, flexShrink: 0,
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0 0.1rem 0 0.15rem',
-                cursor: isFull ? 'default' : 'move',
-                fontFamily: "'Rajdhani', sans-serif", fontSize: '0.62rem',
-                fontWeight: 700, letterSpacing: '0.2em',
-                userSelect: 'none', touchAction: 'none',
-              }}
-            >
-              <span style={{ color: 'var(--hb-icon)', letterSpacing: 0, fontSize: '0.7rem' }}>⣿</span>
-              <span style={{ color: pin ? 'var(--hb-amber)' : '#ffffff' }}>{main}</span>
-              <span style={{ color: 'var(--hb-cyan)' }}>{sub}</span>
-              <span style={{ flex: 1 }} />
-              <button
-                className="hb-btn"
-                onPointerDown={e => e.stopPropagation()}
-                onClick={() => { setFull(f => (f === p.id ? null : p.id)); raise(p.id) }}
-                title={isFull ? 'Restore' : 'Fill the board'}
-                style={{ height: 18, padding: '0 0.4rem', fontSize: '0.55rem', letterSpacing: '0.12em' }}
-              >
-                {isFull ? 'CLOSE' : 'EXTEND_'}
-              </button>
-            </div>
-
-            {p.kind === 'activity'
-              ? (
-                <div className="hb-holo" style={{
-                  flex: 1, minHeight: 0, overflow: 'hidden', padding: '0.7rem 0.85rem',
-                }}>
-                  {activity}
-                </div>
-              )
-              : <VoicePanelBody panel={p} />}
-
-            {/* Resize corner. Hidden while a window fills the board, where the
-                board's edge is the size and there is nothing to drag against. */}
-            {!isFull && (
-              <div
-                onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
-                  x: from.x, y: from.y,
-                  // Clamped against the board's far edge as well as the floor, so
-                  // a window cannot be grown out past where its own corner can be
-                  // reached to shrink it again.
-                  w: clamp(from.w + dx, MIN_W, Math.max(MIN_W, width - from.x - 4)),
-                  h: clamp(from.h + dy, MIN_H, Math.max(MIN_H, height - from.y - 4)),
-                }))}
-                title="Resize"
-                style={{
-                  position: 'absolute', right: 0, bottom: 0,
-                  width: 16, height: 16, cursor: 'nwse-resize',
-                  touchAction: 'none',
-                  // The corner mark, drawn rather than iconised: two hairlines
-                  // meeting, which reads as a grip at this size where a glyph
-                  // would just be a smudge.
-                  borderRight: '2px solid var(--hb-icon-dim)',
-                  borderBottom: '2px solid var(--hb-icon-dim)',
-                  borderBottomRightRadius: 4,
-                  opacity: 0.75,
-                }}
-              />
-            )}
-          </div>
-        )
-      })}
+  return <div className="hb-canvas-workspace" style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+    <div className="hb-canvas-navigation">
+      <span>{panels.length} panels <span className="hb-canvas-nav-hint">· {full ? 'Expanded view · Esc to restore' : contentHeight > viewportHeight ? 'Scroll to explore' : 'Drag to arrange'}</span></span>
+      <div><button aria-label="Scroll canvas up" disabled={!!full} onClick={() => slide(-1)}>↑</button><button aria-label="Scroll canvas down" disabled={!!full} onClick={() => slide(1)}>↓</button></div>
     </div>
-  )
+    <div ref={scroll} className="hb-canvas-scroll" role="region" aria-label="Canvas workspace" tabIndex={0}
+      onScroll={event => { if (full && event.currentTarget.scrollTop) event.currentTarget.scrollTop = 0 }}
+      style={{ position: 'absolute', inset: '40px 0 0', overflow: full ? 'hidden' : 'auto', scrollbarGutter: 'stable', overscrollBehavior: 'contain' }}>
+      <div style={{ position: 'relative', minHeight: contentHeight + bottomRoom }}>
+        {placed.map(p => {
+          const pin = pinned[p.id], isFull = full === p.id
+          const w = Math.min(pin?.w ?? p.w, Math.max(1, width - GAP * 2 - 12))
+          const box = isFull
+            ? { x: GAP, y: GAP, w: Math.max(1, width - GAP * 2 - 12), h: viewportHeight - GAP * 2 }
+            : { x: clamp(pin?.x ?? p.x, 0, Math.max(0, width - w - GAP)), y: pin?.y ?? p.y, w, h: pin?.h ?? p.h }
+          const title = p.title.replace(/_/g, ' ').trim() || p.kind
+          return <section key={p.id} aria-label={title} data-panel-id={p.id} data-kind={p.kind} data-expanded={isFull}
+            className="hb-canvas-panel" onPointerDown={() => raise(p.id)}
+            style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h,
+              zIndex: isFull ? 9000 : z[p.id] ?? 10, display: 'flex', flexDirection: 'column',
+              visibility: full && !isFull ? 'hidden' : 'visible',
+              transition: held === p.id || full ? 'none' : 'left .2s ease, top .2s ease, width .2s ease, height .2s ease',
+              animation: 'widgetEntrance .25s ease both', animationDelay: `${(arrival.current.get(p.id) ?? 0) * Math.min(stagger, 100)}ms`,
+            }}>
+            <div className="hb-canvas-grip" onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
+              x: clamp(from.x + dx, 0, Math.max(0, width - from.w - GAP)), y: Math.max(0, from.y + dy), w: from.w, h: from.h,
+            }))} style={{ cursor: isFull ? 'default' : 'move' }}>
+              <span className="hb-canvas-grip-mark" aria-hidden>⠿</span><span className="hb-canvas-panel-title" title={title}>{title}</span>
+              <button onPointerDown={e => e.stopPropagation()} onClick={() => toggle(p.id)} aria-expanded={isFull}
+                aria-label={`${isFull ? 'Restore' : 'Expand'} ${title}`}>{isFull ? 'Restore' : 'Expand'}</button>
+            </div>
+            <RenderSurface.Provider value={{ canvas: true, expanded: isFull }}>
+              {p.kind === 'activity' ? <div className="hb-canvas-activity">{activity}</div> : <VoicePanelBody panel={p} />}
+            </RenderSurface.Provider>
+            {!isFull && <div className="hb-canvas-resize" title="Resize panel" onPointerDown={e => gesture(e, p, box, (dx, dy, from) => ({
+              x: from.x, y: from.y, w: clamp(from.w + dx, Math.min(280, width - GAP * 2), Math.max(1, width - from.x - GAP - 12)),
+              h: clamp(from.h + dy, p.kind === 'stat' ? 150 : 240, 1600),
+            }))} />}
+          </section>
+        })}
+      </div>
+    </div>
+  </div>
 }

@@ -83,7 +83,7 @@ export default function MemoryEditorModal({
 
   // Commit changes
   const handleSave = async () => {
-    if (saving) return
+    if (saving || !file.editable) return
     setSaving(true)
     setSaveStatus('saving')
     setStatusMsg('Kayıt yapılıyor...')
@@ -97,6 +97,7 @@ export default function MemoryEditorModal({
         }
       } else {
         setLastSavedContent(content)
+        file.updated_at = res.updated_at
         setSaveStatus('saved')
         setStatusMsg('Tüm değişiklikler kaydedildi.')
         if (onSave) onSave(res)
@@ -133,6 +134,7 @@ export default function MemoryEditorModal({
   }
 
   const handleRestore = async (id: number) => {
+    if (!file.editable) return
     try {
       setStatusMsg('Sürüm geri yükleniyor...')
       const restored = await restoreMemoryRevision(config, id)
@@ -482,7 +484,7 @@ export default function MemoryEditorModal({
             {/* Save Button */}
             <button
               onClick={handleSave}
-              disabled={saving || !isDirty}
+              disabled={saving || !isDirty || !file.editable}
               title="Değişiklikleri Kaydet (Ctrl+S)"
               style={{
                 background: isDirty
@@ -632,6 +634,7 @@ export default function MemoryEditorModal({
                       </div>
                       <button
                         onClick={() => handleRestore(r.id)}
+                        disabled={!file.editable}
                         className="glass glass-interactive"
                         style={{
                           background: 'rgba(255, 255, 255, 0.06)',
@@ -710,6 +713,7 @@ export default function MemoryEditorModal({
               {/* Code Textarea */}
               <textarea
                 ref={textareaRef}
+                readOnly={!file.editable}
                 value={content}
                 onChange={e => setContent(e.target.value)}
                 onSelect={handleSelect}

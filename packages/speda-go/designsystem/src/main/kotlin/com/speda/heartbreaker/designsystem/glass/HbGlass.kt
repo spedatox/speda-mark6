@@ -220,7 +220,7 @@ private fun Modifier.hbGlassInternal(
 }
 
 /** First-corner radius in px for [shape]; Pill resolves to half the min side at draw time. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.firstCornerRadiusPx(shape: HbGlassShape): Float =
+private fun androidx.compose.ui.draw.CacheDrawScope.firstCornerRadiusPx(shape: HbGlassShape): Float =
     when (shape) {
         HbGlassShape.Island -> 26.dp.toPx()
         HbGlassShape.Card, HbGlassShape.CardTop -> 22.dp.toPx()

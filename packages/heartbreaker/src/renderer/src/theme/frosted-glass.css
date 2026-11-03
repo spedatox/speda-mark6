@@ -1,0 +1,41 @@
+/* Smooth frost diffuses the backdrop through a softly lit pane. Rounding-only
+   utilities (.hb-island, .hb-tile, .hb-well) and content wrappers do not paint
+   a material: their controls retain their own backgrounds and state colours. */
+
+/* Apply the material only to named surfaces. Matching every inline blur or
+   glass token also painted scrims, ghost hovers and nested menu backgrounds. */
+:root :is(
+  .glass, .glass-active, .glass-tint, .glass-amber,
+  .hb-holo, .hb-panel, .hb-glass, .hb-glass-sm, .hb-glass-xs, .hb-glass-top,
+  .hb-btn, .hb-field,
+  .hb-head-light, .hb-head-cyan, .hb-head-glass, .hb-panel-head, .hb-query-box,
+  .hb-chip-amber,
+  .hb-canvas-panel, .hb-bubble-user, .hb-bubble-agent, .hb-bubble-agent-mine,
+  .hb-party-owner, .hb-party-agent, .hb-party-agent-mid,
+  .hb-canvas-grip button, .hb-canvas-navigation button,
+  .hb-widget-toolbar button, .hb-view-toggle
+):where(:not(.glass-ghost):not(.hb-btn-ghost):not([style*="var(--glass-menu)"])) {
+  --glass-state-wash: linear-gradient(transparent, transparent);
+  background: var(--glass-state-wash), var(--glass-face, var(--glass-sheen)), var(--glass-fill) !important;
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
+}
+
+:root :is(.glass-active, .hb-head-cyan, .hb-bubble-user, .hb-party-owner) {
+  --glass-state-wash: linear-gradient(rgba(var(--hb-accent-rgb), .12), rgba(var(--hb-accent-rgb), .06));
+}
+:root :is(.glass-tint, .hb-btn-tint) {
+  --glass-state-wash: linear-gradient(color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 8%, transparent));
+}
+:root :is(.glass-amber, .hb-chip-amber) {
+  --glass-state-wash: linear-gradient(rgba(217,156,68,.16), rgba(217,156,68,.08));
+}
+
+:root :is(.glass-interactive, .hb-btn):hover:not(:disabled) {
+  --glass-face: var(--glass-sheen-hi);
+}
+
+/* Preserve readable surfaces when the browser cannot diffuse the backdrop. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-fill: rgb(7,11,17) !important; --glass-menu: rgb(11,16,22) !important; }
+}

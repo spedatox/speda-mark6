@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import com.speda.heartbreaker.data.AgentCommEntry
+import com.speda.heartbreaker.data.WorkerExecution
+import com.speda.heartbreaker.ui.chat.SubagentPanel
 import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.designsystem.brand.AgentMark
 import com.speda.heartbreaker.designsystem.brand.AgentMarks
@@ -99,12 +101,14 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
 
     var entries by remember { mutableStateOf<List<AgentCommEntry>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
+    var workers by remember { mutableStateOf<List<WorkerExecution>>(emptyList()) }
     var wide by remember { mutableStateOf(false) }
 
     LaunchedEffect(config) {
         while (true) {
             // oldest first — a chat scrollback, newest at the bottom
             entries = api.fetchAgentComms(config, 120).asReversed()
+            runCatching { api.fetchWorkerExecutions(config) }.onSuccess { workers = it }
             loaded = true
             delay(POLL_MS)
         }
@@ -182,7 +186,7 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                 }
 
                 // ── Feed ─────────────────────────────────────────────────────
-                if (entries.isEmpty()) {
+                if (entries.isEmpty() && workers.isEmpty()) {
                     HbText(
                         if (loaded) t.commsTray.noTraffic else t.commsTray.linking,
                         style = HbType.read.copy(fontSize = 14.sp),
@@ -198,6 +202,12 @@ fun AgentCommsScreen(config: AppConfig, api: IgorApi, onClose: () -> Unit) {
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
+                        if (workers.isNotEmpty()) item(key = "worker-history-heading") {
+                            HbText("Worker tasks · recent history", style = HbType.readout.copy(fontSize = 10.sp), color = palette.accent)
+                        }
+                        items(workers.take(8), key = { "worker-${it.executionId}" }) { execution ->
+                            SubagentPanel(listOf(execution.toRun()), config = config, api = api)
+                        }
                         items(rows, key = { it.msg.key }) { row ->
                             if (row.chip) TimeChip(row.msg.at)
                             CommLine(row.msg, head = row.head, compact = !wide)

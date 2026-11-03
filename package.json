@@ -6,6 +6,7 @@
     "packages/heartbreaker"
   ],
   "scripts": {
+    "test:workers": "node scripts/test_worker_clients.mjs",
     "striker:dev": "npm run dev --workspace=packages/striker",
     "striker:build": "npm run build --workspace=packages/striker",
     "striker:typecheck": "npm run typecheck --workspace=packages/striker",
@@ -20,5 +21,12 @@
   },
   "dependencies": {
     "electron": "^42.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "rehype-katex": { "katex": "0.19.1" },
+    "micromark-extension-math": { "katex": "0.19.1" }
   }
 }

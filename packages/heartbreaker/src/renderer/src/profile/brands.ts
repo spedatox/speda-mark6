@@ -49,9 +49,9 @@ export const BRANDS: Record<string, Brand> = {
     avatarInitial: 'A', accent: '#3fae74',
   },
   nightcrawler: {
-    agentId: 'nightcrawler', name: 'NightCrawler', modelNumber: 'Mark III', userName: 'Ahmet Erol',
+    agentId: 'nightcrawler', name: 'Friday', modelNumber: 'Mark III', userName: 'Ahmet Erol',
     tagline: 'OSINT & Web Surveillance',
-    avatarInitial: 'N', accent: '#9165e6',
+    avatarInitial: 'F', accent: '#9165e6',
   },
   optimus: {
     agentId: 'optimus', name: 'Optimus', modelNumber: 'Mark III', userName: 'Ahmet Erol',
@@ -64,3 +64,6 @@ export const BRANDS: Record<string, Brand> = {
     avatarInitial: 'O', accent: '#e0703a',
   },
 }
+
+// Alias lookup must not add a second switcher/settings entry.
+Object.defineProperty(BRANDS, 'friday', { value: BRANDS.nightcrawler, enumerable: false })

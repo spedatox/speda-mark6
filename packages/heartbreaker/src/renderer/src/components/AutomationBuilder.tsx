@@ -26,6 +26,7 @@
  * backdrop and the escape key, and this pane already owns the whole width.
  */
 
+import FormSelect from './FormSelect'
 import { useMemo, useState } from 'react'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
@@ -360,25 +361,25 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
           </SettingsField>
 
           <SettingsField label={a.stepAgent} hint={a.stepAgentHint}>
-            <select value={agentId} onChange={e => setAgentId(e.target.value)} style={fieldStyle}>
+            <FormSelect aria-label={a.stepAgent} value={agentId} onValueChange={value => setAgentId(value)} style={fieldStyle}>
               {agents.map(ag => (
                 <option key={ag.agent_id} value={ag.agent_id}>
                   {ag.name} — {ag.domain}
                 </option>
               ))}
-            </select>
+            </FormSelect>
           </SettingsField>
 
           <SettingsField label={a.languageLabel} hint={a.languageHint}>
-            <select
+            <FormSelect aria-label={a.languageLabel}
               value={language ?? ''}
-              onChange={e => setLanguage(e.target.value ? e.target.value : null)}
+              onValueChange={value => setLanguage(value ? value : null)}
               style={fieldStyle}
             >
               <option value="">{a.languageDefault}</option>
               <option value="en">English</option>
               <option value="tr">Türkçe</option>
-            </select>
+            </FormSelect>
           </SettingsField>
 
           {isHook(template) ? (
@@ -436,14 +437,14 @@ export function AutomationBuilder({ existing, agents, onCancel, onSave }: {
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 200px' }}>
                   <SettingsField label={a.frequency}>
-                    <select
+                    <FormSelect aria-label={a.frequency}
                       value={frequency}
-                      onChange={e => setFrequency(e.target.value as AutomationFrequency)}
+                      onValueChange={value => setFrequency(value as AutomationFrequency)}
                       disabled={freqs.length === 1}
                       style={{ ...fieldStyle, opacity: freqs.length === 1 ? 0.55 : 1 }}
                     >
                       {freqs.map(f => <option key={f} value={f}>{a.freq[f]}</option>)}
-                    </select>
+                    </FormSelect>
                   </SettingsField>
                 </div>
                 <div style={{ flex: '0 1 160px' }}>

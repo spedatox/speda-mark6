@@ -1,0 +1,30 @@
+# Primary sources and design decisions
+
+Read on 23 October 2026. These are public patterns, not evidence of OpenAI's private “Dreaming v3” architecture. Recommendations below are engineering judgments for Mark VI, not vendor guarantees. No framework was installed or benchmarked during this study.
+
+| Source | What it establishes | Decision for Mark VI |
+|---|---|---|
+| [OpenAI: orchestration and handoffs](https://developers.openai.com/api/docs/guides/agents/orchestration) | A manager can retain ownership while calling specialists; handoffs transfer ownership of a conversational branch. | Distinguish consultation, room participation, and ownership transfer explicitly. Preserve the existing provider-neutral boundary. |
+| [Microsoft: group chat orchestration](https://learn.microsoft.com/en-us/agent-framework/workflows/orchestrations/group-chat) | Central speaker selection and synchronized conversation context support iterative contributions. | Use a room coordinator and explicit speaker events. Our bounded context projection differs from broadcasting all history to every participant. |
+| [LangGraph: persistence](https://docs.langchain.com/oss/python/langgraph/persistence) and [checkpointers](https://docs.langchain.com/oss/python/langgraph/checkpointers) | Thread checkpoints and cross-thread stores have separate roles. Production persistence must survive process loss. | Keep operational execution checkpoints separate from Iacon's long-term knowledge. |
+| [LangGraph: Functional API source documentation](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/functional-api.mdx) | Replay can reuse completed task results; unfinished tasks may execute again. Side effects require idempotent handling. | Record paid calls and tool outcomes separately. A saved conversation alone is insufficient recovery state. |
+| [Temporal: error handling](https://docs.temporal.io/develop/python/best-practices/error-handling) | Activities use at-least-once execution and can repeat after worker failure. Retry policy and idempotency are application concerns. | Do not confuse durable execution with exactly-once external effects. Reconcile unknown outcomes; retry only the admitted failed step. |
+| [Anthropic: multi-agent research system](https://www.anthropic.com/research/multi-agent-research-system) | Parallel research benefits from explicit delegation boundaries and independent contexts, but can be expensive. Their reported multi-agent token use was approximately 15 times ordinary chat in their system. | Select participants and independent work deliberately. That multiplier is a warning from their deployment, not a prediction for SPEDA. |
+| [Anthropic: context engineering](https://www.anthropic.com/research/effective-context-engineering-for-ai-agents) | Curating relevant context is a recurring runtime responsibility; increasing context indiscriminately can impair attention. | Use bounded room packets, project handoffs, exact evidence links, and selective tool disclosure. |
+| [Google ADK: custom workflow documentation](https://github.com/google/adk-docs/blob/main/docs/agents/custom-agents.md) | Workflows can compose explicit control flow and shared state. The fetched document flags newer graph-based mechanisms as superseding the older agent-based workflow approach. | Adopt the principle of explicit dependency/state flow; do not copy a dated API example or share one mutable context across concurrent workers. |
+| [A2A protocol specification](https://a2a-protocol.org/latest/specification/) | Tasks, messages, artifacts, cancellation, and subscriptions are separate protocol concepts. Streaming messages alone are not reliable persistence for critical outputs. | Keep an internal typed contract; add A2A only at independently deployed peer boundaries where interoperability is needed. Artifact records remain durable. |
+| [CharacterEval, ACL 2024](https://aclanthology.org/2024.acl-long.638/) | Evaluates character dialogue across multiple turns and multiple dimensions with human-quality controls. | Use multifaceted, human-reviewed dialogue evaluation. Its Chinese fictional-character results do not validate these MCU/Transformers personas or Turkish dialogue. |
+
+## Runtime choice
+
+**Initial recommendation:** evolve the existing Python services and Forge behind a PostgreSQL-backed coordination contract. Use a modular backend plus separately supervised execution workers. Eight personalities do not require eight microservices. SQLite remains suitable for isolated development and the existing single-host workshop until its authoritative state is deliberately migrated.
+
+| Option | Fit | Trade-off |
+|---|---|---|
+| Extend existing Mark VI + Forge | Best reuse of provider policies, Iacon, workspace claims, and worker controls | We own transactional admission, recovery, concurrency, and their failure tests. This is real implementation work. |
+| LangGraph runtime | Strong candidate for graph/checkpoint execution | Adds another state model and integration layer; checkpoints still need SPEDA's budgets, effects, and project authority. Benchmark an adapter if the custom state machine becomes harder to maintain. |
+| Temporal for durable jobs | Strong alternative when deployment spans hosts or unattended workflows become operationally demanding | Requires operating another service or paying for it, plus versioned workflow/activity integration. Keep outside the direct-chat path. |
+| OpenAI Agents SDK / Microsoft Agent Framework / Google ADK wholesale adoption | Useful reference implementations of coordination patterns | Replacing the entire runtime now would duplicate or migrate substantial existing behavior. No measured evidence here establishes a net benefit for SPEDA. |
+| Unrestricted agent mesh | Flexible conversations | Poor fit for bounded spending, deterministic ownership, and predictable response latency. |
+
+n8n remains the sole calendar/recurrence scheduler. A worker consuming an admitted job, a lease heartbeat, or a completion event is runtime execution, not a second user-facing scheduler.

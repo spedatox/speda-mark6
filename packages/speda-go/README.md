@@ -2,6 +2,14 @@
 
 The native Android client. Kotlin, Jetpack Compose. Package id `com.speda.heartbreaker` — intentional, matching the desktop client's Electron app identity rather than the "Speda GO" branding; it doesn't get renamed.
 
+Heartbreaker and SPEDA Go use one renovated backend and its authoritative
+conversation, membership, model, memory and worker state. Android now negotiates
+the same `room-v1` chat/history/reconnect contract, supports named participants,
+summon/dismiss/handoff, explicit recipients and reply-to, and recovers session
+workers independently of the public reply. Voice turns send the shared canvas
+settings and preserve participant playback order. See
+[cross-client contracts and verification](../../docs/SPEDA_GO_PARITY.md).
+
 ---
 
 ## Contents

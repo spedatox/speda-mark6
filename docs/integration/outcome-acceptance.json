@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "source_commit": "c24c92f9c1126f8d07fb17a713d919ccef9bb3c5",
+  "target": "Superior Mark VI",
+  "contract": "docs/SUPERIOR_MARK_VI.md",
+  "note": "Existing interface-level local tests remain valid evidence of implementation. Comparative workflow acceptance is tracked separately; registration or superseded labels cannot close an owner outcome.",
+  "workflows": [],
+  "release_checks": {
+    "projects_and_canvas_accepted": false,
+    "migration_and_rollback_verified": false,
+    "live_end_to_end_verified": false
+  }
+}

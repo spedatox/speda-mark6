@@ -1,0 +1,3122 @@
+{
+  "source_commit": "c24c92f9c1126f8d07fb17a713d919ccef9bb3c5",
+  "files": {
+    "package-lock.json": {
+      "source": "package-lock.json",
+      "sha256": "6efb527f998c0ff79fba84aa98cdec224a29cdb7c9f812283b1a670e00d4d153",
+      "mode": "unchanged"
+    },
+    "package.json": {
+      "source": "package.json",
+      "sha256": "0b807b59261d5afe6c17dbcddf79208edcb3600beb64a92d168be3e1328d54f5",
+      "mode": "unchanged"
+    },
+    "packages/browser/Dockerfile": {
+      "source": "packages/browser/Dockerfile",
+      "sha256": "b10ac47a385603e9e4070fedc9cfbf6350b35d74caf8b55092b80445a5e77be2",
+      "mode": "unchanged"
+    },
+    "packages/browser/README.md": {
+      "source": "packages/browser/README.md",
+      "sha256": "1ac2333de48b060db1b0a8c71f43daf1888b76e6f335a4b85cc94137c75076c7",
+      "mode": "unchanged"
+    },
+    "packages/browser/server.py": {
+      "source": "packages/browser/server.py",
+      "sha256": "4065fc30e3c52c08c6836aaa18235c068dbf1eb96c6b106094d5a105161884eb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/HEARTBREAKER.md": {
+      "source": "packages/heartbreaker/HEARTBREAKER.md",
+      "sha256": "92673335d4abed6af4cb2809792c2dfdb3d99a14fd570c05b5e323038835cf42",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/build/icon.ico": {
+      "source": "packages/heartbreaker/build/icon.ico",
+      "sha256": "af0f98bc0f0559e5edd9541e8fce6aa68e85be370aeea0fbfd5640bd77819b55",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/canvasharness/index.html": {
+      "source": "packages/heartbreaker/canvasharness/index.html",
+      "sha256": "02924088015755904fdfa913efc906409b223a0b8099a980020f738814141635",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/canvasharness/main.tsx": {
+      "source": "packages/heartbreaker/canvasharness/main.tsx",
+      "sha256": "ff87ec807c84e3cb083addcfd21f7bce9d5257c0d632721d6411e20f7ead5b10",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/electron-builder.yml": {
+      "source": "packages/heartbreaker/electron-builder.yml",
+      "sha256": "8f9abbf82a0ae16945a2a11635c2f33216da46870c19f6faab469944f69d504b",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/electron.vite.config.ts": {
+      "source": "packages/heartbreaker/electron.vite.config.ts",
+      "sha256": "ad32e7e4f570399e4b181c23af5e8d91b0667073328ca49e1157bf4a03564872",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/mapharness/index.html": {
+      "source": "packages/heartbreaker/mapharness/index.html",
+      "sha256": "2315ff2a89d83a22c22b7298d400e2ed24d0b95ff5bd427af459bc653542a3a0",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/mapharness/main.tsx": {
+      "source": "packages/heartbreaker/mapharness/main.tsx",
+      "sha256": "bfa2f3e77cd3b622012b2647aa9f23c1e757fa2c8f8a4051899cb34aa853bd10",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/package.json": {
+      "source": "packages/heartbreaker/package.json",
+      "sha256": "1a3f8d3e3210ed1b81c2278db87c4081e8da0db78a953fb5ee17fefe5d2069e3",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/scripts/gen-chat-fixtures.ts": {
+      "source": "packages/heartbreaker/scripts/gen-chat-fixtures.ts",
+      "sha256": "52a9e42db99a86e3861a0ce40877ea73c50cca5facf78a0f25681716f34ca5f1",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/scripts/gen-theme-fixtures.ts": {
+      "source": "packages/heartbreaker/scripts/gen-theme-fixtures.ts",
+      "sha256": "4eabf71498b0d9ba98d130a965249543491c94dc8fe01c26c9be27ffe528a858",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/main/index.ts": {
+      "source": "packages/heartbreaker/src/main/index.ts",
+      "sha256": "c29a528b6150a885d980e1b0089b4c36d4f6fdd64eacecf972e6b7b3a82e404e",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/preload/index.d.ts": {
+      "source": "packages/heartbreaker/src/preload/index.d.ts",
+      "sha256": "20761e47b8d2b2283b35187750016eec120570fd80ed5c4d7d69a76d6baed1b1",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/preload/index.ts": {
+      "source": "packages/heartbreaker/src/preload/index.ts",
+      "sha256": "17dcbcd73b5f493df0f01ea885639f621dad35148cd11b8563b268ffb3d21208",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/index.html": {
+      "source": "packages/heartbreaker/src/renderer/index.html",
+      "sha256": "16f647f7762c9f8576d374396faac275ec680ceeb555b7d8f0ad69a71ca51ca3",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/App.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/App.tsx",
+      "sha256": "f1d065d904256b3fc92c84e6df47ef2dab8665d206d04532fb773cd028138769",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/AgentMark.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AgentMark.tsx",
+      "sha256": "5096ed58e79cc856591316152ea6b487d9302e8baf990b16722d6f838be40401",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/AgentModelPicker.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AgentModelPicker.tsx",
+      "sha256": "3f9e8cd714967d1f2cd457cf2d3b5948585a1778d42293b8aa7b604b0146192f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/AgentSwitcherOverlay.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AgentSwitcherOverlay.tsx",
+      "sha256": "9cd8d100f62abcf6b66c98fc2061473cd2e020c3c7e98dfc2b6e97f2a776a87d",
+      "mode": "adapted",
+      "target_sha256": "bf83646855f0e7ba2c34a2ebd03995a15ef8c73f88457877cedb7bdee6a811ef",
+      "reason": " Friday display alias; preserve stored transport IDs."
+    },
+    "packages/heartbreaker/src/renderer/src/components/AircraftBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AircraftBlock.tsx",
+      "sha256": "1d0da267a4602a3b5ff7afa530c4b93e106995092810ab9c821cd7e1cc23e614",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/AutomationBuilder.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AutomationBuilder.tsx",
+      "sha256": "db58882ccca75eb2a27c64e8fba90472427e63d166e658081d85201908a5b644",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/AutomationRunHistory.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/AutomationRunHistory.tsx",
+      "sha256": "264b769d3fe4936b1478a3053328cadf9c52c3d07eba29b2869a60ca269c2f28",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/BusBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/BusBlock.tsx",
+      "sha256": "6af93970391486ccb5cbcb5171ea79c5be25520ef09ab1e1174a5fc2aad3e7cc",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/CalendarBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/CalendarBlock.tsx",
+      "sha256": "f4bb5ef67f27ce9dc96eae05edb108f35f4aac75d32cd7aeaf22fe3a96828664",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ChartBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ChartBlock.tsx",
+      "sha256": "07c7e924a5d4cb7be1feab6f28860851a0981a198c75b6c78f743f01962c02cb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ChatMain.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ChatMain.tsx",
+      "sha256": "95944b0e68bd06b7418d69a74873a32ca77cb6b1b1beb28eb5ba09fa833f6d6e",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/CodeBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/CodeBlock.tsx",
+      "sha256": "d572d2c143496e5dac4c83d257f8e9fe609ed79b75fb0c6aa9c9a0f990f3f017",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/CommBubble.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/CommBubble.tsx",
+      "sha256": "979d41f22653f1a35bc9a8435a77009f0c6c55d6910625f4d0c2899d547e83f6",
+      "mode": "adapted",
+      "target_sha256": "a37ac2ff068c8ea215588a130521047dbc09d16e4767d49990f259220c035fb0",
+      "reason": " Friday display alias; preserve stored transport IDs."
+    },
+    "packages/heartbreaker/src/renderer/src/components/CommsTray.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/CommsTray.tsx",
+      "sha256": "0d8961d4172d2105879bc3d296d5d3cc9d0ba6349d0766a21a1ad726c8739e8f",
+      "mode": "adapted",
+      "target_sha256": "b4ec5addf7d1d32a2d17b2850781a5a42242da04f435bdcfce8a682f808c2119",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/ConfigTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ConfigTab.tsx",
+      "sha256": "d09f6f931f286cc47161c47db08c356fc44ecda99ffdea9c422d363b207b89c1",
+      "mode": "adapted",
+      "target_sha256": "e2e93b45b970a78cb8904dab92f7aae211a282c094264c400ed10353bf25be24",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/heartbreaker/src/renderer/src/components/ConnectionSetupModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ConnectionSetupModal.tsx",
+      "sha256": "09ccab2fc08e24923ddcfa8e17dd17cb2d0b26309f8a937a70b1b620f6ced36f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ErrorBoundary.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ErrorBoundary.tsx",
+      "sha256": "f88f4162e11186707e600ed8e31fdb6400ce16c1f81261b2b04fb2a09402739c",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/GlassFolderIcon.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/GlassFolderIcon.tsx",
+      "sha256": "5ed674bad8bd81e0adff99c968535a04ff7fc62b87ea32cd7fea94ced6609e54",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/GlassSelect.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/GlassSelect.tsx",
+      "sha256": "99ef45066600acea5170a30a27e58acb05134e07504b9162169908127c43464f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/Header.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/Header.tsx",
+      "sha256": "fd48f40e71fab804c4c4b66e075055f0426b0a683a493b6f077cf7c44fde5bb7",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/HisarBrowser.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/HisarBrowser.tsx",
+      "sha256": "831ef3b0866033c45bd5ba7b1297a9bee09add6a625414fec65c1b3a4417bc31",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/HousePartyModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/HousePartyModal.tsx",
+      "sha256": "fd9a25d3deb6b148e1ff754c47b6fc66b3b2405ec48337a4371a72baf9334bc9",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/HousePartyWarning.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/HousePartyWarning.tsx",
+      "sha256": "3c7b4f6b137c5013f0513ebb24e3cf7ee3c6e5b6c741c6633d31b2d6e13d5fdf",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/HudFrame.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/HudFrame.tsx",
+      "sha256": "feef3e1e1fd4434b429f47d455a8b89918c4abf678b13642273231eb59d04302",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/InputBar.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/InputBar.tsx",
+      "sha256": "269a08ba3a2ff2eae9a456f7cb82ccaca664cf3e8d588203119d115b9d7d60d0",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes.",
+      "target_sha256": "a999e6a389ef9f0bac7f0e9a5c266f770ae7664d4019d5d1734f279d3d7575f1"
+    },
+    "packages/heartbreaker/src/renderer/src/components/InteractionPrompt.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/InteractionPrompt.tsx",
+      "sha256": "75079523b35bb0fece02faffe829d557b804804d4e8b2b778830080408eb9118",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/Layout.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/Layout.tsx",
+      "sha256": "f277c5075175988465723c1e2ab11397016c71bd2ce18561cc0c56835a7c3e65",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/LockScreen.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/LockScreen.tsx",
+      "sha256": "90cbd96444c3a21b08130e285ddb9dbd66abe3e5bbccc37b8920e6198f1b15ba",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/LockScreensaver.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/LockScreensaver.tsx",
+      "sha256": "4bf8e9f0f80c417dc0d3aada72be98b9ad391a359393aadc4ab5e7c66e1c3b0c",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/LockdownActivation.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/LockdownActivation.tsx",
+      "sha256": "f10c9903b90a0c924e8cdc01e5dbf1200323180c84d950aba0987eace6aaf912",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/LockdownModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/LockdownModal.tsx",
+      "sha256": "0d8e834ad5eba666de9cdaec9b6250215f2867f54d19ebd6bd7f15a4f629a0f6",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/MapBlock.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/MapBlock.tsx",
+      "sha256": "3fd012c83dfa27f0f6ac79e1e7cabaf09dbff8cb71b4fd0a242e8b8016220d17",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/McpServersPanel.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/McpServersPanel.tsx",
+      "sha256": "deb72408306536cff91fda2d96a9c5c38ca03bcf1a0dabdaccf4cbb381192a39",
+      "mode": "adapted",
+      "target_sha256": "e96ccfde6afd55b52353d6c84b32a7f16e715bd011c851381d5cb083364a8493",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/MemoryEditorModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/MemoryEditorModal.tsx",
+      "sha256": "d669c17405d18ea949cb7d60acf5bdef9964c256ac7cf2a2bfb7a5153cd5d7ce",
+      "mode": "adapted",
+      "target_sha256": "3ebe521902778a116ca793d6789324532fe156f5e4a94d5f79ab95395ecfb96a",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/heartbreaker/src/renderer/src/components/MemoryExplorerModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/MemoryExplorerModal.tsx",
+      "sha256": "a41884b99ee213749609aff70d147603b4028fcf486b1a1c7dfc043cc15ef8b6",
+      "mode": "adapted",
+      "target_sha256": "0cdb76f3bd91ceaa4822b0e520efdf8d67f99c1babc2b29c9991e696fba37dc3",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/heartbreaker/src/renderer/src/components/Message.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/Message.tsx",
+      "sha256": "7d05221219044b36a605b36a7b9a2d809c758013c46aa0857decd7d9fdfbcf06",
+      "mode": "adapted",
+      "target_sha256": "c3252ff05e62e8aa13e08193bdd646f7aa62e1f0e800d9f4d2e5d4d49c3621b9",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/MessageList.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/MessageList.tsx",
+      "sha256": "43f09e64dbb2fd2f09765cf2a92a979c21f9920a1ef897e3612e91b1a3eae7de",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/NeuralBackground.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/NeuralBackground.tsx",
+      "sha256": "3c4826d90225ad2020943d3c938eaa0a5564278f17a614b132d7d8eae1b21c34",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/PartyActivation.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PartyActivation.tsx",
+      "sha256": "02a339d4a55a1b34c6fcefe4283e2f9d177b55e451dc163243479d920cca4cd1",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/PartyRosterStrip.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PartyRosterStrip.tsx",
+      "sha256": "65c3863289ce5968ac2efd937f4f0786bb61b569e5bae99a1561d0b077b0b7a6",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/PartyStream.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PartyStream.tsx",
+      "sha256": "f753eaff37ee3e240a8b66c627abea07bb7a0bf4735f2afff94e531ffdabc34b",
+      "mode": "adapted",
+      "target_sha256": "7d2c02d7cf88a44c5374e89e1e15a102a55091c7fc806545441ec57c4e01e61d",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/PendingAsksTray.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PendingAsksTray.tsx",
+      "sha256": "1a1db1dde99d6e5fcdbdc774046b4cce5b9c04116730929f572ed9f9e4e01bca",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/PersonalityTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PersonalityTab.tsx",
+      "sha256": "6ad92609ddaf497954a078ea0040a817014207d9ffc4530ca5285f3c687f3ffc",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/PortalsPanel.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PortalsPanel.tsx",
+      "sha256": "4c52b6c580f3a70e413703e313fb6b02e8020cc515b0cbc012b895590b9f1bff",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ProjectsView.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ProjectsView.tsx",
+      "sha256": "195f3a03e472521020f21584a838a2326f60f9b44a19ea98c134c3ae4b36ce69",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ProtocolsTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ProtocolsTab.tsx",
+      "sha256": "cb1ec51ec18071185c74890cd5a6580a49887b49dc6abc41e78f8124f98bd2f0",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/RemindersTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/RemindersTab.tsx",
+      "sha256": "29461dd5af598f71d160086896877044583516856aa405a8023ebeb65f524b15",
+      "mode": "adapted",
+      "target_sha256": "0dd865c1669817097047742a346f8dac9f6a95c5a423d9fc25587233460e1f5a",
+      "reason": " Friday display alias; preserve stored transport IDs."
+    },
+    "packages/heartbreaker/src/renderer/src/components/RosterModelWindow.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/RosterModelWindow.tsx",
+      "sha256": "b018d4f4940f8ec98fbe52839cb4cd59b04250240f19c23b75b5ad42b61903a9",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ScreenLockSettings.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ScreenLockSettings.tsx",
+      "sha256": "8aeede0f7d2449b7a65576fd67a2206ad38758d046d2fe771a535b44c13310fd",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/SelectionContext.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SelectionContext.tsx",
+      "sha256": "50de92f15b95fdfb07697f63eeb1ff2a2fa53ecf42dfa2cd77b7478f16190fc6",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/SettingsModal.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SettingsModal.tsx",
+      "sha256": "1cccec3b60b35e8e5a1f85382ec2d483afcb3ac45b9188e76dd204954cb4c009",
+      "mode": "adapted",
+      "target_sha256": "6c9670f9b44879a3e1b358a1e4b1ff1af076114b65db1fd7b48a909a61d55c1c",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/Sidebar.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/Sidebar.tsx",
+      "sha256": "24167339fa0a1ff2103b9ace5bfcc3a361b8cfead394c087aea400c54140a314",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/Skeleton.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/Skeleton.tsx",
+      "sha256": "4ce1afcef98949d546ebc76c893a8564724be0c3236aaea947fea7c728a227e8",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/SkyfallCountdown.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SkyfallCountdown.tsx",
+      "sha256": "8dbc38dbabeb7e381eaad1451c6a120e537651fa52d7d509a674945316caf29a",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/SkyfallProjects.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SkyfallProjects.tsx",
+      "sha256": "042a7efbe559481a16775ebf691a1a4348d12cc85d1a7f97542612a5eed2f3ac",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/SubagentDetailView.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SubagentDetailView.tsx",
+      "sha256": "c4dcf55574719693b2ec50c1865a7fc90cd1ab4f15b27728f957d8447a0459a6",
+      "mode": "adapted",
+      "target_sha256": "902b0777302b6edd86cc547df6ccadc7ef0f150e842c34b7e9a337495feeba27",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/SubagentPanel.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SubagentPanel.tsx",
+      "sha256": "fd467797ff1c1bf2305af26f24761d2bcfa2821d2664eb0084436835e1c6594a",
+      "mode": "adapted",
+      "target_sha256": "2ccf3250bf218659205e43b804f2d027fa1fa011382f970ba65e5dae812f8c1d",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/SystemsBoard.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/SystemsBoard.tsx",
+      "sha256": "ad1a4ef1a08e677e921f0572d689b8bc6204d7057adc62c62e6e3a89a1d0d7a8",
+      "mode": "adapted",
+      "target_sha256": "70a1500b759d6963450f6c85bd036dd07d7db9d074fa20367080e80b610d3bfc",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/components/TelemetryColumn.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/TelemetryColumn.tsx",
+      "sha256": "6750d4097e964d4f91495f21d42a69c763c3ffe01d10277e26a8ce6c970d63c8",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/ThinkingLevelSlider.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/ThinkingLevelSlider.tsx",
+      "sha256": "bed59f3058d2569f471d4d4951dcd9a3eb18fe98a10694395b8c7c07e0069ec1",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes.",
+      "target_sha256": "bccc47ba9299f17bfcfc728529ad2c344eda4cae52ce37ae63bcd006fe2dcf0c"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoiceActivity.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoiceActivity.tsx",
+      "sha256": "1882c1dad9c63c66eba55002dd124aa75b4a10274f5a7df855e936aedb2e2ec8",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoiceCanvas.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoiceCanvas.tsx",
+      "sha256": "31eb7dcc2504764591c369031572208d3f15067265a6bc499f29c7ad06c1a0db",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoiceMode.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoiceMode.tsx",
+      "sha256": "0d266e337b0c6464f1721b39789f1deb537ff1938d9b6329031a57cfe06959ca",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoiceOrb.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoiceOrb.tsx",
+      "sha256": "ffb0fda8d15fa7a34f29588ffd173c522d44990d15a00c94effebdd3036637be",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoicePanelBody.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoicePanelBody.tsx",
+      "sha256": "d3110f4f4fd38528f7fa20f3d74c8fba63e86b7e38c1846d531d736dad5c3107",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/VoicesTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoicesTab.tsx",
+      "sha256": "25c2204ab3eccca3a2ebbac2d8b008a05ef9875ce202df976b5e21f9b0a3389b",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/WidgetFrame.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/WidgetFrame.tsx",
+      "sha256": "b20a0d016755a3f20824850b6294d76da11d193af77e0a511f9acbcd838beefe",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/components/settingsUI.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/settingsUI.tsx",
+      "sha256": "7da821f33d7cb0cd80c230b9b4df1a5dbb978b66b1c911d53d30063129e6e04f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/env.d.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/env.d.ts",
+      "sha256": "a2a3d50cd9bf440e342c4804081da2d401d4ff3f238fa17eaeb6fbcc61021056",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/agentMarks.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/agentMarks.ts",
+      "sha256": "e60e614aa9a9953fa3bcd578344bcd07cb3fcb14e8bd4e79ea9b741a76d6e9ec",
+      "mode": "adapted",
+      "target_sha256": "2128c33365e9fce7f2d678db71983e1cb191892abf794b531efe5f282253c1bd",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/heartbreaker/src/renderer/src/lib/agents.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/agents.ts",
+      "sha256": "516615bca4df86807c5565fd5dd06f4d9ea983abe91dba86c0ea028a5bc8c32f",
+      "mode": "adapted",
+      "target_sha256": "2dfb1aaaf9a7b449d8d06ce5d69296d61a8262585768cdf5ce6b870a59b72824",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/heartbreaker/src/renderer/src/lib/api.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/api.ts",
+      "sha256": "bf695d4e3366d2f90c6d78a5ffb731e62105788734de5cc0fcf9fd1c980245c8",
+      "mode": "adapted",
+      "target_sha256": "a812a750b5fcd5f3d468f88818d44cdf59756a2fb73338b69c43e7c103d4b399",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/lib/connection.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/connection.ts",
+      "sha256": "c0acf83fe82a385db788422c64fa8ab15ba85e1ed0ec02668244978b30ce0d66",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/i18n/en.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/i18n/en.ts",
+      "sha256": "30cee30ad3a0ef1ad16be1cbd50faf99842dc0f33fb3c8e4b1000920854f3b71",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/i18n/index.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/i18n/index.ts",
+      "sha256": "72ba4d382a97f7c5bb3b0d99449c9f15b470674700d76761dc599bb2fd525e32",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/i18n/tr.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/i18n/tr.ts",
+      "sha256": "60635ac8e35d1a85160140f19953f730e2d71410dd177c50cda3a233debdc643",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/language.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/language.ts",
+      "sha256": "31164484086f7ca160b30e9d9cb036151cdc4d8e2ce9646921319157334b1e94",
+      "mode": "adapted",
+      "target_sha256": "e433f8e26e23a2d5c459d5037d034be7b01e12bbb9e33d5fddb8c932d00dc007",
+      "reason": "Native integration adaptation; preserve original source hash."
+    },
+    "packages/heartbreaker/src/renderer/src/lib/lock.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/lock.ts",
+      "sha256": "7e6b6fa20f58a59553b524a0bb9f26cc113ce9eaf51e4d217d59516a3aea6ac4",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/mic.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/mic.ts",
+      "sha256": "1edf6c04eb8dd068cca88a61791a86abac94514c417791231d674a282fde7b50",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/partialJson.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/partialJson.ts",
+      "sha256": "3de67f43b770e54bf4a70acd2c9c60053a850e4a8a42e462d1eebd4402f95c80",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/subagentFold.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/subagentFold.ts",
+      "sha256": "c4a2f45f1e3a78c46f084a3bc2614e72dc50f446541ae55505c0f9859d2b38c3",
+      "mode": "adapted",
+      "target_sha256": "82bd887dc08a2285b4aaad4e659e56a4dede8d2556f444cafdcbfc954047a8fe",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/heartbreaker/src/renderer/src/lib/types.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/types.ts",
+      "sha256": "dccddd788d6fa0e28065190ffb26d2d6dbfed75770cd1c4e47f2b9b57570c496",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation.",
+      "target_sha256": "d847b3e9a97977d7218221b378e7201b5eab3158b5afb8fb5afb93b2c5462362"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/useHealth.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/useHealth.ts",
+      "sha256": "cd12d2b88e82a0d271466ce0e26cc727a90652ccd144ed0d2af49e3ba44c579f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/useIsMobile.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/useIsMobile.ts",
+      "sha256": "129f575e5672f04512250d2fce4d8d4b11b1d38b2fe0efbe9d444963ba3af56d",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/useOnlineAgents.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/useOnlineAgents.ts",
+      "sha256": "f2cebc26618a156570fb97be8a9707e245d86ba443e1c4df56a604fe2bf4defb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/useScreenLock.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/useScreenLock.ts",
+      "sha256": "cb8217be2779b73c6bebe4598559ee3ef1a8edb7a186b88a55ea4c93214ffddb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/voice.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/voice.ts",
+      "sha256": "1ac6e282595dfb4a414b3e551dbee79ddef5679372f070f72173a87ec7900bb3",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/lib/voicePanels.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/lib/voicePanels.ts",
+      "sha256": "135cfefb34433de835c367179fd33a21c84d388de8ea2c7c7d529ecaebc53ab7",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/main.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/main.tsx",
+      "sha256": "b19fb3234285b68755da4d3a7505abb16d543f9e2125c8f13a6eb2e44d253c93",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/profile/brands.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/profile/brands.ts",
+      "sha256": "eb1108c587a22819332997712af039ab14b46eaa1ec9e103486ad0275d87edd7",
+      "mode": "adapted",
+      "target_sha256": "0ed550f657051fbde67326246c8a78d1caf74f9443f7228b4a6e12542c21f293",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/heartbreaker/src/renderer/src/profile/index.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/profile/index.ts",
+      "sha256": "60876d4f84c8a5b4d5c249bb646d089bd911b6fcfc21f204eaaf7f26ba1e3ce9",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/profile/theme.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/profile/theme.ts",
+      "sha256": "a05af490f4837500168b6a42db575b34145a47811652b6ffaa0ca459e0e18401",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/profile/types.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/profile/types.ts",
+      "sha256": "7b08a84bdb48f61614501d2650e700ca961200e46899c29aafb7d70166f81aa3",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/profile/warroom.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/profile/warroom.ts",
+      "sha256": "b0b3147820a1c6b06ae85f6533a591ab058c6d4ea1f518811aa643a7dfca6953",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/store/chat.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/store/chat.ts",
+      "sha256": "07312af9acd8ab4174140101d09c5f09a8f44a609a968d3081cd842ff5597bb3",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/store/messageCache.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/store/messageCache.ts",
+      "sha256": "8f697a46d627d2709401628d2a5fef3216b3576ed38534767da4041e51ac9849",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/store/settings.ts": {
+      "source": "packages/heartbreaker/src/renderer/src/store/settings.ts",
+      "sha256": "591e33b0c1a3fb3d17011f99dac3cab2ba4bb5d26c628c05a6b479434ab1596d",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/theme/base.css": {
+      "source": "packages/heartbreaker/src/renderer/src/theme/base.css",
+      "sha256": "38cd20aed03c2572fc36bf59ec225baeb21bbfcb5e7952515d4d92124a67f362",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/renderer/src/theme/heartbreaker.css": {
+      "source": "packages/heartbreaker/src/renderer/src/theme/heartbreaker.css",
+      "sha256": "b3188971d10bd6e0b449b8a92a30f36c8857456b8566f93bdb20faa39e57343c",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/Teaser.tsx": {
+      "source": "packages/heartbreaker/src/teaser/Teaser.tsx",
+      "sha256": "7461a12c6cc7e9318467adf7b0f81a7b884fce1acc2fe1f336971229b6915e2f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/anim.ts": {
+      "source": "packages/heartbreaker/src/teaser/anim.ts",
+      "sha256": "16441fb6a1cd7b76ce25601e7e26f7c10e14e8aa2eb020af75c1155d24047875",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/index.html": {
+      "source": "packages/heartbreaker/src/teaser/index.html",
+      "sha256": "da8412b384d262cc65b34bad6381d6576abf284064a23ea9e65f6a9a8a4c41d7",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos.ts": {
+      "source": "packages/heartbreaker/src/teaser/logos.ts",
+      "sha256": "112e754944bf75e95011fce9046d7bc6584238564c0b356857eaabf3428d173a",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/arxiv.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/arxiv.svg",
+      "sha256": "79427b6fc11e06b5a3a2c70f31dbf536cf442fb1175d7f2573ff765f76f27930",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/brave.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/brave.svg",
+      "sha256": "e32e023dbc07334bb967b1eafc8bca1ce184512b259f31edc71fa7d4a918e462",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/github.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/github.svg",
+      "sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/gmail.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/gmail.svg",
+      "sha256": "a537f5d85d9a27efa3a5d6086e8df6072ee93f76b4d176639a5e483f74b74b9f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/googlecalendar.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/googlecalendar.svg",
+      "sha256": "39b434d3264d123629a12509e9f5bdf57bf9e5ed9a6eafffb714cff5f05f032f",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/logos/notion.svg": {
+      "source": "packages/heartbreaker/src/teaser/logos/notion.svg",
+      "sha256": "b17d2a2b592a06252efef522d5205f0c7a958f748d40df1011ed081417e42f85",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/main.tsx": {
+      "source": "packages/heartbreaker/src/teaser/main.tsx",
+      "sha256": "d30b0963768980b05e13a1b642efd64d97d453fb25eb5ed73e20bc86af8a4de1",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/scenes.tsx": {
+      "source": "packages/heartbreaker/src/teaser/scenes.tsx",
+      "sha256": "0918323681ab11c4bb6f534d90ea4b083af3a9dfe3c53952449f7cb2708c51b7",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/script.ts": {
+      "source": "packages/heartbreaker/src/teaser/script.ts",
+      "sha256": "c5cf3acd665018f21a5a5576a2a2763566377303f3530b23c8f236d67b28bbb7",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/src/teaser/vite-env.d.ts": {
+      "source": "packages/heartbreaker/src/teaser/vite-env.d.ts",
+      "sha256": "97eb22ef321f18b2e784ea94a6c83b40a5e9fbd9ab7044462e98cf0af8c31584",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tests/voice-replay.test.cjs": {
+      "source": "packages/heartbreaker/tests/voice-replay.test.cjs",
+      "sha256": "df41063e7ab30aaf85708143572cb81ab353467cf23e0998d8000ffea3854010",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tests/voice-settings.test.cjs": {
+      "source": "packages/heartbreaker/tests/voice-settings.test.cjs",
+      "sha256": "ee9f28e62552f09c1a1dcd33db7a8580664f3bced8fef2b86c8df8d0466a7458",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tsconfig.json": {
+      "source": "packages/heartbreaker/tsconfig.json",
+      "sha256": "a66358469fbf3cb2b8eff159cfc8c5f7fe376897b47f52903cfa606c0a9c2640",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tsconfig.node.json": {
+      "source": "packages/heartbreaker/tsconfig.node.json",
+      "sha256": "f3c367266aefc44a6ca1ee0d93c027914b3d219f1a779bb257cca3effb785c94",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tsconfig.teaser.json": {
+      "source": "packages/heartbreaker/tsconfig.teaser.json",
+      "sha256": "daaa6f69a791f19df899a085bc77ee836c927bccbb392c6d35666b9bfe20afbe",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/tsconfig.web.json": {
+      "source": "packages/heartbreaker/tsconfig.web.json",
+      "sha256": "2e2359ae51e964441140cfb0b532a65f1e108ce000cefb33eb5f9120cd4d9916",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/vite.canvasharness.config.ts": {
+      "source": "packages/heartbreaker/vite.canvasharness.config.ts",
+      "sha256": "888419ed3d3939bd5c18f27741a7bdab577d1577a2415f849bcb5ad06e15f3f1",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/vite.mapharness.config.ts": {
+      "source": "packages/heartbreaker/vite.mapharness.config.ts",
+      "sha256": "1d08119c51cf52f4e85a8b1017637f93b648b278a115a98154f2b02fb1269beb",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/vite.teaser.config.ts": {
+      "source": "packages/heartbreaker/vite.teaser.config.ts",
+      "sha256": "3c6c6766dcc152a57665c09d821631e948080535c69340ae7730dbead7f49d09",
+      "mode": "unchanged"
+    },
+    "packages/heartbreaker/vite.web.config.ts": {
+      "source": "packages/heartbreaker/vite.web.config.ts",
+      "sha256": "0f82c8ff611e10e2b6f99721f22cb6ad0ae0bb8b0aaf196154ac7c1bbae9062b",
+      "mode": "unchanged"
+    },
+    "packages/playwright-mcp/Dockerfile": {
+      "source": "packages/playwright-mcp/Dockerfile",
+      "sha256": "186f7393c29639bae31bd5eaf9b82ecb0005836490aad15fc184d3cef1b236ea",
+      "mode": "unchanged"
+    },
+    "packages/sandbox/Dockerfile": {
+      "source": "packages/sandbox/Dockerfile",
+      "sha256": "9873eec7bdb7a20c4aa3e9e449e60ba3f3a2c5b48d5cf259a0b20558f8c89163",
+      "mode": "unchanged"
+    },
+    "packages/sandbox/server.py": {
+      "source": "packages/sandbox/server.py",
+      "sha256": "4d440fba0da38963d71f423ed08ed51c2ceaf9e1154d956b0373053afd00d523",
+      "mode": "unchanged"
+    },
+    "packages/solus/index.html": {
+      "source": "packages/solus/index.html",
+      "sha256": "54bc2934a33c39b8da3d1a6d12f8b490832c07a87d33a504e86fab7d1817948c",
+      "mode": "unchanged"
+    },
+    "packages/solus/package-lock.json": {
+      "source": "packages/solus/package-lock.json",
+      "sha256": "56803515f5983f366166868060ba6c71c1f8f1db8a2b3dcf9d3e5466e6f430f2",
+      "mode": "unchanged"
+    },
+    "packages/solus/package.json": {
+      "source": "packages/solus/package.json",
+      "sha256": "9a6550e96bdd535a5eb6e82bf1981a7a49ee6c5ead4ec110206fa1de37a01746",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/App.vue": {
+      "source": "packages/solus/src/App.vue",
+      "sha256": "289d86ad80db69cf7e27f8813f81012db7e7dead36a4f202175ff2500cc05212",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/BookPosition.vue": {
+      "source": "packages/solus/src/BookPosition.vue",
+      "sha256": "4b052c1a0b86f1f04579d6a28068579a4f44180e77942130f3594927182ef18e",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/api.js": {
+      "source": "packages/solus/src/api.js",
+      "sha256": "3e235ab8329635f10246f4df2676118d8cb60044264a17893d1e2f5fde072aa0",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/assets/solus-logo.svg": {
+      "source": "packages/solus/src/assets/solus-logo.svg",
+      "sha256": "dd137671850e5d55bc7d588aea548412059c4a4b9b250ad5b356c2fd328e947e",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/i18n.js": {
+      "source": "packages/solus/src/i18n.js",
+      "sha256": "5937ddf81726b22aa3f5f9e1232583e6ad5ac90306a935cb06104d73f983dc4b",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/main.js": {
+      "source": "packages/solus/src/main.js",
+      "sha256": "efb9b9c6d08d9064f3b195adf0943f8efaf15aac4a6ed01c2f275368c123bba3",
+      "mode": "unchanged"
+    },
+    "packages/solus/src/style.css": {
+      "source": "packages/solus/src/style.css",
+      "sha256": "6967675864c5b7b99cb94cb7c2231b58e78ca78d4ab7e4291a5ebd864dfbfea3",
+      "mode": "unchanged"
+    },
+    "packages/solus/tests/api.test.mjs": {
+      "source": "packages/solus/tests/api.test.mjs",
+      "sha256": "7a7a67227e4b2c45b2384316ab5f4f1c7e0e63fa4c1255d4c457101987a5e0ea",
+      "mode": "unchanged"
+    },
+    "packages/solus/tests/browser.mjs": {
+      "source": "packages/solus/tests/browser.mjs",
+      "sha256": "d5cb35e84335dff08886b812eb3c98a8b437d628ac59bc637b9720aea693f03a",
+      "mode": "unchanged"
+    },
+    "packages/solus/tests/i18n.test.mjs": {
+      "source": "packages/solus/tests/i18n.test.mjs",
+      "sha256": "804421380b278111c7d7e7c3b5b449ea7feb013fd5f7969ce6fa116ebbf0fbe8",
+      "mode": "unchanged"
+    },
+    "packages/solus/vite.config.js": {
+      "source": "packages/solus/vite.config.js",
+      "sha256": "c70d57d6af5de76910ca3e55db17b5e53c8b914f10cb2f4090c7a554c01ead5c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/.gitignore": {
+      "source": "packages/speda-go/.gitignore",
+      "sha256": "3f35fcf4a4f2fa9010304959377a465500688ec643731610152ffbdc1c225e60",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/README.md": {
+      "source": "packages/speda-go/README.md",
+      "sha256": "4166218bec3a9ba540ae699fb773af5fa8db1ae29c0a9a397dbfa5fdd4b4078b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/build.gradle.kts": {
+      "source": "packages/speda-go/app/build.gradle.kts",
+      "sha256": "7560d46b319cca80a2819b96d69da0b71bb2dd96616e26bfccdad345fa609575",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/proguard-rules.pro": {
+      "source": "packages/speda-go/app/proguard-rules.pro",
+      "sha256": "c89bd6ecba3011c8f67c3e9ab037f43eba4120e4a70764d45b56c13d9600fb66",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/AndroidManifest.xml": {
+      "source": "packages/speda-go/app/src/main/AndroidManifest.xml",
+      "sha256": "09ceb2b5c95cf7450d939d4dfe3cfd1d8d058460abf1078e6c28afb665e038c7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_AMS-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_AMS-Regular.woff2",
+      "sha256": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Caligraphic-Bold.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Caligraphic-Bold.woff2",
+      "sha256": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Caligraphic-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Caligraphic-Regular.woff2",
+      "sha256": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Fraktur-Bold.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Fraktur-Bold.woff2",
+      "sha256": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Fraktur-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Fraktur-Regular.woff2",
+      "sha256": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Bold.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Bold.woff2",
+      "sha256": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-BoldItalic.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-BoldItalic.woff2",
+      "sha256": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Italic.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Italic.woff2",
+      "sha256": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Main-Regular.woff2",
+      "sha256": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Math-BoldItalic.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Math-BoldItalic.woff2",
+      "sha256": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Math-Italic.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Math-Italic.woff2",
+      "sha256": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Bold.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Bold.woff2",
+      "sha256": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Italic.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Italic.woff2",
+      "sha256": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_SansSerif-Regular.woff2",
+      "sha256": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Script-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Script-Regular.woff2",
+      "sha256": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size1-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size1-Regular.woff2",
+      "sha256": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size2-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size2-Regular.woff2",
+      "sha256": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size3-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size3-Regular.woff2",
+      "sha256": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size4-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Size4-Regular.woff2",
+      "sha256": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Typewriter-Regular.woff2": {
+      "source": "packages/speda-go/app/src/main/assets/katex/fonts/KaTeX_Typewriter-Regular.woff2",
+      "sha256": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/katex.min.css": {
+      "source": "packages/speda-go/app/src/main/assets/katex/katex.min.css",
+      "sha256": "5e65a1e42103bec728b60544472940c4c01cc1a7201fb531635ec1cc15840118",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/katex/katex.min.js": {
+      "source": "packages/speda-go/app/src/main/assets/katex/katex.min.js",
+      "sha256": "a29d2961d3146de5949d78ac7c1a9d93ae54955bad22a6db4fbe836e88e8bf48",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/assets/map_style_stark.json": {
+      "source": "packages/speda-go/app/src/main/assets/map_style_stark.json",
+      "sha256": "650dd1549e625a81f2767e2900fae7d32bedb83318c7aa0ba47db7daaf1b7f3c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/AppGraph.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/AppGraph.kt",
+      "sha256": "57d1c5a8ec9f79896f42d634ca38283a0ab644ed883ffd257365d4cfba564743",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/HeartbreakerApp.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/HeartbreakerApp.kt",
+      "sha256": "a9dc470cc81576019946441ff69d2625b317e649c25b0b068c9111a9ff737f38",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/MainActivity.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/MainActivity.kt",
+      "sha256": "0d4f4c10609b8c4d2c943acd91e164e2f0226424bbf59b7c004a6f6b9799940d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AgentsDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AgentsDtos.kt",
+      "sha256": "bae6d1f5f89dcbd743843ee9c621074f339e9101f16fbb3cf7ee33f7abf076bd",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AskDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AskDtos.kt",
+      "sha256": "ff9a0856d59e1da9f7badf34b66101a90351dca6176b2603f8a0f38c7449a74f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/Attachments.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/Attachments.kt",
+      "sha256": "833789cf70775c834035ed2fa743232fe7f5016b7efe34bf5c90d3c6e329695e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AutomationRunDto.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/AutomationRunDto.kt",
+      "sha256": "be4deb57b94765d40d845a7b84336e60594e4ed5ad4da8fd2480ed69c48fe117",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/Downloader.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/Downloader.kt",
+      "sha256": "e1d6f91bcc1dac94deb47401c9fcf2ee684d09ff35e94d9f3e1a3ee88e0f7ab3",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/HealthPoller.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/HealthPoller.kt",
+      "sha256": "67862412bcb3da54084e72d647e679ed2beba2b59579be6155b4eee3cfbb0e91",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/IgorApi.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/IgorApi.kt",
+      "sha256": "5df85e52c05aa3abe23a0bfbd7c1e72b476e81ebab30a16428f48dce6ee1d3bd",
+      "mode": "adapted",
+      "target_sha256": "577990e156982a4ead1b589df6dd4c4778c25e45dd31e0659e1dc02caa1ea218",
+      "reason": "Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/KeystoreCrypto.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/KeystoreCrypto.kt",
+      "sha256": "4bb6cd1e61a66da51d198e3c23fe296b49934faa95bb82bf5d33ed98b207c3b2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/MessageCache.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/MessageCache.kt",
+      "sha256": "4f59e27b9836942b067c768dccf76217eea149f13a2143d8a1fa42ac3e66bb29",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/MessageJson.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/MessageJson.kt",
+      "sha256": "8b5db6a6793b61172a9c8bbcaf7bf50761597a82c1d1be6ec2f54e750a9e3612",
+      "mode": "adapted",
+      "target_sha256": "523b1d9db1c364c602267221981df1f27963e7c10f62fcfe433f1a3eebbb1783",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/PersonalityDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/PersonalityDtos.kt",
+      "sha256": "57445ed4c7a049ed27e944b6b1c67e80d17088e0b33381022947c879a8178cd4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/PlatformContext.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/PlatformContext.kt",
+      "sha256": "b8193113af42b5970f7e11d68637364702d97a8058a679cfb1b6e82e983f4c87",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/ProtocolDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/ProtocolDtos.kt",
+      "sha256": "776abff380631a87e14fd6ca5c76a790970b09a7ed64adbea42f1acc64cb0fb2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/ReminderDto.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/ReminderDto.kt",
+      "sha256": "c1aab0502a7de6a9de51843fdd0fcecb64a7aeef3b5ac8e0335bbbc678cfe4f2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SettingsDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SettingsDtos.kt",
+      "sha256": "5d24865e051a175774b3d3a7aa7b2e295cbe4be06a1fa22c8ffe313f1c85b1d5",
+      "mode": "adapted",
+      "target_sha256": "811da92d3bd3e2cc0398ee731a82100ccb1cde8c8907cf1f0db294faf4c0ee59",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SettingsStore.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SettingsStore.kt",
+      "sha256": "ec4483abd35153f1788cf1eec645c199b957d541eb82aefad65112f3a1c88725",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SseEvent.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/SseEvent.kt",
+      "sha256": "3ff965edd9e7726167fb1fbbf6b8f84afe3ae6f4e92570f8aec68f4bd869b350",
+      "mode": "adapted",
+      "target_sha256": "c6a4b4cbe2622abf0f46ef2b98ae68f9a61ab7fbc685564830d7bf95adad7a4d",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/UplinkStore.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/UplinkStore.kt",
+      "sha256": "36888c3c9a1fceaee7d74c4589939cc8d676917e4bacb2b4e6f3b9942163ae97",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceDtos.kt",
+      "sha256": "4bd7b376e0f66889e765bc5a16e12acde62256370d27279e9423baafe89cce71",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceLevels.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceLevels.kt",
+      "sha256": "e4089d496836b80535b3fe668d30912d7ab447652a7fa409d502314beae0d412",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceSpeaker.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/data/VoiceSpeaker.kt",
+      "sha256": "02e87d01bb5ae1c705e137926fb8dba26a9bfdd7684fc11237735f26fbd66e2f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/BoardPanels.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/BoardPanels.kt",
+      "sha256": "05e912f97ed4162abb9821f8d6add1da6d26b557abcb1a99c55cafba9dcb97e4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/BusSpec.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/BusSpec.kt",
+      "sha256": "0b52464b593c48e06cb1af4a7342adf6ce2882998fb52cccfe439c197a4e4e5e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/CalendarSpec.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/CalendarSpec.kt",
+      "sha256": "52c8adfee9ff1394483e910ab5b0cacd33d214378c69d7854ce2700a92afc025",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChartSpec.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChartSpec.kt",
+      "sha256": "050465b4554ebcc8bf4adeb49237bff8ecbcaed14f6edc5cfecb73924b34d7bf",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChatModels.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChatModels.kt",
+      "sha256": "5d0aaed03f7cc4a9d07c2d46e8ba55e0076a2515efe5ad3b4f73d0f32edb08ee",
+      "mode": "adapted",
+      "target_sha256": "2146a9039e3cbbd1cde5f8012bf21998a455b957c292f28e8a388c99c5d17f9d",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChatState.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ChatState.kt",
+      "sha256": "997b57aa3c4b057839904887bb8ad0277b3dcb5ca477e6ce66b3e3ad01d58890",
+      "mode": "adapted",
+      "target_sha256": "563417455025bb718d84f50aa8ac7a2b949231be0a76cde66a4be00e9148e4f4",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/CommTranscript.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/CommTranscript.kt",
+      "sha256": "ad4fc37f487392bca585eb756106892c41b8be251d324a7d588a7614cff0bdd4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MapSpec.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MapSpec.kt",
+      "sha256": "7095cb55f1a745e88993860883633de6c4494f892f03ee6643d327464b76d299",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MarkdownPrep.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MarkdownPrep.kt",
+      "sha256": "69d22ad02d766e1a3000b9734d8d3e525c2eeaf60cc6d1e9e4fc7eda6e0c2d7e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MathExtract.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MathExtract.kt",
+      "sha256": "a82bb8532cac46d14d6a1c12fadb2c41db47a375dbfee95f07d7d42aacd79adb",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MemoryTree.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/MemoryTree.kt",
+      "sha256": "ae8e2dd6bb225041d75e81b963c2500bb0580ece17af9dcae91582601e38f503",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/PartialJson.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/PartialJson.kt",
+      "sha256": "a976578ac46f66b704a688e976d6074c3d4f839cccf308431dc6d240f4156487",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Polyline.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Polyline.kt",
+      "sha256": "8caaf7683f1904220cf9c178e554b4ebc2b3c9c78bb1d4f0d4bb7ff69835cd17",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Segmenter.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Segmenter.kt",
+      "sha256": "2053e764a6680e810e7b1e246ca2d0789caf31b2d9e1726245e1547fd3de2a4e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/SessionGrouping.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/SessionGrouping.kt",
+      "sha256": "f782c8ab210ae66dfd3eb80855b2f1a0d6533dfd7779c6f60adeed89d13c0768",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Speakable.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Speakable.kt",
+      "sha256": "abd791dc83a2d81a82341495914af5d7c71f76f6fd8c6f1ff402fb4410684736",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/TableColumns.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/TableColumns.kt",
+      "sha256": "42d652ad663a82a2ad56fdf679abac8f89a494fc29e6e14d34e669eb21836a8e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ToolStatus.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/ToolStatus.kt",
+      "sha256": "055b949f272242e6a9f685f28f35db267138d71c97dc2863e499d61cfcf631c2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Watchdog.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/domain/Watchdog.kt",
+      "sha256": "4f5b3054e2174d3ea9dde2772f6e3360f140b3aef272c02b028b839dcf2262a2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthConnectSource.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthConnectSource.kt",
+      "sha256": "cf060457394a2e00539ed455c377364787bed05b2c14e76c9b0482b55cf27a36",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthDemandWorker.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthDemandWorker.kt",
+      "sha256": "876d0ea835e15569c9f806a29af07ef6d5b42832d7ee113f2413cf1e0f4c1857",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthDtos.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthDtos.kt",
+      "sha256": "b6ef4754d46f0298b7c9cd3e0d54af7e5a48d28adac17e518b133f771b59da98",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthSyncManager.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthSyncManager.kt",
+      "sha256": "97ec31cbbdb241e4c60a12917550f34bc84c0eb238d71e50633fad2de2443117",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthSyncWorker.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/health/HealthSyncWorker.kt",
+      "sha256": "15ea0e23a4b94e1a97f8b5dd22fecb39cbb1d222152832b69b91ce16252bbcf7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/En.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/En.kt",
+      "sha256": "9b08d9c075c24a77dbba73a4e69b8c067c792826ff2bff9d023da216f6cfc635",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/Strings.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/Strings.kt",
+      "sha256": "d109887b6b279126e06e395e024a59449a879c1a4fdf772c54e2597b220caae3",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/Tr.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/i18n/Tr.kt",
+      "sha256": "aa05960f35f2e18baa5e7a633cd1642c3518be98f4cd0bc35a1c50f8becae266",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/push/PushRegistrar.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/push/PushRegistrar.kt",
+      "sha256": "b6006f1761ed26d8b97ed0cb5b337eebcca02e23250c7ea029910eb4c50dca1c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/push/SpedaMessagingService.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/push/SpedaMessagingService.kt",
+      "sha256": "78b9aa5fddca6c004cec9ef0396678c633330a729e5e5299ffbab37dc819fb00",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/Common.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/Common.kt",
+      "sha256": "83ec44378d03074e3eee41b0b4a11beb548042d04e899290966223ed44ab5f9c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/HeartbreakerRoot.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/HeartbreakerRoot.kt",
+      "sha256": "6f1ef9387344e4f03c7654421736dbc4caec3ca2a01a73899858aae8b380d645",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/HudStrip.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/HudStrip.kt",
+      "sha256": "4b70d57dbe59038dca169e7b013103aebb7e2c04a979812fbb29e53d16b41d14",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/MainScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/MainScreen.kt",
+      "sha256": "32f3b7019e812dc6a9893ab1a417bc67460dadc2078b90e8ac80a3f0aa62094e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/UplinkSetupScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/UplinkSetupScreen.kt",
+      "sha256": "2d6226c0b4a0d235640f7d20160ffc403c6485db976cf1b4524faccf6e23dc22",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/AsksTray.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/AsksTray.kt",
+      "sha256": "25fedf0f9f477a0c0631514c772df79e35ac7bc1d7da09766c897956fa5a040d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ChatScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ChatScreen.kt",
+      "sha256": "f45242e3414d4db45c37b2b641f808372ea7be76a394fd9f35ea7abe6b1b594a",
+      "mode": "adapted",
+      "target_sha256": "b00be8262941ebe76bca5c4358caae486d923ef512bf77a07e9ab397ea87b050",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ChatViewModel.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ChatViewModel.kt",
+      "sha256": "730c16f412d4334b0e859a34feeebc135f57e9cf33e3b754f60b386ad52a6d91",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/Composer.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/Composer.kt",
+      "sha256": "f55f5aa114fc7449202bdaa0f788dfd65d443f088f33c2637c749cfca3ab5584",
+      "mode": "adapted",
+      "target_sha256": "a8ace273db1d50822dd088057864fcb518390513d72867f6c0d2f9144decf243",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/DataUrlImage.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/DataUrlImage.kt",
+      "sha256": "1a2fe92518fa24891cd4c1eda62086c674fd467fd02a72be59562c0fb8a72ac9",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/FileCard.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/FileCard.kt",
+      "sha256": "452164f6be9b465467adab072fff72b8450c59b264ba3f0e76cceed3a0684665",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/MessageItem.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/MessageItem.kt",
+      "sha256": "9a0355d75b7cffecb2fed641f5b3995c332cc4cb0740f3e75a62b9301fd60b3c",
+      "mode": "adapted",
+      "target_sha256": "467e4d6d5da37dcee1eb07ebdc2bba653daf03b87d0f1c69fcc675a887e9936e",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ReplySelection.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ReplySelection.kt",
+      "sha256": "09efeb3cec529a61777589bb14d7e7b784f19a8c587cb1336b259003a82657d6",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/SubagentPanel.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/SubagentPanel.kt",
+      "sha256": "8c6bd306e1ea877d434c7c533e0c5d2fa9e43c25037b0cfcd457379fe00dfa7c",
+      "mode": "adapted",
+      "target_sha256": "3a0f912e438083ef7b8a177ba2b3687fa635b84c01a8b18073ac933bc573111e",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ToolFeed.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/chat/ToolFeed.kt",
+      "sha256": "eb17fc78f51967277ed0f26feae82e319761caac9aa1245d3963e3c6d2ebb191",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/comms/AgentCommsScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/comms/AgentCommsScreen.kt",
+      "sha256": "13af2bff10177a7b011e2e671b3aee43f3e45fa3888f8901c5e9f3bfcf1bafe0",
+      "mode": "adapted",
+      "target_sha256": "a1fe2ae1ee1b13c42003d11dada8ae20c7c42da06f3c3b8415beb700c62b4f3e",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/gallery/TokenGalleryScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/gallery/TokenGalleryScreen.kt",
+      "sha256": "cfdd987133dbfafaef95736f879b1cb7772231068167eda558887771211083c6",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/projects/ProjectsScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/projects/ProjectsScreen.kt",
+      "sha256": "8fa85b525c4537a3ff4c215e72eca6a9a9389c67a5c727caa0f12a7912afacdc",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/AircraftBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/AircraftBlock.kt",
+      "sha256": "7147a64c9d8022b5fc3936cbf210f16d8eb4a7a296180f028239ff7b355f1394",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BoardBlocks.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BoardBlocks.kt",
+      "sha256": "e9c704531b11113658783fcd75890a626a1989941d444567fc6cbddabf6eada9",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BoardImage.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BoardImage.kt",
+      "sha256": "5065092638ed1504f0ffe816aa3b22d889a0906474c2f752cd7b593da3752e6d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BusBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/BusBlock.kt",
+      "sha256": "276724f40e14bf03c684b3249e5515b18bb29274acad873e4ffabc0c85a166f0",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/CalendarBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/CalendarBlock.kt",
+      "sha256": "81a3e6c3ecc862eb6d47f8457c0a1f4fd864bdaee310823eca6872934e0905b1",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/ChartBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/ChartBlock.kt",
+      "sha256": "f574576803afe16f4af6c6e19f3049bebef1fe1b19eb0c99e03113b35fbc2854",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/CodeBlockView.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/CodeBlockView.kt",
+      "sha256": "7b755cb0892d4da5b58e5c42a7f577943e651528af8cd07bea4950cd765c4edb",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/HtmlBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/HtmlBlock.kt",
+      "sha256": "a505bb23c70dfd1a75d07f48586a1370c76e1a963bd96380b298e995b456084d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/MapBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/MapBlock.kt",
+      "sha256": "9bb5e1f47ad0f38695fdf2bf99bead07f4c1b7528181559b4852be33583bf163",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/MathProse.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/MathProse.kt",
+      "sha256": "52c904b6582d2707db9978ed7bd4bef7ad73cd0d58d9fdda16526acda9119474",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/Prose.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/Prose.kt",
+      "sha256": "2aa18494bef18b9a8e1490785eff65152ba6883ca9a1223629afd32b2627a00d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/SvgBlock.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/prose/SvgBlock.kt",
+      "sha256": "df33cc7a4f618134acca253646364fb4eebc6d52ed2529e908e3b21c0ea9009e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AccountTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AccountTab.kt",
+      "sha256": "95fe2e36d6e8e39ce0ffc8cc87c25b1ac3a405dd3bb636604d3c3e2d87018744",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AutomationBuilder.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AutomationBuilder.kt",
+      "sha256": "03c8995403c89dbd58470886f912a675c93c2b742d1828b218a7e6a657a33747",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AutomationsTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/AutomationsTab.kt",
+      "sha256": "7906ded88b7ea0939445a074539069f00acc84ddcea5d7960efb31d3c4a63429",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ConfigTabView.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ConfigTabView.kt",
+      "sha256": "dc8c8b7713e3d115d0c0fbca3fc6bd591afa51b982674a03903cf4f3ed3fa283",
+      "mode": "adapted",
+      "target_sha256": "f5b9446dc0a9fdaeb8e28d2b35d23c2fbd7897b6667927c2af6ec39547502fd4",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ConnectionsTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ConnectionsTab.kt",
+      "sha256": "3206435c5571f3075ded4c17c1d5c88103cfd15d9fa7a2b4f8394ccc295c67f7",
+      "mode": "adapted",
+      "target_sha256": "30351220ca55d33036be86baaa6e94315afdd6557695c5efc4ad1fb5f82c57b3",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/DataTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/DataTab.kt",
+      "sha256": "f883a701e933732027307aaca6148414103a0262f5bf98b7a99f83a96647f974",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/GeneralTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/GeneralTab.kt",
+      "sha256": "4a461c4ceb1047ee92642e5234a4188eb7a6f55965c58fba887f46fdb44d8285",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/HealthTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/HealthTab.kt",
+      "sha256": "60585a5d5defe43fa1511526862ccf95ce5067fb79860e2903f3a07ed1193fa4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/InterfaceTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/InterfaceTab.kt",
+      "sha256": "05569e34d6136d5ed23e3160b8931b912b3f9be4c692990e7e076e940ec6078e",
+      "mode": "adapted",
+      "target_sha256": "66d34b905e9a76674f6fa2f4535686953ae0043c942a47830c949d2b5d267c4c",
+      "reason": "Native integration adaptation; preserve original source hash."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/PersonalityTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/PersonalityTab.kt",
+      "sha256": "d1d417cf075260ede195f3b2707a7e191680b5c81095e823ae7f0e7e1cb02000",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ProtocolsTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/ProtocolsTab.kt",
+      "sha256": "637d988b84c8f94a612d1b95fc3aeabff1bb76b3a324c7844b80e62ab776eb40",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/RemindersTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/RemindersTab.kt",
+      "sha256": "473246995e1d5c9e1466070d15c99254920f222add0f7551c2baf211376f3992",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/SettingsCommon.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/SettingsCommon.kt",
+      "sha256": "4591d8a2f5e08b9d5edc0fdde579e42f6f1d8fe102b68a167fed5ba3655f4f83",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/SettingsScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/SettingsScreen.kt",
+      "sha256": "7785847972048a4174a7e2df42854a11b006c47b2263434e3f81fb48b9f64b8f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/VoicesTab.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/settings/VoicesTab.kt",
+      "sha256": "e9f05471900f87f09b99c5577255a03f538dcef2b192768e02fcbd3e8397604a",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/AppHeader.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/AppHeader.kt",
+      "sha256": "ad823a428ed7f1dc0e41479906e0b6268218ef1a6b6458a0e76c09799644a3c4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/SidebarDrawer.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/SidebarDrawer.kt",
+      "sha256": "15b85a43582d14f060ee9ee6b87730fc5ce0749deea28a76abd87099e1f2c0d7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/WelcomeView.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/shell/WelcomeView.kt",
+      "sha256": "c0df3ef9af1c1bfc140f9f563ab7ddc3cacf7a0b4c80d9dd659ed4389a33fecc",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/skyfall/SkyfallCountdown.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/skyfall/SkyfallCountdown.kt",
+      "sha256": "fb4a594d96dfa5c5939443a03adeabd46bd7e68b5554111d0d4a2d046ace6bc0",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/switcher/AgentSwitcherOverlay.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/switcher/AgentSwitcherOverlay.kt",
+      "sha256": "f65c032ec78db235b3b1a0248627e651329f7bd523dd773bb13e760c83e274e1",
+      "mode": "adapted",
+      "target_sha256": "0ae026d901fddf972899569f6e8a97442880023dbd24060c2e8e5cbb73088a4b",
+      "reason": " Friday alias compatibility."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/KnowledgeBank.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/KnowledgeBank.kt",
+      "sha256": "70f3c9370ffa9d68cf7d414b1374a497f1b85819dd75efd1baa6e92f1486e473",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/RoutingMatrix.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/RoutingMatrix.kt",
+      "sha256": "905e59bee8ced5ca1b17fcf362a69d662b5b1c1af2b4a3a4c9c3a54dc487b96d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/SystemsBoardScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/systems/SystemsBoardScreen.kt",
+      "sha256": "56ddcd31a4c359a36e7a47c3ca3c5a77a21425c9cc0130c377ab0d343fb7cf9d",
+      "mode": "adapted",
+      "target_sha256": "400bc03576feb38dd45947ae4170757e32c107cddbec3fd873abf86c7dc41278",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceActivityCard.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceActivityCard.kt",
+      "sha256": "380b869294365b65c2cbe6efc1cf11ab9f1e9573c22f88ea4cf3ee245388ad05",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceModeScreen.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceModeScreen.kt",
+      "sha256": "c9bfbe9172186fba81384ff925e5099d35c60ef7c62de3dce0f524437a8b2fcd",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceOrb.kt": {
+      "source": "packages/speda-go/app/src/main/kotlin/com/speda/heartbreaker/ui/voice/VoiceOrb.kt",
+      "sha256": "8fed3dcb8bc400b54946d4ebd15b2a5dc7bc341c8c43a75221d5d7addfabf5e0",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/drawable/ic_launcher_background.xml": {
+      "source": "packages/speda-go/app/src/main/res/drawable/ic_launcher_background.xml",
+      "sha256": "1c3429550e51afcd6021915d22933c842e6675137bf593a199e783adf8ca1ec2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "sha256": "d65aec763d564386e2129b4befbc153b226bf4c49ae7cdcb257061abca5d4fb7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "sha256": "d65aec763d564386e2129b4befbc153b226bf4c49ae7cdcb257061abca5d4fb7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+      "sha256": "0e903055418b0215aa21c303af16ed1c0da89d5af89bdf4b3b9a3bf27881e878",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+      "sha256": "401c95171b03d25c4b33cf7664b330c114c8c4990ee98138831dec4573c19df7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+      "sha256": "fb4812cdc5d848a4fb46abf8e7d2a6bb70f7ae7de82d1f1dc6c9f3c89d8485ab",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+      "sha256": "6208cba6fd6ad2e1fac8df7ca6887db79a3d5e2ab07f489c7a68c4817134af9b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
+      "source": "packages/speda-go/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+      "sha256": "3e2ac6bc08b2510d12dbf93f4d108e02cdd96154037b2c2975a83563af161b93",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/values/colors.xml": {
+      "source": "packages/speda-go/app/src/main/res/values/colors.xml",
+      "sha256": "d8211c55a342477a64c85a87485f5f004e6c445cce70dd0cb0bf6c701221ba12",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/values/strings.xml": {
+      "source": "packages/speda-go/app/src/main/res/values/strings.xml",
+      "sha256": "c54c16816f02e7ab96449cfeb55bbc652cb63d4f526d673965a307e9817a29e1",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/values/themes.xml": {
+      "source": "packages/speda-go/app/src/main/res/values/themes.xml",
+      "sha256": "a56fc50385772acc4a0a5f0f84f268c08394254f9bffa4cfb7ead16f5ea4b709",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/xml/data_extraction_rules.xml": {
+      "source": "packages/speda-go/app/src/main/res/xml/data_extraction_rules.xml",
+      "sha256": "6bdcabed68019ad47689c00c4bd876972e230443c88a6bbd44c24cb3052258e5",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/main/res/xml/network_security_config.xml": {
+      "source": "packages/speda-go/app/src/main/res/xml/network_security_config.xml",
+      "sha256": "2fcd07c7ed7c009f3196759ffbb11d6884368bcce2f85c0f60b7d06ececa4809",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/CommTranscriptTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/CommTranscriptTest.kt",
+      "sha256": "fdade6189b477bd1114ea3b557de53398a55831b1d1afc63fe061dd03e289051",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MapSpecTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MapSpecTest.kt",
+      "sha256": "6b6daf2e6577b48c6220124f2913617d4378143f8dcb7e1851be5250b080808f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MarkdownPrepTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MarkdownPrepTest.kt",
+      "sha256": "9a186c2407393b5d8139833706da2ee5f176af13f31a8e16674a17dfb77768aa",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MathExtractTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MathExtractTest.kt",
+      "sha256": "54bbd873ee25cbb1248950de18a3fb0915e59abd90985fdfbfa51dc0ee714958",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MemoryTreeTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/MemoryTreeTest.kt",
+      "sha256": "477fc7bc5441a16084469c18777f503cfb344458234c85b46eac14741911af1b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/ReducerTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/ReducerTest.kt",
+      "sha256": "5cffafd67a6c54ef89fe5e15b9f85d49493296210f706006bda6af01e1eea025",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/SegmenterTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/SegmenterTest.kt",
+      "sha256": "3195db4fc7403a977d8d68797ae731bc732cfb6bf08f15d7b600cf7b228b363c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/TableColumnsTest.kt": {
+      "source": "packages/speda-go/app/src/test/kotlin/com/speda/heartbreaker/domain/TableColumnsTest.kt",
+      "sha256": "c76f94b8f29d73c9c693ef36409180fd6f47bc95ae1aa84033b37acbdeda34ca",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/resources/fixtures/markdown_prep.json": {
+      "source": "packages/speda-go/app/src/test/resources/fixtures/markdown_prep.json",
+      "sha256": "7b7c77802ed27d722d1d3d68d10280b6d9c1359015bca3dd099857264c92d376",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/app/src/test/resources/fixtures/segments.json": {
+      "source": "packages/speda-go/app/src/test/resources/fixtures/segments.json",
+      "sha256": "c4f16965daa2090d4d18b8476fe5c77b031193a82d9b650dfec71066b55d5643",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/build.gradle.kts": {
+      "source": "packages/speda-go/build.gradle.kts",
+      "sha256": "5402537398281a1d481dfae04c4bce955adc22d10031338ae46cec12c96ca16d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/build.gradle.kts": {
+      "source": "packages/speda-go/designsystem/build.gradle.kts",
+      "sha256": "6afcbcf1b2a4f27bdb92a92ee5f6089cd7b303e2a4760898f815feef097dea3d",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/consumer-rules.pro": {
+      "source": "packages/speda-go/designsystem/consumer-rules.pro",
+      "sha256": "a537e07c745697691c0d84f29d57331bab03ba35c2f08bc62b958094e95072b9",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/background/AmbientBackground.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/background/AmbientBackground.kt",
+      "sha256": "54e44166491f09fd65cb54dcbaa0bb44620eb0dba6931a2ccd47a1638829dfd6",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/AgentMark.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/AgentMark.kt",
+      "sha256": "11a065821fb40e1db39c44cd97c107f9195140b06ebc67a92151a211efb938db",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/AgentMarks.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/AgentMarks.kt",
+      "sha256": "270fb31c9a3ee1dc631b0d3ea34479626a6e15f231219962ac746c5dda99bdaa",
+      "mode": "adapted",
+      "target_sha256": "424d8616d38c664c512823e5324532548b4360fc0f6478ce48c2cf455d0c0547",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/Brands.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/brand/Brands.kt",
+      "sha256": "1e2aa65a88580dfbf8c07d6f5c41171e566e1e2d99e40fe6963b9984ecaba683",
+      "mode": "adapted",
+      "target_sha256": "d98781f97d7b3442999b526dbea0d323c301f410bef799fab503ac5869d826d6",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/color/ColorMath.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/color/ColorMath.kt",
+      "sha256": "a50771ea6a114a498a387677587157b98ac68f6e9c600080d4039e8152233c8a",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbGlass.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbGlass.kt",
+      "sha256": "4fd0426bb2d9b49309a0ee5658134a10d92f288f20417b477ceb1d575ba05a64",
+      "mode": "adapted",
+      "target_sha256": "2418f1ecc63950477b5f9d9eaa0e54e0af8570f1bd9b268badc66af6a92f366a",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbHaze.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbHaze.kt",
+      "sha256": "ba9594e303fd5f1ca029d6ad3329554ffd6810c1a6b133d232c8f3f7c6ff3abe",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbSeams.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/glass/HbSeams.kt",
+      "sha256": "a95d9ca55f404176923bf170f72416cbb630c185a329cce37b9c0902d22659c6",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/icons/HbGlyphs.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/icons/HbGlyphs.kt",
+      "sha256": "fa3897ca496521d0ebea44a4d047005a552b4c47a9564c821d75e2284d43f22c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/icons/HbIcons.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/icons/HbIcons.kt",
+      "sha256": "8da66fcc033b879f6861510ef06a7891e9b23ba48bc4bfa4749691acd9770df2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/motion/Motion.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/motion/Motion.kt",
+      "sha256": "565201a93147b3f08f2052d2a7698969c991f02b09b0dd5e504f1377d5285aa4",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/BaseTokens.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/BaseTokens.kt",
+      "sha256": "9aebc61f7e94dc000712e441642964ef91a741918e33476ede8eb6d35461b0f8",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/HbPalette.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/HbPalette.kt",
+      "sha256": "8cbaafb08a6a19bb6689497a163c5acf41e14ade937c77164b46334b7bc9c999",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/HbTheme.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/HbTheme.kt",
+      "sha256": "dfaa0cdf21cbc40b6f0b25aa49fdc955d9d28f6ec30e7f36f697913cf2821713",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/ThemeEngine.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/theme/ThemeEngine.kt",
+      "sha256": "a3d81d10bd1419ba86fed3958e23bb1a49d0e0f2c2341595a53af72c1a25b363",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/type/HbType.kt": {
+      "source": "packages/speda-go/designsystem/src/main/kotlin/com/speda/heartbreaker/designsystem/type/HbType.kt",
+      "sha256": "89a31a8f2c37668298dc1fd968191bb67c712823571dd3306fd3b7fa4f87cc6c",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/inter_variable.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/inter_variable.ttf",
+      "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/jetbrains_mono_variable.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/jetbrains_mono_variable.ttf",
+      "sha256": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/rajdhani_bold.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/rajdhani_bold.ttf",
+      "sha256": "691470dd3286a14e9677940d0bf75796179841ba5215cbda1a2c8910a3226afd",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/rajdhani_light.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/rajdhani_light.ttf",
+      "sha256": "140e9f13af69538161c5780fcf7f81594c069aea887e7bffd417ae1c641213c3",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/rajdhani_medium.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/rajdhani_medium.ttf",
+      "sha256": "12ff7dcfe4c206e3875ac53b1762eab57de6a2fa7f5a86c26b97b88d6591eac2",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/rajdhani_regular.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/rajdhani_regular.ttf",
+      "sha256": "6e1fc228a8318251a6e569502ec57bac1e4656c582f92f59ccecc4688e039b98",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/main/res/font/rajdhani_semibold.ttf": {
+      "source": "packages/speda-go/designsystem/src/main/res/font/rajdhani_semibold.ttf",
+      "sha256": "94bbd25a18ca665999feb05a537de9fd2b860dcfb78bbe9ca00270825bf235da",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/test/kotlin/com/speda/heartbreaker/designsystem/AgentMarksTest.kt": {
+      "source": "packages/speda-go/designsystem/src/test/kotlin/com/speda/heartbreaker/designsystem/AgentMarksTest.kt",
+      "sha256": "39ae0a6298c6e3812497a4bae4cd5f2eda24ac61789e65e8862d3975bf73c2a8",
+      "mode": "adapted",
+      "target_sha256": "fb895477dc56df54101abbf9b86b3412d3ba5568d99fbe69fa212fe56c4959a7",
+      "reason": " Friday presentation and legacy identity alias compatibility. Friday alias compatibility."
+    },
+    "packages/speda-go/designsystem/src/test/kotlin/com/speda/heartbreaker/designsystem/ThemeEngineTest.kt": {
+      "source": "packages/speda-go/designsystem/src/test/kotlin/com/speda/heartbreaker/designsystem/ThemeEngineTest.kt",
+      "sha256": "58ab4fb9933e73367bfb70f3085653fa8bc70e25fe65d0c7f160fee3eb6a5d6e",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/designsystem/src/test/resources/fixtures/theme_vars.json": {
+      "source": "packages/speda-go/designsystem/src/test/resources/fixtures/theme_vars.json",
+      "sha256": "9af0f427886b6d2802767fe92bf80349d4df4e1e151fce1590aabd7a90cb627f",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/docs/FONTS.md": {
+      "source": "packages/speda-go/docs/FONTS.md",
+      "sha256": "d1af90ed3fb2a03c495991a47badb639d10aec0397acbb014fbe69c90e11488a",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradle.properties": {
+      "source": "packages/speda-go/gradle.properties",
+      "sha256": "6b7ae6d477b600e9e5f8351f077d0d241908f7c0c00a32b1df9446bbf0de7b21",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradle/libs.versions.toml": {
+      "source": "packages/speda-go/gradle/libs.versions.toml",
+      "sha256": "e715649930980fcab63da974e47ad22fbad0680075d21bed984a3de9d38d6e5a",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradle/wrapper/gradle-wrapper.jar": {
+      "source": "packages/speda-go/gradle/wrapper/gradle-wrapper.jar",
+      "sha256": "e996d452d2645e70c01c11143ca2d3742734a28da2bf61f25c82bdc288c9e637",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradle/wrapper/gradle-wrapper.properties": {
+      "source": "packages/speda-go/gradle/wrapper/gradle-wrapper.properties",
+      "sha256": "8906bdbce6cdf99a1cf7f4ec366704977f3a702e513f2536969642fc1271fdd7",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradlew": {
+      "source": "packages/speda-go/gradlew",
+      "sha256": "c15a47b60a4eeede9ffee33433fd990d8b6236607372b9bb1f6dc51b07b78c39",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/gradlew.bat": {
+      "source": "packages/speda-go/gradlew.bat",
+      "sha256": "af835f98787e9269af5a046edcb821a592fed372139df7b947b471a63cfc236b",
+      "mode": "unchanged"
+    },
+    "packages/speda-go/settings.gradle.kts": {
+      "source": "packages/speda-go/settings.gradle.kts",
+      "sha256": "f14a0cbe6aace1993252e2874af873e3b2b0bcfcc117cf1d9ae1b61bb6c1a429",
+      "mode": "unchanged"
+    },
+    "packages/striker/STRIKER.md": {
+      "source": "packages/striker/STRIKER.md",
+      "sha256": "b5cbbe3611e3e2f2832207cf9bf2660d5e63bc42e78cf40308c95fd164dfcd68",
+      "mode": "unchanged"
+    },
+    "packages/striker/electron-builder.yml": {
+      "source": "packages/striker/electron-builder.yml",
+      "sha256": "223db317906826cd15ae25612fcd1b4bd1c2606b45f8d9b2f0e31eda70f53026",
+      "mode": "unchanged"
+    },
+    "packages/striker/electron.vite.config.ts": {
+      "source": "packages/striker/electron.vite.config.ts",
+      "sha256": "88905653ffdef75ae69bed1c226b68e75abcbe675886f12d9343f592551bd071",
+      "mode": "unchanged"
+    },
+    "packages/striker/package-lock.json": {
+      "source": "packages/striker/package-lock.json",
+      "sha256": "80ffc715716dddc9a0f8182efe2d4bf282ee75f0d9cbc449ef8a373fe1324556",
+      "mode": "unchanged"
+    },
+    "packages/striker/package.json": {
+      "source": "packages/striker/package.json",
+      "sha256": "11f1e2efa79c67fbe04f973e4908ef592e68465e60a33055c4f4fcb3857b30a0",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/main/index.ts": {
+      "source": "packages/striker/src/main/index.ts",
+      "sha256": "5c4b87492ae6a6f973460823035e4bcf43d7606663e98d935e7b161d3b559724",
+      "mode": "adapted",
+      "target_sha256": "66dfd9e64922f2822a257985910ea66a0a18ad5fd52316a486d55eb21c3cba86",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/preload/index.d.ts": {
+      "source": "packages/striker/src/preload/index.d.ts",
+      "sha256": "3427def01244e3cf67e0815e8ea15c2b320aafa9071c4761ce0437b6112d0fac",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/preload/index.ts": {
+      "source": "packages/striker/src/preload/index.ts",
+      "sha256": "a7f9c3a3ddfbb3a732769c3bb49827411b1e591b59ce67ade25d301c35c545cc",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/index.html": {
+      "source": "packages/striker/src/renderer/index.html",
+      "sha256": "e2dd303e1d79f23aac5d987c72b4c64fdeac405d09434d570778520bcfd0afc5",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/App.tsx": {
+      "source": "packages/striker/src/renderer/src/App.tsx",
+      "sha256": "949af528097cbc2421d03cc527211fbfc94862dfd97fd2f80646643e180efc76",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/AgentMark.tsx": {
+      "source": "packages/striker/src/renderer/src/components/AgentMark.tsx",
+      "sha256": "5096ed58e79cc856591316152ea6b487d9302e8baf990b16722d6f838be40401",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/AgentModelPicker.tsx": {
+      "source": "packages/striker/src/renderer/src/components/AgentModelPicker.tsx",
+      "sha256": "137e4cd9192aff911d064ef210bb5f4b9fb057ccb82f195c2b37409ba7002b57",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/AircraftBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/AircraftBlock.tsx",
+      "sha256": "1d0da267a4602a3b5ff7afa530c4b93e106995092810ab9c821cd7e1cc23e614",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/BusBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/BusBlock.tsx",
+      "sha256": "6af93970391486ccb5cbcb5171ea79c5be25520ef09ab1e1174a5fc2aad3e7cc",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/CalendarBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/CalendarBlock.tsx",
+      "sha256": "f4bb5ef67f27ce9dc96eae05edb108f35f4aac75d32cd7aeaf22fe3a96828664",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/ChartBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ChartBlock.tsx",
+      "sha256": "07c7e924a5d4cb7be1feab6f28860851a0981a198c75b6c78f743f01962c02cb",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/ChatMain.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ChatMain.tsx",
+      "sha256": "4ede353d35e1f560fb0334fdec946860ea0a16843075d53f9ea371f2b36f4629",
+      "mode": "adapted",
+      "target_sha256": "0001271ab64ece30c21c5a2ed9e4dfccb65778756ed3a66e13d3203d948fdc5c",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/components/CodeBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/CodeBlock.tsx",
+      "sha256": "d572d2c143496e5dac4c83d257f8e9fe609ed79b75fb0c6aa9c9a0f990f3f017",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/CommBubble.tsx": {
+      "source": "packages/striker/src/renderer/src/components/CommBubble.tsx",
+      "sha256": "7465ff9f963c38c379264a4fdba6c2a4b25b3f07dbeb08d5ddd4a30ed393e64c",
+      "mode": "adapted",
+      "target_sha256": "a903f7ca952ad2cee33eb92963099140d7a6f462e0ca68a933fb54777f479dd7",
+      "reason": " Friday display alias; preserve stored transport IDs."
+    },
+    "packages/striker/src/renderer/src/components/ConfigTab.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ConfigTab.tsx",
+      "sha256": "d09f6f931f286cc47161c47db08c356fc44ecda99ffdea9c422d363b207b89c1",
+      "mode": "adapted",
+      "target_sha256": "e2e93b45b970a78cb8904dab92f7aae211a282c094264c400ed10353bf25be24",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/components/ErrorBoundary.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ErrorBoundary.tsx",
+      "sha256": "f88f4162e11186707e600ed8e31fdb6400ce16c1f81261b2b04fb2a09402739c",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/GlassFolderIcon.tsx": {
+      "source": "packages/striker/src/renderer/src/components/GlassFolderIcon.tsx",
+      "sha256": "5ed674bad8bd81e0adff99c968535a04ff7fc62b87ea32cd7fea94ced6609e54",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/GlassSelect.tsx": {
+      "source": "packages/striker/src/renderer/src/components/GlassSelect.tsx",
+      "sha256": "ea9dc58a215ae64a1ddbf73bfc54d3a453007053627ce669e0057428bf38bf05",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/Header.tsx": {
+      "source": "packages/striker/src/renderer/src/components/Header.tsx",
+      "sha256": "28b810f0492a13fcef67711dc30eecf723198dccf539c9ad5bfe716267548df1",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/InputBar.tsx": {
+      "source": "packages/striker/src/renderer/src/components/InputBar.tsx",
+      "sha256": "3487070bb3980aabeceaa6731d6fd3c6810980a9e3b97c608336906e933d11ff",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes.",
+      "target_sha256": "01f63cc907885b30cba7210e2ee27a30032e28f6bbd29029259660ef754d9e4c"
+    },
+    "packages/striker/src/renderer/src/components/InteractionPrompt.tsx": {
+      "source": "packages/striker/src/renderer/src/components/InteractionPrompt.tsx",
+      "sha256": "d3adf24f3f110aabaa7600f96f72f64ddab57b55212f41d4028528b6f97e9ed8",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/Layout.tsx": {
+      "source": "packages/striker/src/renderer/src/components/Layout.tsx",
+      "sha256": "f3a52a8b24165c030fd5f267f84b91ed03cd713a82e93f3fcec2ecc844fe902a",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/LockScreen.tsx": {
+      "source": "packages/striker/src/renderer/src/components/LockScreen.tsx",
+      "sha256": "90cbd96444c3a21b08130e285ddb9dbd66abe3e5bbccc37b8920e6198f1b15ba",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/LockScreensaver.tsx": {
+      "source": "packages/striker/src/renderer/src/components/LockScreensaver.tsx",
+      "sha256": "4bf8e9f0f80c417dc0d3aada72be98b9ad391a359393aadc4ab5e7c66e1c3b0c",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/MapBlock.tsx": {
+      "source": "packages/striker/src/renderer/src/components/MapBlock.tsx",
+      "sha256": "3fd012c83dfa27f0f6ac79e1e7cabaf09dbff8cb71b4fd0a242e8b8016220d17",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/McpServersPanel.tsx": {
+      "source": "packages/striker/src/renderer/src/components/McpServersPanel.tsx",
+      "sha256": "deb72408306536cff91fda2d96a9c5c38ca03bcf1a0dabdaccf4cbb381192a39",
+      "mode": "adapted",
+      "target_sha256": "e96ccfde6afd55b52353d6c84b32a7f16e715bd011c851381d5cb083364a8493",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/striker/src/renderer/src/components/MemoryEditorModal.tsx": {
+      "source": "packages/striker/src/renderer/src/components/MemoryEditorModal.tsx",
+      "sha256": "d669c17405d18ea949cb7d60acf5bdef9964c256ac7cf2a2bfb7a5153cd5d7ce",
+      "mode": "adapted",
+      "target_sha256": "3ebe521902778a116ca793d6789324532fe156f5e4a94d5f79ab95395ecfb96a",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/components/MemoryExplorerModal.tsx": {
+      "source": "packages/striker/src/renderer/src/components/MemoryExplorerModal.tsx",
+      "sha256": "a41884b99ee213749609aff70d147603b4028fcf486b1a1c7dfc043cc15ef8b6",
+      "mode": "adapted",
+      "target_sha256": "0cdb76f3bd91ceaa4822b0e520efdf8d67f99c1babc2b29c9991e696fba37dc3",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/components/Message.tsx": {
+      "source": "packages/striker/src/renderer/src/components/Message.tsx",
+      "sha256": "956d0155b3fed1310062c160df8dcb68fa1f31ce7dafe33160c20a295dbd2cec",
+      "mode": "adapted",
+      "target_sha256": "9873d9d3363235406d35f41abbc4cab74be4f752b2d901bcc744c9b0c6ff59f6",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/striker/src/renderer/src/components/MessageList.tsx": {
+      "source": "packages/striker/src/renderer/src/components/MessageList.tsx",
+      "sha256": "43f09e64dbb2fd2f09765cf2a92a979c21f9920a1ef897e3612e91b1a3eae7de",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/NeuralBackground.tsx": {
+      "source": "packages/striker/src/renderer/src/components/NeuralBackground.tsx",
+      "sha256": "f63fc21db6bdc37c2ed3d35d31b8aa0742907e237e090e7e2e9aa185c1aae687",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/ProjectsView.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ProjectsView.tsx",
+      "sha256": "75bbdf987db6cd3134527cc224a05ff19917ce33ae7df680a9668a768426b740",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/RemindersTab.tsx": {
+      "source": "packages/striker/src/renderer/src/components/RemindersTab.tsx",
+      "sha256": "29461dd5af598f71d160086896877044583516856aa405a8023ebeb65f524b15",
+      "mode": "adapted",
+      "target_sha256": "0dd865c1669817097047742a346f8dac9f6a95c5a423d9fc25587233460e1f5a",
+      "reason": " Friday display alias; preserve stored transport IDs."
+    },
+    "packages/striker/src/renderer/src/components/ScreenLockSettings.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ScreenLockSettings.tsx",
+      "sha256": "8aeede0f7d2449b7a65576fd67a2206ad38758d046d2fe771a535b44c13310fd",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/SelectionContext.tsx": {
+      "source": "packages/striker/src/renderer/src/components/SelectionContext.tsx",
+      "sha256": "50de92f15b95fdfb07697f63eeb1ff2a2fa53ecf42dfa2cd77b7478f16190fc6",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/SettingsModal.tsx": {
+      "source": "packages/striker/src/renderer/src/components/SettingsModal.tsx",
+      "sha256": "57eccf6282f7f183bea2b5bb90ee6697887ec0d70ff8a88a850da3bb7401ed08",
+      "mode": "adapted",
+      "target_sha256": "b71ae8d229fa2d03544553abde8c8190300737171a21a68e42cbba9eed3eee66",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/striker/src/renderer/src/components/Sidebar.tsx": {
+      "source": "packages/striker/src/renderer/src/components/Sidebar.tsx",
+      "sha256": "0e797f3c6c1f46df0a721a82957a80a978ff8b55739e65ebed9a31f34126a480",
+      "mode": "adapted",
+      "target_sha256": "0e64da6ecb05bf9a0de85e63662b1b630234a6fa289e02840ddeeafa4b950b8d",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/components/Skeleton.tsx": {
+      "source": "packages/striker/src/renderer/src/components/Skeleton.tsx",
+      "sha256": "4ce1afcef98949d546ebc76c893a8564724be0c3236aaea947fea7c728a227e8",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/SubagentDetailView.tsx": {
+      "source": "packages/striker/src/renderer/src/components/SubagentDetailView.tsx",
+      "sha256": "d19f005c442d7af4e325d1d80b8fb2d3efbdfd19f97b27ecabfb2dad4704037d",
+      "mode": "adapted",
+      "target_sha256": "902b0777302b6edd86cc547df6ccadc7ef0f150e842c34b7e9a337495feeba27",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/striker/src/renderer/src/components/SubagentPanel.tsx": {
+      "source": "packages/striker/src/renderer/src/components/SubagentPanel.tsx",
+      "sha256": "d97bcd977e0318f827b84f6082e3873c98da545b55af1822e325870db5d5be3d",
+      "mode": "adapted",
+      "target_sha256": "2ccf3250bf218659205e43b804f2d027fa1fa011382f970ba65e5dae812f8c1d",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/striker/src/renderer/src/components/SystemsBoard.tsx": {
+      "source": "packages/striker/src/renderer/src/components/SystemsBoard.tsx",
+      "sha256": "ef34920d632553130afcfaf51a15cca8e96ef16fde91a8c790fd030521857c44",
+      "mode": "adapted",
+      "target_sha256": "17624817ccaf2ad86b49169557465ee7e6623bb8c295ebc2368cb515dd8ce492",
+      "reason": " Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "packages/striker/src/renderer/src/components/ThinkingLevelSlider.tsx": {
+      "source": "packages/striker/src/renderer/src/components/ThinkingLevelSlider.tsx",
+      "sha256": "7d1081f10f21d7784f61337da80643aa68945d7be5284deb4694a57a98743713",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes.",
+      "target_sha256": "3034844bcdc6d6ad183a476c1de2c364acfa8a52c805903134e17f88f9f23573"
+    },
+    "packages/striker/src/renderer/src/components/VoiceActivity.tsx": {
+      "source": "packages/striker/src/renderer/src/components/VoiceActivity.tsx",
+      "sha256": "4a36bd0c5a0dcd085daef88d4966e789964a6ee2c126b2da597fd12207e10aaf",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/VoiceCanvas.tsx": {
+      "source": "packages/striker/src/renderer/src/components/VoiceCanvas.tsx",
+      "sha256": "31eb7dcc2504764591c369031572208d3f15067265a6bc499f29c7ad06c1a0db",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/VoiceMode.tsx": {
+      "source": "packages/striker/src/renderer/src/components/VoiceMode.tsx",
+      "sha256": "b76c764b18b18b567d0ea89536477e8397740ad1bac3af1600bc35c087ac1d93",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/VoiceOrb.tsx": {
+      "source": "packages/striker/src/renderer/src/components/VoiceOrb.tsx",
+      "sha256": "ffb0fda8d15fa7a34f29588ffd173c522d44990d15a00c94effebdd3036637be",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/VoicePanelBody.tsx": {
+      "source": "packages/striker/src/renderer/src/components/VoicePanelBody.tsx",
+      "sha256": "d3110f4f4fd38528f7fa20f3d74c8fba63e86b7e38c1846d531d736dad5c3107",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/WidgetFrame.tsx": {
+      "source": "packages/striker/src/renderer/src/components/WidgetFrame.tsx",
+      "sha256": "b20a0d016755a3f20824850b6294d76da11d193af77e0a511f9acbcd838beefe",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/components/settingsUI.tsx": {
+      "source": "packages/striker/src/renderer/src/components/settingsUI.tsx",
+      "sha256": "4ccb9c8d8816001394bdfb0996cf1f5efd5eee4f22034d6416068906ffab053d",
+      "mode": "adapted",
+      "target_sha256": "5221a08a4cc0f5a8699cf10fad9e9df67c7d62d43e19ae4360b27a6f5ca0deab",
+      "reason": "Native integration adaptation; preserve original source hash.",
+      "additional_sources": [
+        {
+          "source": "packages/heartbreaker/src/renderer/src/components/settingsUI.tsx",
+          "sha256": "7da821f33d7cb0cd80c230b9b4df1a5dbb978b66b1c911d53d30063129e6e04f"
+        }
+      ]
+    },
+    "packages/striker/src/renderer/src/env.d.ts": {
+      "source": "packages/striker/src/renderer/src/env.d.ts",
+      "sha256": "a2a3d50cd9bf440e342c4804081da2d401d4ff3f238fa17eaeb6fbcc61021056",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/agentMarks.ts": {
+      "source": "packages/striker/src/renderer/src/lib/agentMarks.ts",
+      "sha256": "e60e614aa9a9953fa3bcd578344bcd07cb3fcb14e8bd4e79ea9b741a76d6e9ec",
+      "mode": "adapted",
+      "target_sha256": "2128c33365e9fce7f2d678db71983e1cb191892abf794b531efe5f282253c1bd",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/striker/src/renderer/src/lib/agents.ts": {
+      "source": "packages/striker/src/renderer/src/lib/agents.ts",
+      "sha256": "818f27790e641a52cd8bedb3d47562b17c1663ac6c1af53eda1a88a15a6be8bd",
+      "mode": "adapted",
+      "target_sha256": "e62e05cdde6cc72cc3e2058148056968f0aa0b5bf08c6337a849288fcb15fb14",
+      "reason": " Friday presentation and legacy identity alias compatibility."
+    },
+    "packages/striker/src/renderer/src/lib/api.ts": {
+      "source": "packages/striker/src/renderer/src/lib/api.ts",
+      "sha256": "e1712af340bdf6219560c936ec130ca9118f03246b68d2e6054156c6d8d8679d",
+      "mode": "adapted",
+      "target_sha256": "dbef0972ed142aa7bb9f673630d4289fd68ef4f3947cff560cbc07ca6cb355f1",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation.",
+      "additional_sources": [
+        {
+          "source": "packages/heartbreaker/src/renderer/src/lib/api.ts",
+          "sha256": "bf695d4e3366d2f90c6d78a5ffb731e62105788734de5cc0fcf9fd1c980245c8"
+        }
+      ]
+    },
+    "packages/striker/src/renderer/src/lib/i18n/en.ts": {
+      "source": "packages/striker/src/renderer/src/lib/i18n/en.ts",
+      "sha256": "2ea9366fd22bee99fec98b8f176e1231371f6bd0e66ebd773befaa121014edc1",
+      "mode": "adapted",
+      "target_sha256": "4f9f464c146bcabf3c3e1cc7a488d4ede318dc10e73ef7dc4c6af6e6d06b246a",
+      "reason": "Native integration adaptation; preserve original source hash.",
+      "additional_sources": [
+        {
+          "source": "packages/heartbreaker/src/renderer/src/lib/i18n/en.ts",
+          "sha256": "30cee30ad3a0ef1ad16be1cbd50faf99842dc0f33fb3c8e4b1000920854f3b71"
+        }
+      ]
+    },
+    "packages/striker/src/renderer/src/lib/i18n/index.ts": {
+      "source": "packages/striker/src/renderer/src/lib/i18n/index.ts",
+      "sha256": "72ba4d382a97f7c5bb3b0d99449c9f15b470674700d76761dc599bb2fd525e32",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/i18n/tr.ts": {
+      "source": "packages/striker/src/renderer/src/lib/i18n/tr.ts",
+      "sha256": "e3251b3c3272748fc7c46447e3f55fa9f452a74ec608dc957afec1f5065dc0e0",
+      "mode": "adapted",
+      "target_sha256": "0e4f992bbf1ef591dc34e3862d84b1e16d87a71f997fc217824a3f9d04f2692c",
+      "reason": "Native integration adaptation; preserve original source hash.",
+      "additional_sources": [
+        {
+          "source": "packages/heartbreaker/src/renderer/src/lib/i18n/tr.ts",
+          "sha256": "60635ac8e35d1a85160140f19953f730e2d71410dd177c50cda3a233debdc643"
+        }
+      ]
+    },
+    "packages/striker/src/renderer/src/lib/language.ts": {
+      "source": "packages/striker/src/renderer/src/lib/language.ts",
+      "sha256": "31164484086f7ca160b30e9d9cb036151cdc4d8e2ce9646921319157334b1e94",
+      "mode": "adapted",
+      "target_sha256": "e433f8e26e23a2d5c459d5037d034be7b01e12bbb9e33d5fddb8c932d00dc007",
+      "reason": "Native integration adaptation; preserve original source hash."
+    },
+    "packages/striker/src/renderer/src/lib/lock.ts": {
+      "source": "packages/striker/src/renderer/src/lib/lock.ts",
+      "sha256": "7e6b6fa20f58a59553b524a0bb9f26cc113ce9eaf51e4d217d59516a3aea6ac4",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/mic.ts": {
+      "source": "packages/striker/src/renderer/src/lib/mic.ts",
+      "sha256": "1edf6c04eb8dd068cca88a61791a86abac94514c417791231d674a282fde7b50",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/partialJson.ts": {
+      "source": "packages/striker/src/renderer/src/lib/partialJson.ts",
+      "sha256": "3de67f43b770e54bf4a70acd2c9c60053a850e4a8a42e462d1eebd4402f95c80",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/types.ts": {
+      "source": "packages/striker/src/renderer/src/lib/types.ts",
+      "sha256": "e487397761ca409f6e3a9995e07944af480c4cab0bd08df3cc7a313b4dc50297",
+      "mode": "adapted",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes. Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation.",
+      "target_sha256": "75f6db6a236fa4fcdf753166ea8d2e35ef0717a6b41d56c78a0bb3a56ad3590a"
+    },
+    "packages/striker/src/renderer/src/lib/useHealth.ts": {
+      "source": "packages/striker/src/renderer/src/lib/useHealth.ts",
+      "sha256": "cd12d2b88e82a0d271466ce0e26cc727a90652ccd144ed0d2af49e3ba44c579f",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/useIsMobile.ts": {
+      "source": "packages/striker/src/renderer/src/lib/useIsMobile.ts",
+      "sha256": "aff1eea393bcf09bc82f552cc54972e6170b8b11b94087fa60d0190de61623eb",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/useOnlineAgents.ts": {
+      "source": "packages/striker/src/renderer/src/lib/useOnlineAgents.ts",
+      "sha256": "f2cebc26618a156570fb97be8a9707e245d86ba443e1c4df56a604fe2bf4defb",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/useScreenLock.ts": {
+      "source": "packages/striker/src/renderer/src/lib/useScreenLock.ts",
+      "sha256": "cb8217be2779b73c6bebe4598559ee3ef1a8edb7a186b88a55ea4c93214ffddb",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/voice.ts": {
+      "source": "packages/striker/src/renderer/src/lib/voice.ts",
+      "sha256": "0d11824283e8cc65b9ec450474149b6a23674c3ff37ad88c57bc655eaa7294a8",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/lib/voicePanels.ts": {
+      "source": "packages/striker/src/renderer/src/lib/voicePanels.ts",
+      "sha256": "135cfefb34433de835c367179fd33a21c84d388de8ea2c7c7d529ecaebc53ab7",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/main.tsx": {
+      "source": "packages/striker/src/renderer/src/main.tsx",
+      "sha256": "b19fb3234285b68755da4d3a7505abb16d543f9e2125c8f13a6eb2e44d253c93",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/profile/index.ts": {
+      "source": "packages/striker/src/renderer/src/profile/index.ts",
+      "sha256": "ee38a9271dd32dac0fd51af7f5308980981fd56fba0591e7179f5a249fbb29c2",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/profile/theme.ts": {
+      "source": "packages/striker/src/renderer/src/profile/theme.ts",
+      "sha256": "a36518a697ac84f3c4f9fd38e9adcdc25d74568249ccc00ce712c987907c11f7",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/profile/types.ts": {
+      "source": "packages/striker/src/renderer/src/profile/types.ts",
+      "sha256": "7b08a84bdb48f61614501d2650e700ca961200e46899c29aafb7d70166f81aa3",
+      "mode": "adapted",
+      "target_sha256": "197be8bc885fb924f716cdcc5ec47a64cb954d9ebb83393ed4d15e47456270e5",
+      "reason": "Preserve client presentation; adapt thinking/Iacon contracts, read-only editor controls and inherited compilation fixes."
+    },
+    "packages/striker/src/renderer/src/store/chat.ts": {
+      "source": "packages/striker/src/renderer/src/store/chat.ts",
+      "sha256": "bc1af3ae8daca9f3835bd70748511b90dbc797ad12171df9f74f8108a8398cc2",
+      "mode": "adapted",
+      "target_sha256": "f0b3f0dcb328c7df6cd7009b17ce0583b1ea7d06cb3f2614b49131caf80e2a41",
+      "reason": "Native Legion/Forge roles, stable worker controls, replay/history and attributed client presentation."
+    },
+    "packages/striker/src/renderer/src/store/messageCache.ts": {
+      "source": "packages/striker/src/renderer/src/store/messageCache.ts",
+      "sha256": "8f697a46d627d2709401628d2a5fef3216b3576ed38534767da4041e51ac9849",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/store/settings.ts": {
+      "source": "packages/striker/src/renderer/src/store/settings.ts",
+      "sha256": "75d0dbdf9c46d5f6c7040f77d9784a1cc9fba5b95fdc88c6aaa657213beabc01",
+      "mode": "unchanged"
+    },
+    "packages/striker/src/renderer/src/theme/striker.css": {
+      "source": "packages/striker/src/renderer/src/theme/striker.css",
+      "sha256": "b10efaa790f5ba839b5edb75c21899a2295888347412b47afd2cfa4daf454657",
+      "mode": "unchanged"
+    },
+    "packages/striker/tsconfig.json": {
+      "source": "packages/striker/tsconfig.json",
+      "sha256": "a66358469fbf3cb2b8eff159cfc8c5f7fe376897b47f52903cfa606c0a9c2640",
+      "mode": "unchanged"
+    },
+    "packages/striker/tsconfig.node.json": {
+      "source": "packages/striker/tsconfig.node.json",
+      "sha256": "f3c367266aefc44a6ca1ee0d93c027914b3d219f1a779bb257cca3effb785c94",
+      "mode": "unchanged"
+    },
+    "packages/striker/tsconfig.web.json": {
+      "source": "packages/striker/tsconfig.web.json",
+      "sha256": "2e2359ae51e964441140cfb0b532a65f1e108ce000cefb33eb5f9120cd4d9916",
+      "mode": "unchanged"
+    },
+    "packages/striker/vite.web.config.ts": {
+      "source": "packages/striker/vite.web.config.ts",
+      "sha256": "6fdee8917c41fdb2d9829da37d4d66b955b2f87b22dfc648f3557ffe4aa6adad",
+      "mode": "unchanged"
+    },
+    "app/core/clock.py": {
+      "source": "packages/igor/app/core/clock.py",
+      "sha256": "0f47c73f715ca99f4e915ee0cc31b90996ade1bfb3034ebff68bb631ae154f60",
+      "mode": "unchanged"
+    },
+    "app/models/academic.py": {
+      "source": "packages/igor/app/models/academic.py",
+      "sha256": "264b69584a38e97a7a3b458012b1081e6d34e6dbd042320c67da8689f8391a39",
+      "mode": "unchanged"
+    },
+    "app/models/place.py": {
+      "source": "packages/igor/app/models/place.py",
+      "sha256": "b5340f3ed39fbf53fdfc4cf34ea03bad93a924a02e0741675c18cc292846dd5d",
+      "mode": "unchanged"
+    },
+    "app/models/route.py": {
+      "source": "packages/igor/app/models/route.py",
+      "sha256": "03a5bfad6d45feb5204adad8d9f00a40f0b12596f1c5863292c3f1975bab3cc2",
+      "mode": "unchanged"
+    },
+    "app/routers/academic.py": {
+      "source": "packages/igor/app/routers/academic.py",
+      "sha256": "306352a7b24e036930aea054e530c220bf14553316b31cd96d1559913fe99114",
+      "mode": "unchanged"
+    },
+    "app/routers/aircraft.py": {
+      "source": "packages/igor/app/routers/aircraft.py",
+      "sha256": "c487dbd6d7c8e295b5e77c4181ad72af5bc44514d53a3fb5685020e9e89de621",
+      "mode": "unchanged"
+    },
+    "app/routers/navigation.py": {
+      "source": "packages/igor/app/routers/navigation.py",
+      "sha256": "e196b8962c7dbbc6575c93285dd09ece73047e61ec25c5d38faacb9ca8b20ac2",
+      "mode": "unchanged"
+    },
+    "app/schemas/academic.py": {
+      "source": "packages/igor/app/schemas/academic.py",
+      "sha256": "3c1a55ecb8e7b2eaa9d6fa10dccd5d73d65119df5d3a0996b1c7c96babdabbdf",
+      "mode": "unchanged"
+    },
+    "app/services/academic.py": {
+      "source": "packages/igor/app/services/academic.py",
+      "sha256": "feac194b4c2c622ac2bd6d4dde96e5e37f522f003be675fa935fd3de38d68c64",
+      "mode": "unchanged"
+    },
+    "app/services/aircraft.py": {
+      "source": "packages/igor/app/services/aircraft.py",
+      "sha256": "0b607ec7971f883f982784b3205f3e17fa43751a08773358f1cebbf39f2bb998",
+      "mode": "unchanged"
+    },
+    "app/services/fcm.py": {
+      "source": "packages/igor/app/services/fcm.py",
+      "sha256": "7a8e3b6adfb0e7625e1403d504b89980e9a0dc86d34d16276effa79958d6cec0",
+      "mode": "unchanged"
+    },
+    "app/services/places.py": {
+      "source": "packages/igor/app/services/places.py",
+      "sha256": "263d24aa27807f774184a2817d169235494c41711d2f82efb304a0059ceaa700",
+      "mode": "unchanged"
+    },
+    "app/services/routes.py": {
+      "source": "packages/igor/app/services/routes.py",
+      "sha256": "6e98cfa9623cd09798e9437c387976c921872df2b428435be130e431b22d297a",
+      "mode": "unchanged"
+    },
+    "app/skills/aircraft.py": {
+      "source": "packages/igor/app/skills/aircraft.py",
+      "sha256": "b5a838e182c372af93222f3dd8c380ca6ff9527527961bd03ad9ebd2d426a6af",
+      "mode": "unchanged"
+    },
+    "app/skills/attendance.py": {
+      "source": "packages/igor/app/skills/attendance.py",
+      "sha256": "60e0fc1579979342b8124a80262a899b4d8703172b2090ccabf2c47e38924c97",
+      "mode": "unchanged"
+    },
+    "app/skills/navigation.py": {
+      "source": "packages/igor/app/skills/navigation.py",
+      "sha256": "f89bea411c59f4cab4b103dd574e6d8ede95d9dbbb4934960908d2b8c48e41c5",
+      "mode": "unchanged"
+    },
+    "app/skills/pharmacies.py": {
+      "source": "packages/igor/app/skills/pharmacies.py",
+      "sha256": "046ed7330802681dd92caf77c37b1b876c9cb654d1ff3890848f869f7c8942eb",
+      "mode": "unchanged"
+    },
+    "app/skills/schedule.py": {
+      "source": "packages/igor/app/skills/schedule.py",
+      "sha256": "156ba539c6c5b1688c9b7ebd01578e14ca75e7e53acf8cb3486933364400b3bc",
+      "mode": "unchanged"
+    },
+    "app/skills/weather.py": {
+      "source": "packages/igor/app/skills/weather.py",
+      "sha256": "60a3450702f0e491924d3e87b40147b8b206817062169e2f4e7ae94df508ddf8",
+      "mode": "unchanged"
+    },
+    "app/services/chat_history.py": {
+      "source": "packages/igor/app/services/chat_history.py",
+      "sha256": "ace66a96ebbe6afb491612db67fb569ab8eb07493ff31c3b591db2b75c1b5c39",
+      "mode": "unchanged"
+    },
+    "app/core/files.py": {
+      "source": "packages/igor/app/core/files.py",
+      "sha256": "46eb903a400d0a78a23de11a6f8f3999e88285a8feebfedcd2e7f5d8553bb655",
+      "mode": "adapted",
+      "target_sha256": "57c8f671177168ed9c62b4798a9014185acaf2b22757b95451cef6015ea6d108",
+      "reason": "Compatibility adaptation to renovated services; original source hash retained."
+    },
+    "app/routers/files.py": {
+      "source": "packages/igor/app/routers/files.py",
+      "sha256": "4b0ed052986f1aeb833944b869aa8546e916e47cc6026a3f692b608687a4e7fc",
+      "mode": "unchanged"
+    },
+    "app/services/attachments.py": {
+      "source": "packages/igor/app/services/attachments.py",
+      "sha256": "4979f7163f3843c4a8b859629c503b3e0c1a534c24ecd11f2618f07f4bc2b6f6",
+      "mode": "unchanged"
+    },
+    "app/skills/osint.py": {
+      "source": "packages/igor/app/skills/osint.py",
+      "sha256": "a6c4a66e4329a285412eaa8578fa20c38a1a408eb071ddb74765164e185ad9d8",
+      "mode": "unchanged"
+    },
+    "app/skills/read_skill.py": {
+      "source": "packages/igor/app/skills/read_skill.py",
+      "sha256": "ab58b6ec04b83b65c6672070b40f74bdb9739043b82aefb4023499c1701855b7",
+      "mode": "unchanged"
+    },
+    "app/skills/save_file.py": {
+      "source": "packages/igor/app/skills/save_file.py",
+      "sha256": "98ab3a63f9bce399aab51efe8167fc72e1e2da46c8c934cb904e7dd53d7cbc08",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/calendar-operations/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/calendar-operations/SKILL.md",
+      "sha256": "da2b1099c92e35d6c810fc24dfdb06ece916279f2190a0bb4d3c6b98cfcfbcca",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/generate-document/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/generate-document/SKILL.md",
+      "sha256": "36f9aa3648262fdab82025d35886a50ae0e2aac20dec34bccf4a5d87f145ad8e",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/inline-rendering/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/inline-rendering/SKILL.md",
+      "sha256": "990755f0f565716f5697dbfdcc367de881af60a4ddddf523d4e8b6e1871e4dc1",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/memory/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/memory/SKILL.md",
+      "sha256": "b836bb1bdaf34b923d3ce1a6bd750d9368895c32436693a66cd76b6e37204858",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/search-history/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/search-history/SKILL.md",
+      "sha256": "4f9f136f954522a076b1fdecdda7bd3313cfd1209da6804f3407c0f60e4cca84",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/send-push-notification/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/send-push-notification/SKILL.md",
+      "sha256": "59d1efc701f5cd526e307dd1e09c7b624c072a36a57e2e33e5298df0dd56ac15",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/speech-to-text/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/speech-to-text/SKILL.md",
+      "sha256": "29ba126e1fc61ae09b8cdb061937273792de1bb4ba8fc25b9027797bdad67694",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/system-info/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/system-info/SKILL.md",
+      "sha256": "10dabc0647c0a02e29f75d382d2dbbe1b2e541a5e494515f2511591e4e851257",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/system-operations/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/system-operations/SKILL.md",
+      "sha256": "e5b6f264c75d5b8649e1503d0727b324cedd9066e8d9971de154660abfc9c5fc",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/text-to-speech/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/text-to-speech/SKILL.md",
+      "sha256": "a1f07ce4d6f4037a1af1201871b73f14cde156846294355db7f2dc6675676c3e",
+      "mode": "unchanged"
+    },
+    "app/skills/skill_docs/web-research/SKILL.md": {
+      "source": "packages/igor/app/skills/skill_docs/web-research/SKILL.md",
+      "sha256": "1aed49d7af6c35f32de92521549d7b3b8ad6cb8d0c5b33e2e52b6ab493987ef3",
+      "mode": "unchanged"
+    },
+    "app/core/runtime_state.py": {
+      "source": "packages/igor/app/core/runtime_state.py",
+      "sha256": "caac5cb59ea4fc47a13f7b9893d63d5d8b5650b7f2f9a0c9a43ccc0f27775b2e",
+      "mode": "adapted",
+      "reason": "Retain selected portal/device/connection credentials and presentation settings with atomic persistence; no legacy model/memory authority. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation.",
+      "target_sha256": "14d39164310386057999ac3b6f4fbffb81812cb9f55f9ab0eebf9a74d1dcb049"
+    },
+    "app/routers/health_data.py": {
+      "source": "packages/igor/app/routers/health.py",
+      "sha256": "8d21ec0187bcfa39a08b2bb3fd1d03d27069ab22c7648ba20f2f155ef144743c",
+      "mode": "adapted",
+      "reason": "Domain-only compatibility; renovated architecture retains all engine authority",
+      "target_sha256": "1edca52e2a35b09648f883deb097815f11847d44212c5a7e438f96309c768be4"
+    },
+    "app/models/health_sample.py": {
+      "source": "packages/igor/app/models/health_sample.py",
+      "sha256": "c8a6ddb8849e828a9528831b58bb62bb653b734d289b8f26623cc695a32b4236",
+      "mode": "unchanged"
+    },
+    "app/routers/browser.py": {
+      "source": "packages/igor/app/routers/browser.py",
+      "sha256": "7370a8620b0f92781ae1eba75a548c27ea7b9fb1baeba5672b231bc65ac1da42",
+      "mode": "adapted",
+      "target_sha256": "71679c3164f517ff4a0bbbc41bbaf56bc51cdb272eeaa724dd44a34cfb99885f",
+      "reason": "Compatibility adaptation to renovated services; original source hash retained."
+    },
+    "app/schemas/health.py": {
+      "source": "packages/igor/app/schemas/health.py",
+      "sha256": "84660f3ee785a9b0299fe2bf95f44feb701905dd1939187ce650e80348b746dd",
+      "mode": "unchanged"
+    },
+    "app/services/browser.py": {
+      "source": "packages/igor/app/services/browser.py",
+      "sha256": "6ead3f280a8d6ab6720e6ced5517ad03c4331613db5380af14bcc4fe9ac41501",
+      "mode": "unchanged"
+    },
+    "app/services/health.py": {
+      "source": "packages/igor/app/services/health.py",
+      "sha256": "7beaebd4ee30bcebd57effd3d5db314ea5de82d78f18935b7da268f705e10264",
+      "mode": "unchanged"
+    },
+    "app/skills/browser.py": {
+      "source": "packages/igor/app/skills/browser.py",
+      "sha256": "1545157108dbac944eb75f1fb0ce47fdc91db3c23dce31d20f1684c3625c006d",
+      "mode": "unchanged"
+    },
+    "app/skills/health_data.py": {
+      "source": "packages/igor/app/skills/health_data.py",
+      "sha256": "cbf7db1d3327fc2bf47eba0e7d1e82caac18b386366831e5d4bccf65c51f608a",
+      "mode": "unchanged"
+    },
+    "app/news/__init__.py": {
+      "source": "packages/igor/app/news/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "unchanged"
+    },
+    "app/news/dedup.py": {
+      "source": "packages/igor/app/news/dedup.py",
+      "sha256": "3e96642425882f4a8d63bfd0682e0c655fe5b805804010a2630cfe159e48f44d",
+      "mode": "unchanged"
+    },
+    "app/routers/web_watch.py": {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "sha256": "75639ed20e80b7f064eb368b3c0f43093edc37c8e5f83dbe0a8d575d7971fef4",
+      "mode": "unchanged"
+    },
+    "app/schemas/web.py": {
+      "source": "packages/igor/app/schemas/web.py",
+      "sha256": "c232a674a6d63165d804f1aa02af119f6ddc8a7b680ecac1d1387a56456b53f8",
+      "mode": "unchanged"
+    },
+    "app/services/web_watch.py": {
+      "source": "packages/igor/app/services/web_watch.py",
+      "sha256": "915c0bd4fa42adf4f47fc1cffae105a6710d9b5104c2c5e9db6e662067c56a89",
+      "mode": "unchanged"
+    },
+    "app/models/news_item.py": {
+      "source": "packages/igor/app/models/news_item.py",
+      "sha256": "77496620de76db564a4ebb8a6f19ae2b5cb9ac4e37bfc4d2600eb65a24305c57",
+      "mode": "unchanged"
+    },
+    "app/models/news_quota.py": {
+      "source": "packages/igor/app/models/news_quota.py",
+      "sha256": "616dafc8b7a5d1c940e2653e34d479369215ca209932dc4c9b7e49009d898b4d",
+      "mode": "unchanged"
+    },
+    "app/models/news_watch.py": {
+      "source": "packages/igor/app/models/news_watch.py",
+      "sha256": "ac6252e3e2c92fb1a4c3108d6d7da5224085df4830b50839f63107b3093a57d7",
+      "mode": "unchanged"
+    },
+    "app/news/collector.py": {
+      "source": "packages/igor/app/news/collector.py",
+      "sha256": "be70b24bbcc6453c422c2335a6900863a96b0ad831a7f2b0c99a10eb2b414e8f",
+      "mode": "unchanged"
+    },
+    "app/news/feeds.py": {
+      "source": "packages/igor/app/news/feeds.py",
+      "sha256": "1d9abf9cfc973d85a4d069159fda927109040b1fac20d330f406d25f56e88abf",
+      "mode": "unchanged"
+    },
+    "app/routers/news.py": {
+      "source": "packages/igor/app/routers/news.py",
+      "sha256": "55ad7a85073fd2fe1f2340786cc3a6c0a94456034343484661033efa5fd5f826",
+      "mode": "unchanged"
+    },
+    "app/skills/news.py": {
+      "source": "packages/igor/app/skills/news.py",
+      "sha256": "923d6585b5b5a2a4ba3c7f927b8c9f6b28e461aa861b4a40a88fc9dd2550f96b",
+      "mode": "unchanged"
+    },
+    "app/skills/documents.py": {
+      "source": "packages/igor/app/skills/documents.py",
+      "sha256": "ec0ca71e6d4187afc039ac4db39996d3577234fa166462dced9b32da2adfa320",
+      "mode": "adapted",
+      "target_sha256": "0354203f316cb3d7a3a79d8d204a670aa94749022a17331587a824888087b74e",
+      "reason": "Retain generators and bundled fonts; bound inputs, run rendering off the event loop, use native persona branding and file receipts."
+    },
+    "app/skills/system.py": {
+      "source": "packages/igor/app/skills/system.py",
+      "sha256": "2ea787b287733d459b4cbf4b864e7259b6d91da7b934740beb3f641d64786a6a",
+      "mode": "adapted",
+      "target_sha256": "181987a8920223fee39631d6c28d888c141a2cbb8947c66863696b1dad03a212",
+      "reason": "Retain metrics; expose through deferred discovery and native persona grants."
+    },
+    "app/skills/fonts/BarlowCondensed-Bold.ttf": {
+      "source": "packages/igor/app/skills/fonts/BarlowCondensed-Bold.ttf",
+      "sha256": "e476562ec9c1e16cf16475895b511f08c804f438cc9a9f80a44ea50a0eeb5b65",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/BarlowCondensed-ExtraBold.ttf": {
+      "source": "packages/igor/app/skills/fonts/BarlowCondensed-ExtraBold.ttf",
+      "sha256": "724c9c25952d5f4a2d87185d9767aa006144c5f0d944dc05bf7d5d603551c260",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/BarlowCondensed-Medium.ttf": {
+      "source": "packages/igor/app/skills/fonts/BarlowCondensed-Medium.ttf",
+      "sha256": "262bd143292ce479ee0cd09a42b47ab173fca8e9c6eb5ed0b5c8a845bc371d17",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/DejaVuSans-Bold.ttf": {
+      "source": "packages/igor/app/skills/fonts/DejaVuSans-Bold.ttf",
+      "sha256": "e6476c1b80502924294eed40894c5b18e06c181444ca953e5334262df9c27724",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/DejaVuSans-BoldOblique.ttf": {
+      "source": "packages/igor/app/skills/fonts/DejaVuSans-BoldOblique.ttf",
+      "sha256": "eb436dca0c2594b73d8b603b892e374fdfd8d885d25ffb4f18df4c4c0b49e50f",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/DejaVuSans-Oblique.ttf": {
+      "source": "packages/igor/app/skills/fonts/DejaVuSans-Oblique.ttf",
+      "sha256": "4af75fa16ee6d3ad43e1ecec41862c24954af26a55c6bb1ebb27bd486a50f5f4",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/DejaVuSans.ttf": {
+      "source": "packages/igor/app/skills/fonts/DejaVuSans.ttf",
+      "sha256": "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
+      "mode": "unchanged"
+    },
+    "app/skills/fonts/DejaVuSansMono.ttf": {
+      "source": "packages/igor/app/skills/fonts/DejaVuSansMono.ttf",
+      "sha256": "b4a6c3e4faab8773f4ff761d56451646409f29abedd68f05d38c2df667d3c582",
+      "mode": "unchanged"
+    },
+    "app/skills/notifications.py": {
+      "source": "packages/igor/app/skills/notifications.py",
+      "sha256": "524a103e5eb3489d7e2d5ba038c6c2ae26c5b774ddc4914fe4f66beae28ba145",
+      "mode": "adapted",
+      "target_sha256": "77bc2d0d2f5f06142cc6d6b5fbdc229d5ee4ede81947fe999c358b5c8389fdb7",
+      "reason": "Retain FCM delivery; use request database, enforce configured owner/non-silent scope, retain effect receipts."
+    },
+    "app/skills/hisar.py": {
+      "source": "packages/igor/app/skills/hisar.py",
+      "sha256": "ee6062f02813ea77b6c9e100a777e2922e5cbd56c62cd9b162cabbe7b3b07348",
+      "mode": "adapted",
+      "target_sha256": "20a996b202e2e2358496c2d52f27fe541ab5e946ceb5ff3f5740659f93ab500d",
+      "reason": "Retain vault client; confine deposits locally and hold uncertain write outcomes."
+    },
+    "app/skills/transit.py": {
+      "source": "packages/igor/app/skills/transit.py",
+      "sha256": "90f413901716de011e90b56f03a7d58b2c6df46d78a5005ee0e5b11e8dd3fe42",
+      "mode": "unchanged"
+    },
+    "app/services/transit.py": {
+      "source": "packages/igor/app/services/transit.py",
+      "sha256": "f3862aaafaf335c543daf42d00cbfc8271a795fe0e212ae91dd08a3a541f45a8",
+      "mode": "unchanged"
+    },
+    "app/services/hisar_workspaces.py": {
+      "source": "packages/igor/app/services/hisar_workspaces.py",
+      "sha256": "3995f2090ec2c2bad72df81579037cd08f1a7d07cff1cd320119e302346cc2b1",
+      "mode": "adapted",
+      "target_sha256": "2383bd18dbe3502de9513a89a7e130652ed491645089546b5c9c5c8ee02f2021",
+      "reason": "Retain confined directory picker/creation; detach from superseded WorkspaceService and reject metadata paths."
+    },
+    "app/routers/hisar.py": {
+      "source": "packages/igor/app/routers/hisar.py",
+      "sha256": "b9c2459ccffc116d1f8f568831fa0b6dcf520d6041223aa7ed5097e0acdeb894",
+      "mode": "adapted",
+      "target_sha256": "acbd139f10980a22dcb16a4cc3507337a69b271a1163d908624ac1281568eb1a",
+      "reason": "Retain picker routes; use adapted service errors and bounded inputs."
+    },
+    "app/services/google_auth.py": {
+      "source": "packages/igor/app/services/google_auth.py",
+      "sha256": "2900869794a52f706183a883f91e4046ce06d597adeb5ae70d27aab5d563029e",
+      "mode": "adapted",
+      "target_sha256": "0f3636d8d864e780962dfc89a85fa7e7814657976faa1f3d96ea40bc07fa137c",
+      "reason": "Retain vendor REST dispatch; use bounded shared registry controls and app-owned serialized token refresh/rotation/invalidation. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "app/mcp/google_rest.py": {
+      "source": "packages/igor/app/mcp/google_rest.py",
+      "sha256": "2aeb8ee7bd32fdabf931358131699480b833a5ec793ba8cacf981c11e7317dc3",
+      "mode": "adapted",
+      "target_sha256": "7cb58478025f04628cbb86af20cfc7cb51f7d35aece5d90f80596a45220e940a",
+      "reason": "Retain vendor REST dispatch; use bounded shared registry controls and app-owned serialized token refresh/rotation/invalidation."
+    },
+    "app/mcp/microsoft_rest.py": {
+      "source": "packages/igor/app/mcp/microsoft_rest.py",
+      "sha256": "2e2ae872f594dc7e89a01b968fe7e59c5abb7382fe0819487e7bc97d24c00df9",
+      "mode": "adapted",
+      "target_sha256": "b8725ad97d11d64775dea58a174d3f0dd2343fcec818ba697bd610954bd0090f",
+      "reason": "Retain vendor REST dispatch; use bounded shared registry controls and app-owned serialized token refresh/rotation/invalidation. Native OAuth/connection contracts, grants, reconnect and nullable provider-limit presentation."
+    },
+    "app/models/solus_ledger.py": {
+      "source": "packages/igor/app/models/solus_ledger.py",
+      "sha256": "ff0f27f50a4ee770f8299b264f520d84cf08854dc03b782e9a1326d497ab4b3a",
+      "mode": "unchanged"
+    },
+    "app/schemas/solus.py": {
+      "source": "packages/igor/app/schemas/solus.py",
+      "sha256": "3c318ace85796610a6588cb308765f5fbade6d71728c133503f4810b089373c0",
+      "mode": "unchanged"
+    },
+    "app/services/solus/__init__.py": {
+      "source": "packages/igor/app/services/solus/__init__.py",
+      "sha256": "dcd5cf312e25345ef32e858ac4e3fda08bda469ef88a1c4a4107cc2b400f3287",
+      "mode": "unchanged"
+    },
+    "app/services/solus/money.py": {
+      "source": "packages/igor/app/services/solus/money.py",
+      "sha256": "b4707f9771eb97ac687c6fe4dcb7ec733ae3c4bf999887bfb9a529c95bd51d2b",
+      "mode": "unchanged"
+    },
+    "app/services/solus/calendars.py": {
+      "source": "packages/igor/app/services/solus/calendars.py",
+      "sha256": "654be0ecdbf79ef40ad6b50dfc3c9475f027ba95928f1008b90618842a63607a",
+      "mode": "unchanged"
+    },
+    "app/services/solus/commands.py": {
+      "source": "packages/igor/app/services/solus/commands.py",
+      "sha256": "bd8db88f2c8fc5bb6bb285843b58d2238e8bc20c123866cd12b3932f856b3bbc",
+      "mode": "unchanged"
+    },
+    "app/services/solus/reports.py": {
+      "source": "packages/igor/app/services/solus/reports.py",
+      "sha256": "58750d7a03084f276bdc80bed766dbfd51b6f339fef45c61799264309cf26a13",
+      "mode": "unchanged"
+    },
+    "app/services/solus/reconciliation.py": {
+      "source": "packages/igor/app/services/solus/reconciliation.py",
+      "sha256": "b478636016afd09bd07e14a42577ce7c87be7d68c1d4c1b8cd69483438d69808",
+      "mode": "unchanged"
+    },
+    "app/services/solus/investments.py": {
+      "source": "packages/igor/app/services/solus/investments.py",
+      "sha256": "8089ffe90a4e76fa22ccec53b6caaeef85fe07c7644f44b8f7b4f901f722ecd0",
+      "mode": "unchanged"
+    },
+    "app/services/solus/imports.py": {
+      "source": "packages/igor/app/services/solus/imports.py",
+      "sha256": "e188c7f1112485b411d782f87a32169c97a79c4f77a72ffafdb0c60a15e0b8a3",
+      "mode": "unchanged"
+    },
+    "app/services/solus/guards.py": {
+      "source": "packages/igor/app/services/solus/guards.py",
+      "sha256": "77c51de95215ba5edb9451ecb8c8361c7cf9cf82809aae80d9255152896f6cda",
+      "mode": "adapted",
+      "target_sha256": "bc3ef49bd96c95d322db8302b5508bed197e7c36964bf8139392ffda25059f64",
+      "reason": "Native Solus receipts/transaction/auth authority, immutable routing revisions and Sentinel bookkeeping workflow."
+    },
+    "app/services/solus/http.py": {
+      "source": "packages/igor/app/services/solus/http.py",
+      "sha256": "356b99e4c664108ffeadc2f0bfc67a991d74012f7dd824d69cbc677c3d86e1ce",
+      "mode": "adapted",
+      "target_sha256": "b0dea0911ae830818fea4f4f41299bd844d28b346c22171ba51a0091e567fd2d",
+      "reason": "Native Solus receipts/transaction/auth authority, immutable routing revisions and Sentinel bookkeeping workflow."
+    },
+    "app/services/solus/security.py": {
+      "source": "packages/igor/app/services/solus/security.py",
+      "sha256": "7cdee22b34ff80a0e2159d2bcdab313bbb74f37e76cb525091dfa4febddbd93f",
+      "mode": "adapted",
+      "target_sha256": "8c657e5f002cf8cf2497df58dc7df27105b4b71f35fee4422170868889798d39",
+      "reason": "Native Solus receipts/transaction/auth authority, immutable routing revisions and Sentinel bookkeeping workflow."
+    },
+    "app/services/solus/transport.py": {
+      "source": "packages/igor/app/services/solus/transport.py",
+      "sha256": "b7d7f592de04c55b16a104fa4c44ac6cd7a9f465e8d192248d764177ab41a9a9",
+      "mode": "adapted",
+      "target_sha256": "9d7d27cc5daf1af986b8cca1e6796a6bb0454a92ec73f81246e18be7bb21ff3b",
+      "reason": "Native Solus receipts/transaction/auth authority, immutable routing revisions and Sentinel bookkeeping workflow."
+    },
+    "app/routers/solus.py": {
+      "source": "packages/igor/app/routers/solus.py",
+      "sha256": "a8c0342a75d4f0f57303c94b00bea4f0455ae192617440c6d73671cc368a218c",
+      "mode": "unchanged"
+    },
+    "tests/test_solus_core.py": {
+      "source": "packages/igor/tests/test_solus_core.py",
+      "sha256": "283ae66c2919fe35070df2cf868e3b3cee1eff9db1e7dbdf3554d00aa25ae5ef",
+      "mode": "adapted",
+      "target_sha256": "9b6b8a552f1b7e41774ddd6ce1393b72085472b672ce727d51ea0c180045d613",
+      "reason": "Retain accounting/browser invariants under the native Solus transaction/auth boundary and external build staging; no legacy memory projections."
+    },
+    "tests/test_solus_http.py": {
+      "source": "packages/igor/tests/test_solus_http.py",
+      "sha256": "383d9edea33fdd473533a43942fb2f7f833e948d828cceadc92ab9a0637b7406",
+      "mode": "adapted",
+      "target_sha256": "66aef8aba226ab2999ef6caa87fb40b8c552912a12436bf878f988bc95b3ba81",
+      "reason": "Retain accounting/browser invariants under the native Solus transaction/auth boundary and external build staging; no legacy memory projections."
+    },
+    "app/automations/__init__.py": {
+      "source": "packages/igor/app/automations/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "unchanged"
+    },
+    "app/automations/schedule.py": {
+      "source": "packages/igor/app/automations/schedule.py",
+      "sha256": "a160463cf2a18d7df3a9dc5c760a0b9f66b5e221dea7a3961843f76b514f5b97",
+      "mode": "unchanged"
+    },
+    "app/automations/templates.py": {
+      "source": "packages/igor/app/automations/templates.py",
+      "sha256": "0d13829dbd5550d66efa9c0662c35e9c502c936171c77c1d00b660f8a846ebbc",
+      "mode": "unchanged"
+    },
+    "app/automations/composer.py": {
+      "source": "packages/igor/app/automations/composer.py",
+      "sha256": "0f2b59141c0360e87848aebf375b8d0d18a5dea50e03c92de16e6637f8c361a5",
+      "mode": "unchanged"
+    },
+    "app/skills/atomix_reports.py": {
+      "source": "packages/igor/app/skills/atomix_reports.py",
+      "sha256": "9c195be7d1715daf9d89115613811b8779c8ec577b1ebf7ffb070954427d24a7",
+      "mode": "adapted",
+      "target_sha256": "46b43d0b44353bbbcc8efea71fe882fab7ef8a78d95f934297e8d233b317ad1d",
+      "reason": "Native scope, authority, integration and deterministic validation adapters."
+    },
+    "app/templates/reports/atomix_daily_program_template.html": {
+      "source": "packages/igor/app/templates/reports/atomix_daily_program_template.html",
+      "sha256": "2a3fad7125edcf151857bbb1c591c8fb3a9febee3d58ce971e04972f859abb27",
+      "mode": "unchanged"
+    },
+    "app/skills/onyx.py": {
+      "source": "packages/igor/app/skills/onyx.py",
+      "sha256": "5dea61a46cdfe78f6643dbcd8488b9d87ff4758bf5406e718eb37c63ed6e600f",
+      "mode": "adapted",
+      "target_sha256": "928a380b09d18ef6220a3392145aff7532312c8f213692ba6a4735d21a83c87e",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/skills/sandbox.py": {
+      "source": "packages/igor/app/skills/sandbox.py",
+      "sha256": "c7bfa6a8719f2f6e258c36d9c3a33d6b54420bc25a5bf08f5019cd35193270aa",
+      "mode": "adapted",
+      "target_sha256": "9272406baddea696624660f9f09aeb5e47394d47ebb4815b34056f83c483e3e5",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/skills/search_history.py": {
+      "source": "packages/igor/app/skills/search_history.py",
+      "sha256": "9a9c2d06a03c8cde5b099a651445c1f8f25575c5d98843a19a78e8f783c39e2b",
+      "mode": "adapted",
+      "target_sha256": "fa2a9e9a3852f36fd6e1b07c8ebb3d8033ba9297730f3f26652b12f2ab07726f",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/skills/automations.py": {
+      "source": "packages/igor/app/skills/automations.py",
+      "sha256": "96384caf14c0c48e1c684e20d95d60cae26a877cd11e26660d67eae7fd96f4f4",
+      "mode": "adapted",
+      "target_sha256": "5b5c600fa375f1c645cc07a7e49851b2c50e97189c39b6ab18b77fc0c0b871b1",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/routers/automations.py": {
+      "source": "packages/igor/app/routers/automations.py",
+      "sha256": "165c25f16dc0d31dcebd3d4d76d04faf1a6308745c30a81d5d44aead813279dc",
+      "mode": "adapted",
+      "target_sha256": "6a2689e1b16cf89c4752008f5b1b33f62cf64f9056e87726edeb4a5d84a7e728",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/automations.py": {
+      "source": "packages/igor/app/automations/manager.py",
+      "sha256": "6de0b128e1a4445d8d1c7d3d2def8ade17fbbbab0b5670a288c9f8bc17bf21ba",
+      "mode": "adapted",
+      "target_sha256": "d83fd514325d3359a992b3dcd94ecdd57573c26844b102e4a976a29440200029",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/models/automation.py": {
+      "source": "packages/igor/app/models/automation.py",
+      "sha256": "227cd345d656ba9716af6cc8d1116bb43feb339db28bffb21f6d3c61183864bf",
+      "mode": "adapted",
+      "target_sha256": "900d2f070024bdc76b42de5f80feb1e19db760e2a18af6580037f03b1cc386c4",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/routers/telegram.py": {
+      "source": "packages/igor/app/routers/telegram.py",
+      "sha256": "faf2d1b3c1efcb079a25c3d88af3e5a4b02a93127939d438159e0eb975b7a7ff",
+      "mode": "adapted",
+      "target_sha256": "f1f5e50d40b8b0179d01fe36f741930a0a83bc8b38292066d91f2aca4297bab8",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/telegram_gateway.py": {
+      "source": "packages/igor/app/telegram/gateway.py",
+      "sha256": "37a3921f59a08753b73149b821efba153de2fb3204daee1191fb1c291d5f0e39",
+      "mode": "adapted",
+      "target_sha256": "34308c3338dc060143935905c8b9699ca2f5e9feb66c3a4a1ff3389bc37ca1eb",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/skills/telegram.py": {
+      "source": "packages/igor/app/skills/telegram.py",
+      "sha256": "a7f9267751003d63e868fbe1e77da6331bafee20ea073421284d6fb18e0a41ec",
+      "mode": "adapted",
+      "target_sha256": "559086d9d085d78b893e7b9f966aca45b87b9480ab71bfcf9bac163789b1d3a4",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/routers/voice.py": {
+      "source": "packages/igor/app/routers/voice.py",
+      "sha256": "4037bd0f7effe9b003d35ac28248d55c2ff2145d5caf018059f49319577cffe4",
+      "mode": "adapted",
+      "target_sha256": "87c41078cd4c205c02d352ed2024ec613f7e447886394a842768873081bb2ca0",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/voice.py": {
+      "source": "packages/igor/app/services/tts.py",
+      "sha256": "1b285e39ea9f7118af1df5df8f723b42b77a9831b767763876e836437764a020",
+      "mode": "adapted",
+      "target_sha256": "e5f38f578ac69c0b66fcb9bf93a63696fa540cb01ae2c42e993671caf2ec7555",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/speech_text.py": {
+      "source": "packages/igor/app/services/tts.py",
+      "sha256": "1b285e39ea9f7118af1df5df8f723b42b77a9831b767763876e836437764a020",
+      "mode": "adapted",
+      "target_sha256": "9b24c99e827bd24120b15e1b49afb293130abe69f4ef3a19e02d675816a34a0f",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/schemas/voice.py": {
+      "source": "packages/igor/app/schemas/voice.py",
+      "sha256": "581c504ffb1d9b623b8a06e9c7e11c7a8cbf0135fe9b4fb21b7da584b1c18cca",
+      "mode": "adapted",
+      "target_sha256": "935af1d57ed1e1d048802b2227e9e140489b7daf5ba937c3fc6e9ad60101a3f6",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/skills/reminders.py": {
+      "source": "packages/igor/app/skills/reminders.py",
+      "sha256": "ebfc1bcae9942e7589ed47d7504a8f1c6a3734c2a42c58f3cfede4054d1202b5",
+      "mode": "adapted",
+      "target_sha256": "d8beb7859b68bd9fa09e666ff9ca6d9510ab2ed9097546e6c31faf1fb2a48ac7",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/routers/reminders.py": {
+      "source": "packages/igor/app/routers/reminders.py",
+      "sha256": "1362446b267749a5523cfc735fe9da7adce5aae55e04be20a07ea7cad0b53f13",
+      "mode": "adapted",
+      "target_sha256": "a157bbb48444a574904c3c54a2f9e774af66275d3dfb19e64700e093ffd195e6",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/reminders.py": {
+      "source": "packages/igor/app/services/reminders.py",
+      "sha256": "b76ea87fe11d1949fb88fae97676794c0df22a9a76a6250136b6149f33d91b5f",
+      "mode": "adapted",
+      "target_sha256": "5d5d04787e04efbb4b50660adc7a2e7762e19f4069be1f8b7f64ea0f68138e2b",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/models/reminder.py": {
+      "source": "packages/igor/app/models/reminder.py",
+      "sha256": "95070c0e97fa5717fa61b87fc4ea53326ca5d5a2c6d8c04511dc07b342dd39d8",
+      "mode": "adapted",
+      "target_sha256": "6e35a68bfcab0491c0f63ead6109595f9e0fa944b5f7d19d2e587bc09bd21db9",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/schemas/reminder.py": {
+      "source": "packages/igor/app/schemas/reminder.py",
+      "sha256": "d67fb20b668485cc4cb5c808603ec0113d457d75e5b8c61b58bccb25650d5da1",
+      "mode": "adapted",
+      "target_sha256": "018f89aa78dfd5ac7ed6692ac111ebaf84886a2c987459ea25654c1b833d9704",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/services/mail_watch.py": {
+      "source": "packages/igor/app/services/mail_watch.py",
+      "sha256": "7899820d691f718c937b1d5a4122fe524bdb2b7de3f2e604979e856ee6f2f70d",
+      "mode": "adapted",
+      "target_sha256": "374a092bcd97246a500d7821993310663a0a75ae52f7ab830fe888afd1696f53",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/routers/mail.py": {
+      "source": "packages/igor/app/routers/mail.py",
+      "sha256": "c582e111f08e4ca3be43feee94af0463044823d2f891c9b6c1c09403cbf9a6b8",
+      "mode": "adapted",
+      "target_sha256": "09044d4d35efa432e81c5bf7530c1a22174036d5778226bb1ae26942d8d01185",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/schemas/mail.py": {
+      "source": "packages/igor/app/schemas/mail.py",
+      "sha256": "e41ceccf246e3c26af856e346a0a1efbd53492fddc1bd273061065be09d39f8f",
+      "mode": "adapted",
+      "target_sha256": "cbfca19cf2cd7920e5ed7d0b419ae13d60e5873a8d5727d8aa54770bce5b1556",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/core/surface.py": {
+      "source": "packages/igor/app/core/surface.py",
+      "sha256": "5f5fde7727db672cd5a8522ff565ba425fd0f1639fbe53f078ad52b1d0c0a50a",
+      "mode": "adapted",
+      "target_sha256": "945dc69628e43e90e8864045cc4e6455e2e427a1ee95bb11b11b1cccc30aa0f0",
+      "reason": "Native adapter/reimplementation under Coordinator, Iacon, budget and durable effect authority; original engine/runtime is not imported."
+    },
+    "app/config_labels.json": {
+      "source": "packages/igor/app/config_schema.py",
+      "sha256": "8df7a3c82519b97013f63b92a2e5343b3a0dd3d2b5d09a89eb775d2ea8ce7178",
+      "mode": "adapted",
+      "reason": "Retained labels for actual native settings; the generated catalog provides complete coverage.",
+      "target_sha256": "1021da464521f68fa40397817d6e86336683aab50ba92a07db7b05ff1f51f865"
+    },
+    "app/config_schema.py": {
+      "source": "packages/igor/app/config_schema.py",
+      "sha256": "8df7a3c82519b97013f63b92a2e5343b3a0dd3d2b5d09a89eb775d2ea8ce7178",
+      "mode": "adapted",
+      "reason": "Native Settings-derived replacement for the handwritten metadata catalog; retained labels live in config_labels.json.",
+      "target_sha256": "81ee12971bf169c1466a7c033e0819fc41210a8c6e80551297f1fbcdd8dad890"
+    },
+    "app/routers/config.py": {
+      "source": "packages/igor/app/routers/config.py",
+      "sha256": "bcef9cb71543671e3c68dd2828c46668f6ad289afe308e405f4f161232ed64a0",
+      "mode": "adapted",
+      "reason": "Native authenticated versioned configuration contract and explicit managed restart, without legacy engine mutation.",
+      "target_sha256": "a92bb4110e9368fbb880f5d2fdd7fa0ec7aa1230071003a2e0d08081743e051b"
+    },
+    "packages/striker/src/renderer/src/components/PersonalityTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/PersonalityTab.tsx",
+      "sha256": "6ad92609ddaf497954a078ea0040a817014207d9ffc4530ca5285f3c687f3ffc",
+      "mode": "adapted",
+      "reason": "Reuse the existing native personality editor in Striker settings.",
+      "target_sha256": "6ad92609ddaf497954a078ea0040a817014207d9ffc4530ca5285f3c687f3ffc"
+    },
+    "packages/striker/src/renderer/src/components/VoicesTab.tsx": {
+      "source": "packages/heartbreaker/src/renderer/src/components/VoicesTab.tsx",
+      "sha256": "25c2204ab3eccca3a2ebbac2d8b008a05ef9875ce202df976b5e21f9b0a3389b",
+      "mode": "adapted",
+      "reason": "Reuse the existing voice policy editor in Striker settings.",
+      "target_sha256": "25c2204ab3eccca3a2ebbac2d8b008a05ef9875ce202df976b5e21f9b0a3389b"
+    },
+    "app/services/behavior_config.py": {
+      "source": "packages/igor/app/services/behavior_config.py",
+      "sha256": "7d3145f879f01dc2bb49831aea98c42efe29f625be104dc0276b6239a37a0386",
+      "mode": "adapted",
+      "reason": "Native authenticated evaluation evidence from versioned model, permission and policy authorities; runtime snapshots do not certify production or product parity.",
+      "target_sha256": "be31f9360c452604acd5ffc388a3e540383457dcaf02f76263ef3f2ed37936cd"
+    },
+    "app/routers/admin.py": {
+      "source": "packages/igor/app/routers/admin.py",
+      "sha256": "c19f3e72342d7058701acdaf44a7af8b0b69620a80e451d9cf970336f47f966f",
+      "mode": "adapted",
+      "reason": "Native owner evaluation snapshot route; preserve existing native maintenance authority.",
+      "target_sha256": "83dea87da44c1710c2b140cc1389d3feb970e6efa3319a230e1759fb1dcf3452"
+    }
+  }
+}

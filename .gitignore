@@ -3,17 +3,6 @@
 .env.*
 !.env.example
 
-# Claude Code — personal/local settings (the shared launch.json is committed)
-.claude/settings.local.json
-
-# Local databases (may contain secrets — never commit)
-*.db
-*.sqlite
-*.sqlite3
-
-# Private memory snapshots, migration plans, reports and vault exports
-/db_migrate/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -26,14 +15,6 @@ build/
 *.egg-info/
 .eggs/
 
-# …but electron-builder uses `build/` as its buildResources SOURCE directory,
-# not as output. The blanket rule above was silently swallowing the app icon,
-# so it was never committed — electron-builder.yml pointed at a file that did
-# not exist in any clone, and both the installer and every `dev` run fell back
-# to Electron's default logo. Re-include just that tree.
-!packages/heartbreaker/build/
-!packages/heartbreaker/build/**
-
 # Virtual environment
 .venv/
 venv/
@@ -41,11 +22,14 @@ env/
 
 # Pytest / coverage
 .pytest_cache/
-.pytest-*/
 .coverage
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# JavaScript dependencies and client build outputs
+node_modules/
+/packages/*/out/
 
 # Temp outputs
 /tmp/speda_outputs/
@@ -62,36 +46,7 @@ Thumbs.db
 
 # Docker
 *.log
-
-# Node / Electron
-node_modules/
-packages/*/out/
-packages/*/.vite/
-packages/*/*.tsbuildinfo
-packages/igor/app/static/solus/
-
-# Proprietary fonts — kept local, not redistributed in this public repo
-Samsung*.ttf
-references/
-
-# Generated Caddy site blocks for optional peers (contain real hostnames).
-caddy-sites/*
-!caddy-sites/.gitkeep
-packages/igor/scripts/tts_samples/
-# Forge scratch: session state, allowlist, and worktrees an agent created here
-.forge/
-.forge-worktrees/
-.worktrees/
-
-# Forge scratch — run_command output spills, never source
-.forge_spill/
-
-# Firebase service-account JSON (FCM sending key). Never commit.
-secrets/
-
-# Private supplied database snapshots and reconstruction artifacts.
-/db_migration/
-
-# VS Code Counter's reports. Generated, machine-local, and large enough that
-# one `git add -A` sweeps a few thousand lines of them into a commit.
-.VSCodeCounter/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3

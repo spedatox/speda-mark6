@@ -350,7 +350,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   const [models, setModels] = useState<ModelInfo[]>([])
   const [servers, setServers] = useState<ConnectionInfo[]>([])
-  const [budgetTokens, setBudgetTokens] = useState({ used: 0, limit: 30000 })
+  const [budgetTokens, setBudgetTokens] = useState({ used: 0, limit: 0 })
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
@@ -367,7 +367,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
-    setBudgetTokens({ used: r.active_tool_tokens, limit: r.itpm_limit })
+    setBudgetTokens({ used: r.active_tool_tokens, limit: r.itpm_limit ?? 0 })
   }).catch(() => {})
 
   useEffect(() => {
@@ -788,14 +788,14 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 : budgetTokens.used}
             </span>
             <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-faint)' }}>
-              / {(budgetTokens.limit / 1000).toFixed(0)}k ITPM
+              {budgetTokens.limit ? `/ ${(budgetTokens.limit / 1000).toFixed(0)}k ITPM` : 'On demand'}
             </span>
           </div>
           <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
             <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: gaugeColor }} />
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '10px 0 14px' }}>
-            Tool definitions carried on every prompt
+            Tool definitions load when selected
           </p>
 
           {[...servers].sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(s => (
@@ -808,7 +808,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                   {s.label}
                 </span>
                 <span style={{ color: 'var(--hb-text-faint)', flexShrink: 0, marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
-                  {s.active ? `${(s.tokens / 1000).toFixed(1)}k tok` : 'standby'}
+                  {s.active ? (budgetTokens.limit ? `${(s.tokens / 1000).toFixed(1)}k tok` : `${s.tools} tools`) : 'standby'}
                 </span>
               </div>
               <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>

@@ -67,6 +67,7 @@ import com.speda.heartbreaker.i18n.AppLocale
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.i18n.localeFromWire
 import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.ui.HbGlassButton
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -88,7 +89,7 @@ fun Composer(
     /** Set how hard one model is asked to think — a persisted server-side
      *  setting, not a per-turn flag, so every agent on that model follows it. */
     onModelThinking: (String, String) -> Unit,
-    onSend: (String, List<ImageBlock>, List<DocBlock>) -> Unit,
+    onSend: (String, List<ImageBlock>, List<DocBlock>) -> Boolean,
     onStop: () -> Unit,
     /** Null until the backend has answered — the row shows as unknown, not as
      *  "full power", so the owner is never told the wrong spend state. */
@@ -108,12 +109,17 @@ fun Composer(
     modifier: Modifier = Modifier,
     replyQuotes: List<String> = emptyList(),
     onRemoveQuote: (Int) -> Unit = {},
+    onSteer: (suspend (String) -> Boolean)? = null,
+    draftScope: Any? = null,
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var text by remember { mutableStateOf("") }
+    var text by remember(draftScope) { mutableStateOf("") }
+    var draftRevision by remember(draftScope) { mutableStateOf(0L) }
+    var steering by remember(draftScope) { mutableStateOf(false) }
+    val currentDraftScope by androidx.compose.runtime.rememberUpdatedState(draftScope)
     var pickerOpen by remember { mutableStateOf(false) }
 
     // The catalogue row for the selected model. Null until /models answers, and
@@ -126,9 +132,8 @@ fun Composer(
     // absent from it there is no row to patch, and the control would sit on the
     // default forever no matter how many times it was set — the write reaching
     // the server each time, invisibly.
-    var thinkingSet by remember { mutableStateOf(mapOf<String, String>()) }
-    val activeThinking = thinkingSet[model] ?: activeModel?.thinking ?: "medium"
-    val activePinned = model in thinkingSet || activeModel?.thinkingPinned == true
+    val activeThinking = activeModel?.thinking ?: "default"
+    val activePinned = activeModel?.thinkingPinned == true
     var plusOpen by remember { mutableStateOf(false) }
     var thinkingOpen by remember { mutableStateOf(false) }
 
@@ -147,6 +152,7 @@ fun Composer(
             ?.trim()
             .orEmpty()
         if (said.isNotEmpty()) {
+            draftRevision++
             text = if (text.isBlank()) said else "${text.trimEnd()} $said"
         }
     }
@@ -193,14 +199,31 @@ fun Composer(
     val canSend = (text.isNotBlank() || images.isNotEmpty() || docs.isNotEmpty()) && !busy
 
     fun submit() {
-        if (!canSend) return
-        onSend(text.trim(), images.toList(), docs.toList())
+        if (!canSend || isStreaming) return
+        if (!onSend(text.trim(), images.toList(), docs.toList())) return
         text = ""
+        draftRevision++
         images.clear()
         docs.clear()
     }
 
     Column(modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
+        if (isStreaming && text.isNotBlank() && onSteer != null) {
+            HbGlassButton(if (language == "tr") "Çalışan yanıta ilet" else "Send to active reply", onClick = {
+                if (!steering && images.isEmpty() && docs.isEmpty()) {
+                    val submitted = text
+                    val revision = draftRevision
+                    val origin = draftScope
+                    steering = true
+                    scope.launch {
+                        try {
+                            val accepted = onSteer(submitted.trim())
+                            if (accepted && currentDraftScope == origin && draftRevision == revision) { text = ""; draftRevision++ }
+                        } finally { if (currentDraftScope == origin) steering = false }
+                    }
+                }
+            })
+        }
         replyQuotes.forEachIndexed { index, quote ->
             Row(Modifier.fillMaxWidth()) {
                 HbText(quote, style = HbType.read, color = palette.text, modifier = Modifier.weight(1f).heightIn(max = 100.dp))
@@ -272,7 +295,7 @@ fun Composer(
 
                 BasicTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = { text = it; draftRevision++ },
                     textStyle = HbType.read.merge(TextStyle(color = palette.text)),
                     cursorBrush = SolidColor(palette.accentBright),
                     maxLines = 6,
@@ -344,8 +367,8 @@ fun Composer(
                                         value = activeThinking,
                                         pinned = activePinned,
                                         supported = true,
+                                        options = activeModel?.thinkingOptions,
                                         onChange = { level ->
-                                            thinkingSet = thinkingSet + (model to level)
                                             onModelThinking(model, level)
                                         },
                                     )
@@ -651,10 +674,12 @@ private fun ThinkingLevelSlider(
     pinned: Boolean,
     supported: Boolean,
     onChange: (String) -> Unit,
+    options: List<String>? = null,
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
-    val idx = THINKING_LEVELS.indexOf(value).coerceAtLeast(0)
+    val levels = options?.takeIf { it.isNotEmpty() } ?: THINKING_LEVELS
+    val idx = levels.indexOf(value).coerceAtLeast(0)
     val tint = when {
         !supported -> palette.iconDim
         pinned -> palette.accentBright
@@ -667,10 +692,10 @@ private fun ThinkingLevelSlider(
     ) {
         androidx.compose.material3.Slider(
             value = idx.toFloat(),
-            onValueChange = { raw -> onChange(THINKING_LEVELS[raw.roundToInt().coerceIn(0, THINKING_LEVELS.lastIndex)]) },
-            valueRange = 0f..THINKING_LEVELS.lastIndex.toFloat(),
-            steps = THINKING_LEVELS.size - 2,
-            enabled = supported,
+            onValueChange = { raw -> onChange(levels[raw.roundToInt().coerceIn(0, levels.lastIndex)]) },
+            valueRange = 0f..levels.lastIndex.coerceAtLeast(1).toFloat(),
+            steps = (levels.size - 2).coerceAtLeast(0),
+            enabled = supported && levels.size > 1,
             modifier = Modifier.width(150.dp),
             colors = androidx.compose.material3.SliderDefaults.colors(
                 thumbColor = Color(0xFFF7F7F8),

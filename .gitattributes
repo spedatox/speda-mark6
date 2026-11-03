@@ -1,7 +1,12 @@
-# Shell scripts and Dockerfiles MUST be LF — CRLF breaks them on the Linux server
-# ("bad interpreter: /bin/bash^M"). Force LF regardless of the committer's OS.
-*.sh        text eol=lf
-Dockerfile  text eol=lf
-Caddyfile   text eol=lf
-*.yml       text eol=lf
-*.yaml      text eol=lf
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+Dockerfile text eol=lf
+gradlew text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import FormSelect from './FormSelect'
 import { useCallback, useEffect, useState } from 'react'
 import {
   listSkyfallProjects, saveSkyfallProject, deleteSkyfallProject, armSkyfall,
@@ -226,12 +227,12 @@ function ProjectForm({ draft, error, onChange, onCancel, onSave }: {
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ width: 120, flexShrink: 0 }}>
           <Field label={t.skyfall.fieldMethod}>
-            <select style={INPUT} value={draft.method || 'POST'}
-                    onChange={e => set({ method: e.target.value })}>
+            <FormSelect aria-label={t.skyfall.fieldMethod} style={INPUT} value={draft.method || 'POST'}
+                    onValueChange={value => set({ method: value })}>
               {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
-            </select>
+            </FormSelect>
           </Field>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>

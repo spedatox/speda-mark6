@@ -72,6 +72,7 @@ class VoiceSpeaker(
     private val audioSessionId: Int,
     private val replayAudio: List<ByteArray>? = null,
     private val onRecording: (String, List<ByteArray>) -> Unit = { _, _ -> },
+    private val waitForPlayback: (suspend () -> Unit)? = null,
     /** Called as the turn moves between silence, generating and speaking, so the
      *  surface can show which of the three is happening. */
     private val onState: (State) -> Unit = {},
@@ -106,7 +107,9 @@ class VoiceSpeaker(
     private val recorded = mutableListOf<ByteArray>()
     private var recordedBytes = 0
     private var recordingTooLarge = false
-    private val drain: Job = scope.launch { playInOrder() }
+    private val drain: Job = scope.launch { waitForPlayback?.invoke(); playInOrder() }
+
+    suspend fun awaitPlayback() { drain.join() }
 
     init {
         if (replayAudio != null) {

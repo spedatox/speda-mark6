@@ -23,6 +23,7 @@ import {
 } from '../lib/api'
 import { useT } from '../lib/i18n'
 import { SkeletonList } from './Skeleton'
+import ProjectWorkspace, { ProjectFolderPicker } from './ProjectWorkspace'
 
 /* Striker is the single-agent build — there is no roster and no per-agent
  * accent to read off a profile, so a project with no colour of its own falls
@@ -234,27 +235,33 @@ function ProjectCard({ project, accent, locale, onOpen, onPin, onArchive }: {
 }
 
 /* ── New-project composer ─────────────────────────────────────────────────── */
-function NewProjectForm({ onCancel, onCreate }: {
+function NewProjectForm({ config, locale, onCancel, onCreate }: {
+  config: AppConfig; locale: string
   onCancel: () => void
-  onCreate: (v: { name: string; description: string; instructions: string; icon: string }) => Promise<void>
+  onCreate: (v: { name: string; path: string; description: string; instructions: string; icon: string }) => Promise<void>
 }) {
   const t = useT()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [instructions, setInstructions] = useState('')
   const [icon, setIcon] = useState('')
+  const [path, setPath] = useState('')
+  const [createError, setCreateError] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
-    if (!name.trim() || busy) return
+    if (!name.trim() || !path || busy) return
     setBusy(true)
-    try { await onCreate({ name, description, instructions, icon }) }
+    try { setCreateError(''); await onCreate({ name, path, description, instructions, icon }) }
+    catch (err) { setCreateError(err instanceof Error ? err.message : String(err)) }
     finally { setBusy(false) }
   }
 
   return (
     <div className="hb-holo hb-glass" style={{ padding: '1.1rem 1.2rem', marginBottom: '1.25rem' }}>
       <div style={{ ...label, marginBottom: '0.75rem' }}>{t.projects.newProject}</div>
+      <ProjectFolderPicker config={config} locale={locale} value={path} onChange={setPath} />
+      {createError && <p role="alert">{createError}</p>}
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem' }}>
         <input
@@ -294,7 +301,7 @@ function NewProjectForm({ onCancel, onCreate }: {
 
       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
         <Btn onClick={onCancel}>{t.projects.cancel}</Btn>
-        <Btn onClick={submit} tint="var(--hb-cyan-bright)" disabled={!name.trim() || busy}>
+        <Btn onClick={submit} tint="var(--hb-cyan-bright)" disabled={!name.trim() || !path || busy}>
           {t.projects.create}
         </Btn>
       </div>
@@ -330,8 +337,8 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
 
   useEffect(() => {
     let alive = true
-    fetchProjectSessions(config, project.id).then(s => { if (alive) setSessions(s) })
-    fetchProjectFiles(config, project.id).then(f => { if (alive) setFiles(f) })
+    fetchProjectSessions(config, project.id).then(s => { if (alive) setSessions(s) }).catch(err => { if (alive) setUploadError(String(err)) })
+    fetchProjectFiles(config, project.id).then(f => { if (alive) setFiles(f) }).catch(err => { if (alive) setUploadError(String(err)) })
     return () => { alive = false }
   }, [config, project.id])
 
@@ -342,10 +349,11 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
 
   const save = useCallback(async () => {
     if (!dirty || !name.trim()) return
-    const updated = await updateProject(config, project.id, { name, description, instructions })
-    onChanged(updated)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1600)
+    try {
+      const updated = await updateProject(config, project.id, { name, description, instructions })
+      onChanged(updated); setSaved(true)
+      setTimeout(() => setSaved(false), 1600)
+    } catch (err) { setUploadError(err instanceof Error ? err.message : String(err)) }
   }, [config, project.id, name, description, instructions, dirty, onChanged])
 
   const addFiles = useCallback(async (picked: FileList | null) => {
@@ -370,11 +378,11 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
 
   const removeFile = useCallback(async (fileId: number) => {
     setFiles(prev => (prev ?? []).filter(f => f.id !== fileId))
-    await deleteProjectFile(config, project.id, fileId)
+    try { await deleteProjectFile(config, project.id, fileId) } catch (err) { setUploadError(String(err)); setFiles(await fetchProjectFiles(config, project.id)) }
   }, [config, project.id])
 
   const remove = useCallback(async () => {
-    if (!window.confirm(t.projects.deleteConfirm)) return
+    if (!window.confirm('Remove this project from the sidebar? Its folder, chats and saved work will be kept.')) return
     await deleteProject(config, project.id)
     onChanged(null)
     onBack()
@@ -408,6 +416,9 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
         </IconBtn>
       </div>
 
+      <ProjectWorkspace key={`${config.agentId}:${project.id}`} config={config} projectId={project.id} locale={locale} />
+
+      {uploadError && <p role="alert">{uploadError}</p>}
       {/* Instructions */}
       <section style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem' }}>
@@ -566,9 +577,15 @@ export default function ProjectsView({
   const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const loadGeneration = useRef(0)
 
   const reload = useCallback(async () => {
-    setProjects(await fetchProjects(config, showArchived))
+    const generation = ++loadGeneration.current
+    try {
+      const list = await fetchProjects(config, showArchived)
+      if (generation === loadGeneration.current) { setProjects(list); setLoadError('') }
+    } catch (err) { if (generation === loadGeneration.current) { setProjects([]); setLoadError(err instanceof Error ? err.message : String(err)) } }
   }, [config, showArchived])
 
   /** The sidebar keeps its own copy of the pinned projects, so anything that
@@ -579,7 +596,7 @@ export default function ProjectsView({
     window.dispatchEvent(new CustomEvent('speda:projects-changed'))
   }, [])
 
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => { reload(); return () => { loadGeneration.current++ } }, [reload])
 
   // An agent switch rewrites config.agentId, which reloads the list above. The
   // OPEN project has to close with it: it belongs to the agent we just left,
@@ -633,7 +650,7 @@ export default function ProjectsView({
   }, [config, patch, reload, announce])
 
   const create = useCallback(async (v: {
-    name: string; description: string; instructions: string; icon: string
+    name: string; path: string; description: string; instructions: string; icon: string
   }) => {
     const made = await createProject(config, v)
     setProjects(prev => [made, ...(prev ?? [])])
@@ -698,8 +715,9 @@ export default function ProjectsView({
             </IconBtn>
           </div>
 
-          {creating && <NewProjectForm onCancel={() => setCreating(false)} onCreate={create} />}
+          {creating && <NewProjectForm config={config} locale={locale} onCancel={() => setCreating(false)} onCreate={create} />}
 
+          {loadError && <p role="alert">{loadError}</p>}
           {/* Grid */}
           {!projects ? (
             <SkeletonList rows={4} mark={false} markSize={28} />

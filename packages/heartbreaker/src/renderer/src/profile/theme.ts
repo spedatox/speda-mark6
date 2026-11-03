@@ -106,16 +106,15 @@ const BASE_RGBA: Record<string, [string, number]> = {
   // Unified glass material — a near-white frost with only a whisper of brand in
   // it. Two stops so the slab can be lit across its face (160deg) rather than
   // washed flat; --glass-tint is also used on its own for ghost hovers.
-  '--glass-tint': ['#e6eef6', 0.07], '--glass-tint-2': ['#e6eef6', 0.02],
-  '--glass-tint-hi': ['#e6eef6', 0.12],
-  // Dark occluding base. Kept because nested backdrop roots cancel a child's
-  // blur, but much lighter than before so the white frost above it is what the
-  // eye actually reads.
-  '--glass-fill': ['#070b11', 0.42],
+  '--glass-tint': ['#e6eef6', 0.10], '--glass-tint-2': ['#e6eef6', 0.025],
+  '--glass-tint-hi': ['#e6eef6', 0.15],
+  // Frost diffuses the backdrop through a translucent pane. Keep these alphas
+  // in sync with heartbreaker.css so agent changes preserve the material.
+  '--glass-fill': ['#070b11', 0.45],
   // Floating menus/dropdowns sit inside backdrop roots (composer, sidebar) where
   // their own blur is cancelled, so they need a near-opaque fill to occlude the
   // content behind them. Re-hued like the rest.
-  '--glass-menu': ['#0b1016', 0.95],
+  '--glass-menu': ['#0b1016', 0.98],
 }
 
 /** Derive the bright (active) and dim shades from a single accent.

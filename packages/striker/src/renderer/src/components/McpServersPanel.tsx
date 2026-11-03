@@ -20,6 +20,7 @@
  * already holds every other tab's.
  */
 
+import FormSelect from './FormSelect'
 import { useEffect, useState } from 'react'
 import {
   getCustomMcpServers, saveCustomMcpServer, deleteCustomMcpServer,
@@ -36,7 +37,7 @@ type Pair = { key: string; value: string }
 
 const EMPTY_DRAFT = {
   name: '', transport: 'stdio' as 'stdio' | 'http',
-  command: '', url: '', note: '',
+  command: '', url: '', note: '', allowedAgents: 'speda', allowedTools: '', readOnlyTools: '',
 }
 
 function pairsToObject(pairs: Pair[]): Record<string, string> {
@@ -96,9 +97,12 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
     setDraft({
       name: s.name,
       transport: s.transport,
-      command: Array.isArray(s.command) ? s.command.join(' ') : (s.command || ''),
+      command: Array.isArray(s.command) ? JSON.stringify(s.command) : (s.command || ''),
       url: s.url || '',
       note: s.note || '',
+      allowedAgents: (s.allowed_agents ?? ['speda']).join(', '),
+      allowedTools: (s.allowed_tools ?? []).join(', '),
+      readOnlyTools: (s.read_only_tools ?? []).join(', '),
     })
     setEnvPairs(objectToPairs(s.env))
     setHeaderPairs(objectToPairs(s.headers))
@@ -113,11 +117,14 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
     const r = await saveCustomMcpServer(config, {
       name: draft.name.trim().toLowerCase(),
       transport: draft.transport,
-      command: draft.command,
-      url: draft.url,
-      env: pairsToObject(envPairs),
-      headers: pairsToObject(headerPairs),
+      command: draft.transport === 'stdio' ? draft.command : [],
+      url: draft.transport === 'http' ? draft.url : '',
+      env: draft.transport === 'stdio' ? pairsToObject(envPairs) : {},
+      headers: draft.transport === 'http' ? pairsToObject(headerPairs) : {},
       note: draft.note,
+      allowed_agents: draft.allowedAgents.split(',').map(x => x.trim()).filter(Boolean),
+      allowed_tools: draft.allowedTools.trim() ? draft.allowedTools.split(',').map(x => x.trim()).filter(Boolean) : null,
+      read_only_tools: draft.readOnlyTools.split(',').map(x => x.trim()).filter(Boolean),
       enabled: true,
     })
     setBusy(false)
@@ -140,7 +147,9 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
 
   const toggle = async (s: CustomMcpServer, enabled: boolean) => {
     setServers(ss => ss.map(x => x.name === s.name ? { ...x, enabled } : x))
-    await saveCustomMcpServer(config, { ...s, enabled })
+    const { connected: _connected, tools: _tools, tokens: _tokens, error: _error, ...editable } = s
+    const result = await saveCustomMcpServer(config, { ...editable, enabled })
+    if (result.error) setMsg({ text: result.error, ok: false })
     load()
   }
 
@@ -166,7 +175,7 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
             name={s.name}
             desc={
               s.connected
-                ? `${s.tools ?? 0} tools · ${s.transport === 'http' ? s.url : (Array.isArray(s.command) ? s.command.join(' ') : s.command)}`
+                ? `${s.tools ?? 0} tools · ${s.transport === 'http' ? s.url : (Array.isArray(s.command) ? JSON.stringify(s.command) : s.command)}`
                 : (s.enabled ? t.mcpServersPanel.notConnected : t.mcpServersPanel.switchedOff)
             }
           >
@@ -214,14 +223,14 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
             </div>
             <div style={{ width: 170 }}>
               <div style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)', marginBottom: 8 }}>{t.mcpServersPanel.transport}</div>
-              <select
+              <FormSelect aria-label={t.mcpServersPanel.transport}
                 style={{ ...fieldStyle, cursor: 'pointer' }}
                 value={draft.transport}
-                onChange={e => setDraft(d => ({ ...d, transport: e.target.value as 'stdio' | 'http' }))}
+                onValueChange={value => setDraft(d => ({ ...d, transport: value as 'stdio' | 'http' }))}
               >
                 <option value="stdio">{t.mcpServersPanel.stdioCommand}</option>
                 <option value="http">{t.mcpServersPanel.httpUrl}</option>
-              </select>
+              </FormSelect>
             </div>
           </div>
           {nameTaken && (
@@ -236,7 +245,7 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
               <input
                 style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
                 value={draft.command}
-                placeholder="npx -y @some/mcp-server"
+                placeholder="npx -y @some/mcp-server@1.2.3"
                 onChange={e => setDraft(d => ({ ...d, command: e.target.value }))}
               />
               <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '8px 0 0', lineHeight: 1.5 }}>
@@ -254,6 +263,18 @@ export default function McpServersPanel({ config }: { config: AppConfig }) {
               />
             </div>
           )}
+
+          {([
+            ['allowedAgents', 'Agent access (comma separated IDs)'],
+            ['allowedTools', 'Allowed tools (blank = all tools)'],
+            ['readOnlyTools', 'Worker read-only tools (blank = no worker access)'],
+          ] as const).map(([key, label]) => (
+            <label key={key} style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>
+              {label}
+              <input style={{ ...fieldStyle, marginTop: 8 }} value={draft[key]}
+                onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))} />
+            </label>
+          ))}
 
           <PairEditor
             label={draft.transport === 'stdio' ? t.mcpServersPanel.envVars : t.mcpServersPanel.httpHeaders}

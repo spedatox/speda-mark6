@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
@@ -13,8 +13,10 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import ChatMain from './ChatMain'
 import ProjectsView from './ProjectsView'
+import { useProjectNavigation } from '../lib/useProjectNavigation'
 import SettingsModal from './SettingsModal'
 import SystemsBoard from './SystemsBoard'
+import PendingAsksTray from './PendingAsksTray'
 
 interface LayoutProps {
   profile: AppProfile
@@ -44,7 +46,11 @@ export default function Layout({ profile, config }: LayoutProps) {
   // the conversation list is still one click away. `null` = the chat view.
   const [projectsAt, setProjectsAt] = useState<{ projectId: number | null } | null>(null)
 
+  const viewRef = useRef(state)
+  viewRef.current = state
+
   const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null) => {
+    const expectedViewEpoch = viewRef.current.viewEpoch + (viewRef.current.activeSessionId === sessionId ? 0 : 1)
     setDrawerOpen(false)
     setProjectsAt(null)
     // Show the cached transcript instantly (also the offline fallback), then let
@@ -57,11 +63,13 @@ export default function Layout({ profile, config }: LayoutProps) {
       // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
       // restart), keep showing the cache rather than blanking the view.
       if (messages.length || !cached) {
-        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId } })
+        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId, expectedViewEpoch } })
         if (messages.length) saveMessages(config.agentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
   }, [config, dispatch])
+
+  useProjectNavigation(config, handleSelectSession)
 
   const handleNewChat = useCallback(() => {
     setDrawerOpen(false)
@@ -136,6 +144,7 @@ export default function Layout({ profile, config }: LayoutProps) {
 
       {boardOpen && <SystemsBoard config={config} onClose={() => setBoardOpen(false)} />}
       {settingsOpen && <SettingsModal config={config} onClose={() => setSettingsOpen(false)} />}
+      <PendingAsksTray config={config} />
     </div>
   )
 }

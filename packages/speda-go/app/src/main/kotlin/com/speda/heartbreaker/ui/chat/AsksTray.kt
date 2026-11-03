@@ -193,7 +193,9 @@ fun PermissionCard(ask: PendingAsk, onResolve: (approved: Boolean, remember: Boo
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AskButton("Approve", enabled = !expired, tint = palette.accentBright) { onResolve(true, false) }
-            AskButton("Approve — don't ask again", enabled = !expired, tint = palette.textDim) { onResolve(true, true) }
+            if (!ask.askId.startsWith("release:")) {
+                AskButton("Approve — don't ask again", enabled = !expired, tint = palette.textDim) { onResolve(true, true) }
+            }
             AskButton("Deny", enabled = !expired, tint = palette.red) { onResolve(false, false) }
         }
     }

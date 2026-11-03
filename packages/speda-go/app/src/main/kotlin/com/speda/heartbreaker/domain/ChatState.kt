@@ -10,6 +10,8 @@ import kotlinx.collections.immutable.toPersistentList
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /** The backend connection + which agent this session targets (lib/types AppConfig). */
 @Immutable
@@ -29,6 +31,7 @@ data class ChatState(
     val activeProjectId: Int? = null,
     val messages: PersistentList<ChatMessage> = persistentListOf(),
     val isStreaming: Boolean = false,
+    val room: RoomInfo? = null,
 )
 
 /**
@@ -36,6 +39,10 @@ data class ChatState(
  * `when` in [reduce] is exhaustive.
  */
 sealed interface ChatAction {
+    data class SetRoom(val room: RoomInfo, val sessionId: Int) : ChatAction
+    data class RoomFrame(val event: RoomEvent, val placeholderId: String, val sessionId: Int) : ChatAction
+    data class FinishRoomTurn(val sessionId: Int, val error: String? = null) : ChatAction
+    data class WorkerSnapshot(val sessionId: Int, val parentStep: String, val parentMessage: String?, val run: SubagentRun, val create: Boolean) : ChatAction
     data class SetConfig(val config: AppConfig) : ChatAction
     data class SetSessions(val sessions: List<Session>) : ChatAction
     /** [projectId] is passed when the caller already knows it (opening a chat
@@ -80,6 +87,17 @@ sealed interface ChatAction {
 
 /** Pure reducer — literal port of chatReducer in store/chat.ts. Fixture/tested. */
 fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
+    is ChatAction.SetRoom -> if (state.activeSessionId != action.sessionId) state else state.copy(room = updateRoom(state.room, action.room))
+    is ChatAction.RoomFrame -> if (state.activeSessionId != action.sessionId) state else {
+        val snapshot = action.event.payload["room"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.let { roomJson.decodeFromJsonElement<RoomInfo>(it) }
+        state.copy(room = snapshot?.let { updateRoom(state.room, it) } ?: state.room,
+            messages = consolidateWorkerAnchors(foldRoomMessages(state.messages, action.event, action.placeholderId, action.sessionId)).toPersistentList())
+    }
+    is ChatAction.FinishRoomTurn -> if (state.activeSessionId != action.sessionId) state else state.copy(isStreaming = false,
+        messages = state.messages.map { message -> if (!message.isStreaming) message else message.copy(isStreaming = false,
+            status = null, thinkingDone = true, isError = action.error != null, errorNote = action.error) }.toPersistentList())
+    is ChatAction.WorkerSnapshot -> if (state.activeSessionId != action.sessionId) state else state.copy(
+        messages = upsertWorkerMessage(state.messages, action.parentStep, action.parentMessage, action.sessionId, action.run, action.create).toPersistentList())
     is ChatAction.SetConfig -> state.copy(config = action.config)
 
     is ChatAction.SetSessions -> state.copy(sessions = action.sessions.toPersistentList())
@@ -94,6 +112,9 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                 m.sessionId == action.sessionId &&
                 action.messages.none { it.id == m.id }
         }
+        val current = if (state.activeSessionId == action.sessionId) state.messages else emptyList()
+        val history = mergeWorkerHistory(mergeRoomHistory(action.messages, current), current)
+        val tails = kept.filter { tail -> history.none { it.coordinationStepId != null && it.coordinationStepId == tail.coordinationStepId } }
         state.copy(
             activeSessionId = action.sessionId,
             // Follow the opened chat into (or out of) its project, so the header
@@ -101,8 +122,9 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
             // than whichever one happened to be open a moment ago.
             activeProjectId = action.projectId
                 ?: state.sessions.firstOrNull { it.id == action.sessionId }?.projectId,
-            messages = (action.messages + kept).toPersistentList(),
-            isStreaming = kept.isNotEmpty(),
+            room = if (state.activeSessionId == action.sessionId) state.room else null,
+            messages = consolidateWorkerAnchors(history + tails).toPersistentList(),
+            isStreaming = kept.isNotEmpty() || state.activeSessionId == action.sessionId && state.isStreaming,
         )
     }
 
@@ -114,6 +136,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
     )
 
     is ChatAction.NewChat -> state.copy(
+        room = null,
         activeSessionId = null,
         activeProjectId = action.projectId,
         messages = persistentListOf(),
@@ -189,91 +212,13 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
     )
 
     is ChatAction.Subagent -> {
-        val e = action.event
-        val runId = e["id"]?.jsonPrimitive?.contentOrNull
-        if (runId == null) {
-            state
-        } else {
-            state.copy(
-                messages = state.messages.updateMessage(action.id) { m ->
-                    if (m.id != action.id) return@updateMessage m
-                    val runs = m.subagents ?: persistentListOf()
-                    val idx = runs.indexOfFirst { it.id == runId }
-                    var run = if (idx >= 0) {
-                        runs[idx]
-                    } else {
-                        SubagentRun(
-                            id = runId,
-                            agent = e["agent"]?.jsonPrimitive?.contentOrNull ?: "",
-                            label = e["label"]?.jsonPrimitive?.contentOrNull ?: "",
-                            source = e["source"]?.jsonPrimitive?.contentOrNull,
-                        )
-                    }
-                    e["source"]?.jsonPrimitive?.contentOrNull?.let { run = run.copy(source = it) }
-                    when (e["phase"]?.jsonPrimitive?.contentOrNull) {
-                        "started" -> run = run.copy(
-                            prompt = e["prompt"]?.jsonPrimitive?.contentOrNull,
-                            running = true,
-                        )
-                        "text" -> {
-                            val delta = e["text"]?.jsonPrimitive?.contentOrNull
-                            if (!delta.isNullOrEmpty()) {
-                                val last = run.steps.lastOrNull()
-                                run = if (last?.kind == "text") {
-                                    run.copy(
-                                        steps = run.steps.set(
-                                            run.steps.lastIndex,
-                                            last.copy(text = (last.text ?: "") + delta),
-                                        ),
-                                    )
-                                } else {
-                                    run.copy(steps = (run.steps + SubagentStep(kind = "text", text = delta)).toPersistentList())
-                                }
-                            }
-                        }
-                        "tool" -> {
-                            val toolCallId = e["tool_call_id"]?.jsonPrimitive?.contentOrNull
-                            if (toolCallId != null) {
-                                run = run.copy(
-                                    steps = (
-                                        run.steps + SubagentStep(
-                                            kind = "tool",
-                                            tool = e["tool"]?.jsonPrimitive?.contentOrNull,
-                                            input = e["input"],
-                                            toolCallId = toolCallId,
-                                        )
-                                        ).toPersistentList(),
-                                )
-                            }
-                        }
-                        "tool_result" -> {
-                            val toolCallId = e["tool_call_id"]?.jsonPrimitive?.contentOrNull
-                            val i = if (toolCallId != null) run.steps.indexOfFirst {
-                                it.kind == "tool" && it.toolCallId == toolCallId
-                            } else -1
-                            if (i >= 0) {
-                                run = run.copy(
-                                    steps = run.steps.set(
-                                        i,
-                                        run.steps[i].copy(
-                                            result = e["error"]?.jsonPrimitive?.contentOrNull
-                                                ?: e["result"]?.jsonPrimitive?.contentOrNull,
-                                        ),
-                                    ),
-                                )
-                            }
-                        }
-                        "finished" -> run = run.copy(
-                            running = false,
-                            ok = e["ok"]?.jsonPrimitive?.contentOrNull != "false",
-                            report = e["report"]?.jsonPrimitive?.contentOrNull,
-                        )
-                    }
-                    val nextRuns = if (idx >= 0) runs.set(idx, run) else (runs + run).toPersistentList()
-                    m.copy(subagents = nextRuns)
-                },
-            )
-        }
+        val runId = action.event["id"]?.jsonPrimitive?.contentOrNull
+        if (runId == null) state else state.copy(messages = state.messages.updateMessage(action.id) { message ->
+            val runs = message.subagents ?: persistentListOf()
+            val index = runs.indexOfFirst { it.id == runId }
+            val next = foldSubagentEvent(if (index >= 0) runs[index] else null, action.event)
+            message.copy(subagents = if (index >= 0) runs.set(index, next) else (runs + next).toPersistentList())
+        })
     }
 
     is ChatAction.FinishMessage -> {
@@ -336,6 +281,8 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
         )
     }
 }
+
+private val roomJson = Json { ignoreUnknownKeys = true }
 
 /** Tail updates share the persistent list's untouched nodes instead of copying
  * every historical row on every token. Search from the tail for live replies. */

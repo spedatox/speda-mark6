@@ -91,7 +91,7 @@ fun AgentSwitcherOverlay(
 ) {
     val t = LocalStrings.current
     val roster = Brands.ROSTER
-    var selected by remember { mutableIntStateOf(roster.indexOf(currentAgentId).coerceAtLeast(0)) }
+    var selected by remember { mutableIntStateOf(roster.indexOf(if (currentAgentId == "friday") "nightcrawler" else currentAgentId).coerceAtLeast(0)) }
     var confirming by remember { mutableStateOf<Int?>(null) }
     
     // Internal animation state to manage the cinematic sequence

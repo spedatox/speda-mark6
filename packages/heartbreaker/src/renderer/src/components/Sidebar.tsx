@@ -7,7 +7,7 @@ import type { AppProfile } from '../profile/types'
 import type { Session, AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { deleteSession, renameSession, exportSession, fetchActiveRuns, fetchProjects } from '../lib/api'
+import { deleteSession, renameSession, exportSession, fetchActiveRuns, fetchProjects, fetchSessions } from '../lib/api'
 import type { Project } from '../lib/types'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
@@ -311,7 +311,7 @@ function ProjectsNav({ config, active, onOpen }: {
     const load = () => {
       fetchProjects(config).then(list => {
         if (alive) setPinned(list.filter(p => p.pinned).slice(0, 5))
-      })
+      }).catch(() => { if (alive) setPinned([]) })
     }
     load()
     window.addEventListener('speda:projects-changed', load)
@@ -857,9 +857,32 @@ interface Props {
 
 export default function Sidebar({ profile, config, isOpen, mobile, onSelectSession, onToggle, onNewChat, onOpenSettings, switchAgent, onOpenProjects, projectsOpen }: Props) {
   const t = useT()
-  const { state } = useChatContext()
+  const { state, dispatch } = useChatContext()
   const [search, setSearch]         = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [oldestLoaded, setOldestLoaded] = useState<number | null>(null)
+  const [olderError, setOlderError] = useState(false)
+  const historyScope = `${config.apiBase}\n${config.apiKey}\n${config.agentId}`
+  const historyScopeRef = useRef(historyScope)
+  historyScopeRef.current = historyScope
+  useEffect(() => { setLoadingOlder(false); setOldestLoaded(null); setOlderError(false) }, [historyScope])
+  const lastSessionId = state.sessions.at(-1)?.id
+  const loadOlder = async () => {
+    if (loadingOlder || lastSessionId == null) return
+    const scope = historyScope
+    setLoadingOlder(true); setOlderError(false)
+    try {
+      const page = await fetchSessions(config, 500, lastSessionId)
+      if (historyScopeRef.current !== scope) return
+      dispatch({ type: 'APPEND_SESSIONS', payload: { sessions: page, config } })
+      if (page.length < 500) setOldestLoaded(page.at(-1)?.id ?? lastSessionId)
+    } catch {
+      if (historyScopeRef.current === scope) setOlderError(true)
+    } finally {
+      if (historyScopeRef.current === scope) setLoadingOlder(false)
+    }
+  }
 
   // Which sessions have a turn still running server-side (survives navigation).
   // Light poll — presence changes on turn start/finish, not per second.
@@ -975,6 +998,12 @@ export default function Sidebar({ profile, config, isOpen, mobile, onSelectSessi
               </div>
             ))
           )}
+          {state.sessionsLoaded && state.sessions.length >= 500 && lastSessionId !== oldestLoaded &&
+            <button onClick={() => void loadOlder()} disabled={loadingOlder}
+              style={{ ...mono, width: '100%', padding: '0.85rem', color: 'var(--hb-text-dim)' }}>
+              {loadingOlder ? t.common.loading : t.sidebar.loadOlder}
+            </button>}
+          {olderError && <p role="alert" style={{ ...mono, color: 'var(--hb-text-dim)' }}>{t.sidebar.olderFailed}</p>}
         </div>
 
         {/* Footer */}

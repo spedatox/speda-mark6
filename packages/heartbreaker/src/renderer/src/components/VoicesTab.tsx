@@ -18,6 +18,7 @@
  * voice again with no tuning applied is one click either way.
  */
 
+import FormSelect from './FormSelect'
 import { useEffect, useState } from 'react'
 import { fetchVoiceAgents, fetchVoiceOptions, saveVoiceAgent, clearVoiceAgent } from '../lib/api'
 import type { VoiceAgentInfo, VoiceAgentPatch, VoiceOption, VoiceSettings } from '../lib/api'
@@ -63,12 +64,12 @@ export default function VoicesTab({ config }: { config: AppConfig }) {
       </p>
 
       {!editing && <SettingsField label={a.language} hint={a.languageHint}>
-        <select aria-label={a.language} value={language ?? 'shared'} style={fieldStyle}
-          onChange={e => setLanguage(e.target.value === 'shared' ? undefined : e.target.value as 'tr' | 'en')}>
+        <FormSelect aria-label={a.language} value={language ?? 'shared'} style={fieldStyle}
+          onValueChange={value => setLanguage(value === 'shared' ? undefined : value as 'tr' | 'en')}>
           <option value="tr">Türkçe</option>
           <option value="en">English</option>
           <option value="shared">{a.shared}</option>
-        </select>
+        </FormSelect>
       </SettingsField>}
       {settings.voiceModel && <SettingsField label={a.chatOverride} hint={a.chatOverrideHint}>
         <PillBtn onClick={() => update({ voiceModel: '' })}>{a.useAgentVoices}</PillBtn>
@@ -201,10 +202,10 @@ export function VoiceEditor({ agent, language, voiceOptions, onCancel, onSave, o
       <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       <SettingsField label={a.voicePick} hint={a.voicePickHint}>
-        <select
+        <FormSelect
           aria-label={a.voicePick}
           value={voiceId}
-          onChange={e => pickFromCatalog(e.target.value)}
+          onValueChange={value => pickFromCatalog(value)}
           style={{ ...fieldStyle, marginBottom: 10 }}
         >
           <option value="">{`${language ? a.useShared : a.useDefault} — ${voiceOptions.find(o => o.id === fallbackVoice)?.display ?? fallbackVoice}`}</option>
@@ -214,7 +215,7 @@ export function VoiceEditor({ agent, language, voiceOptions, onCancel, onSave, o
               {opts.map(o => <option key={o.id} value={o.id}>{o.display}</option>)}
             </optgroup>
           ))}
-        </select>
+        </FormSelect>
       </SettingsField>
 
       {/* The catalog needs the ElevenLabs key's voices_read permission —

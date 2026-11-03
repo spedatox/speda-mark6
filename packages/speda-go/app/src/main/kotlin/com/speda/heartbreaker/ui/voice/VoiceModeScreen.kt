@@ -114,6 +114,7 @@ fun VoiceModeScreen(
     onReplay: () -> Unit,
     onStopSpeaking: () -> Unit,
     modifier: Modifier = Modifier,
+    canvasEnabled: Boolean = true,
 ) {
     val palette = LocalHbPalette.current
     val strings = LocalStrings.current.voiceMode
@@ -121,7 +122,7 @@ fun VoiceModeScreen(
     // The staged windows and the narration, cut from the same text. Recomputed as
     // it streams, which is what makes a window appear at the point in the
     // narration the agent placed it — writing order is the cue track.
-    val panels = remember(reply, maxPanels) { splitBoardPanels(reply).take(maxPanels) }
+    val panels = remember(reply, maxPanels, canvasEnabled) { if (canvasEnabled) splitBoardPanels(reply).take(maxPanels) else emptyList() }
     val caption = remember(reply) { captionOf(reply) }
 
     /* The activity card leads the column, because while a turn is working it is

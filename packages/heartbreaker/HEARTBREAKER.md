@@ -70,7 +70,7 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 | Chat core | `ChatMain`, `MessageList`, `Message` (also `ThinkingPanel`, `ThinkingOrb` — see below), `InputBar`, `VoiceMode` |
 | Voice canvas | `VoiceCanvas` (the board), `VoicePanelBody` (what a window looks like), `VoiceOrb`, `lib/voicePanels` (splitting + layout) |
 | Rich content | `MapBlock`, `ChartBlock`, `CalendarBlock` — inline widgets rendered from fenced code blocks in a message |
-| Roster & coordination | `AgentSwitcherOverlay`, `CommsTray`, `HousePartyModal`, `HousePartyWarning`, `PartyActivation`, `PartyRosterStrip`, `PartyStream` |
+| Roster & coordination | `RoomConversation` (confirmed membership and on-demand Summon), `MessageList` (public speaker transcript), `AgentSwitcherOverlay`, `CommsTray`, `HousePartyModal`, `HousePartyWarning`, `PartyActivation`, `PartyRosterStrip` |
 | Safety protocols | `LockdownModal`, `LockdownActivation`, `SkyfallCountdown`, `SkyfallProjects` |
 | Screen lock | `LockScreen`, `LockScreensaver`, `ScreenLockSettings` (Interface tab), `lib/useScreenLock`, `lib/lock` |
 | Status & telemetry | `HudFrame`, `SystemsBoard`, `TelemetryColumn` |
@@ -82,6 +82,12 @@ From the repo root, the same commands are exposed workspace-scoped: `npm run hea
 ---
 
 ## Projects
+
+The Coordinator-backed room UX and validation contract are documented in
+[`HEARTBREAKER_ROOMS_UX.md`](../../docs/design/HEARTBREAKER_ROOMS_UX.md). Normal
+one-to-one chat has no permanent collaboration toolbar. A second participant
+reveals the membership strip; Summon opens from the header's ellipsis action.
+House Party keeps its separate, authorized full-roster session.
 
 A project is a named workspace owning its own chats, standing instructions and
 knowledge base. `ProjectsView` is both halves — the card grid and the detail pane

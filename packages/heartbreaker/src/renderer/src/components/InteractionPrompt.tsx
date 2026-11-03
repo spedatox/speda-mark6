@@ -105,10 +105,10 @@ export function PermissionPrompt({ ask, onResolve, embedded = false }: {
                 onClick={() => onResolve(true, false)}>
           Approve
         </button>
-        <button style={btn('ghost')} disabled={expired}
+        {!ask.ask_id.startsWith('release:') && <button style={btn('ghost')} disabled={expired}
                 onClick={() => onResolve(true, true)}>
           Approve — don't ask again
-        </button>
+        </button>}
         <button style={btn('danger')} disabled={expired}
                 onClick={() => onResolve(false, false)}>
           Deny

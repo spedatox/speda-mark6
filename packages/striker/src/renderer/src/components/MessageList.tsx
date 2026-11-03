@@ -46,9 +46,9 @@ const MemoMessage = memo(function MemoMessage({
   return (
     <div data-reply-message={message.id}><Message
       message={message}
-      onDelete={handleDelete}
-      onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
-      onEditAndResend={message.role === 'user' ? handleEdit : undefined}
+      onDelete={message.isWorkerAnchor ? undefined : handleDelete}
+      onRegenerate={!message.isWorkerAnchor && message.role === 'assistant' ? handleRegenerate : undefined}
+      onEditAndResend={!message.isWorkerAnchor && message.role === 'user' ? handleEdit : undefined}
     /></div>
   )
 })

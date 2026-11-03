@@ -32,6 +32,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +59,7 @@ import com.speda.heartbreaker.designsystem.glass.hbGlass
 import com.speda.heartbreaker.designsystem.icons.HbGlyphs
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
+import com.speda.heartbreaker.data.IgorApi
 import com.speda.heartbreaker.data.Downloader
 import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.domain.ChatMessage
@@ -68,6 +70,10 @@ import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.buildSegments
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
+import com.speda.heartbreaker.ui.HbGlassButton
+import com.speda.heartbreaker.designsystem.brand.AgentMark
+import kotlinx.serialization.json.JsonObject
+import com.speda.heartbreaker.domain.roomText
 import com.speda.heartbreaker.ui.prose.LocalMessageStreaming
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
@@ -85,15 +91,40 @@ fun MessageItem(
     message: ChatMessage,
     config: AppConfig? = null,
     downloader: Downloader? = null,
+    api: IgorApi? = null,
     showThinking: Boolean = true,
     onDelete: (() -> Unit)? = null,
     onRegenerate: (() -> Unit)? = null,
     onEditAndResend: ((String) -> Unit)? = null,
+    onReply: (() -> Unit)? = null,
+    turkish: Boolean = false,
 ) {
+    val palette = LocalHbPalette.current
+    val notice = message.roomNotice as? JsonObject
+    if (notice != null) {
+        val id = notice.roomText("agent_id").orEmpty()
+        val action = notice.roomText("action").orEmpty()
+        val text = when (action) {
+            "invite" -> if (turkish) "${roomName(id)} sohbete katıldı" else "${roomName(id)} joined the chat"
+            "dismiss" -> if (turkish) "${roomName(id)} sohbetten ayrıldı" else "${roomName(id)} left the chat"
+            "handoff" -> if (turkish) "${roomName(id)} artık lider" else "${roomName(id)} is now leading"
+            else -> if (turkish) "Katılımcılar güncellendi" else "Participants updated"
+        }
+        HbText(text, style = HbType.label, color = palette.textDim, modifier = Modifier.padding(vertical = 8.dp))
+        return
+    }
+    Column {
+    message.speaker?.let { id ->
+        Row(Modifier.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AgentMark(id, roomColor(id), 22.dp)
+            HbText(roomName(id), style = HbType.label, color = palette.textDim)
+        }
+    }
     if (message.role == Role.User) {
-        UserRow(message, onDelete = onDelete, onEditAndResend = onEditAndResend)
+        UserRow(message, onDelete = onDelete, onEditAndResend = onEditAndResend, onReply = onReply, replyLabel = if (turkish) "Yanıtla" else "Reply")
     } else {
-        AssistantRow(message, config, downloader, showThinking, onDelete = onDelete, onRegenerate = onRegenerate)
+        AssistantRow(message, config, downloader, showThinking, api, onDelete = onDelete, onRegenerate = onRegenerate, onReply = onReply, replyLabel = if (turkish) "Yanıtla" else "Reply")
+    }
     }
 }
 
@@ -102,6 +133,8 @@ private fun UserRow(
     message: ChatMessage,
     onDelete: (() -> Unit)?,
     onEditAndResend: ((String) -> Unit)?,
+    onReply: (() -> Unit)?,
+    replyLabel: String,
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
@@ -186,6 +219,7 @@ private fun UserRow(
         // (the plan's (pointer: coarse) behaviour).
         if (showActions && message.content.isNotEmpty()) {
             ActionBar {
+                if (onReply != null) HbGlassButton(replyLabel, onClick = onReply)
                 if (onEditAndResend != null) {
                     ActionBtn({ HbGlyphs.Edit(it) }) { editValue = message.content; editing = true }
                 }
@@ -225,8 +259,11 @@ private fun AssistantRow(
     config: AppConfig?,
     downloader: Downloader?,
     showThinking: Boolean,
+    api: IgorApi?,
     onDelete: (() -> Unit)?,
     onRegenerate: (() -> Unit)?,
+    onReply: (() -> Unit)?,
+    replyLabel: String,
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
@@ -283,7 +320,7 @@ private fun AssistantRow(
             // What a coding peer delegated this turn — see SubagentPanel's doc.
             val subagents = message.subagents
             if (!subagents.isNullOrEmpty()) {
-                SubagentPanel(subagents, modifier = Modifier.padding(top = 8.dp))
+                SubagentPanel(subagents, modifier = Modifier.padding(top = 8.dp), config = config, api = api)
             }
 
             // Downloadable files the agent produced this turn.
@@ -314,6 +351,7 @@ private fun AssistantRow(
             // regenerate, delete).
             if (showActions && !message.isStreaming && message.content.isNotEmpty()) {
                 ActionBar(Modifier.padding(top = 6.dp)) {
+                    if (onReply != null) HbGlassButton(replyLabel, onClick = onReply)
                     CopyBtn(message.content)
                     ThumbsBtns()
                     ReadAloudBtn(message.content)

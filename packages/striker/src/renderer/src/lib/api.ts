@@ -287,6 +287,23 @@ export async function cancelRun(config: AppConfig, requestId: string): Promise<b
   } catch { return false }
 }
 
+export async function steerRun(config: AppConfig, requestId: string, text: string, messageId = newRequestId(), expectedStepId?: string): Promise<boolean> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+  try {
+    const res = await fetch(`${config.apiBase}/chat/steer/${requestId}`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, message_id: messageId, expected_step_id: expectedStepId }),
+    })
+    if (!res.ok) return false
+    const d = await res.json()
+    return !!d.steered
+  } catch { return false }
+  finally { clearTimeout(timeout) }
+}
+
 export async function fetchMessages(
   config: AppConfig,
   sessionId: number
@@ -326,16 +343,16 @@ export async function fetchProjects(
       `${config.apiBase}/projects?agent_id=${config.agentId}&include_archived=${includeArchived}`,
       { headers: authHeaders(config) }
     )
-    if (!res.ok) return []
+    if (!res.ok) throw new Error(await res.text().catch(() => `Project request failed (${res.status})`))
     return res.json()
-  } catch {
-    return []
+  } catch (err) {
+    throw err
   }
 }
 
 export async function createProject(
   config: AppConfig,
-  body: { name: string; description?: string; instructions?: string; icon?: string; color?: string }
+  body: { name: string; path: string; description?: string; instructions?: string; icon?: string; color?: string }
 ): Promise<import('./types').Project> {
   const res = await fetch(`${config.apiBase}/projects`, {
     method: 'POST',
@@ -367,10 +384,11 @@ export async function updateProject(
 }
 
 export async function deleteProject(config: AppConfig, projectId: number): Promise<void> {
-  await fetch(`${config.apiBase}/projects/${projectId}?agent_id=${config.agentId}`, {
+  const res = await fetch(`${config.apiBase}/projects/${projectId}?agent_id=${config.agentId}`, {
     method: 'DELETE',
     headers: authHeaders(config),
   })
+  if (!res.ok) throw new Error(await res.text())
 }
 
 export async function fetchProjectSessions(
@@ -382,10 +400,10 @@ export async function fetchProjectSessions(
       `${config.apiBase}/projects/${projectId}/sessions?agent_id=${config.agentId}`,
       { headers: authHeaders(config) }
     )
-    if (!res.ok) return []
+    if (!res.ok) throw new Error(await res.text().catch(() => `Project request failed (${res.status})`))
     return res.json()
-  } catch {
-    return []
+  } catch (err) {
+    throw err
   }
 }
 
@@ -398,10 +416,10 @@ export async function fetchProjectFiles(
       `${config.apiBase}/projects/${projectId}/files?agent_id=${config.agentId}`,
       { headers: authHeaders(config) }
     )
-    if (!res.ok) return []
+    if (!res.ok) throw new Error(await res.text().catch(() => `Project request failed (${res.status})`))
     return res.json()
-  } catch {
-    return []
+  } catch (err) {
+    throw err
   }
 }
 
@@ -438,10 +456,11 @@ export async function deleteProjectFile(
   projectId: number,
   fileId: number
 ): Promise<void> {
-  await fetch(
+  const res = await fetch(
     `${config.apiBase}/projects/${projectId}/files/${fileId}?agent_id=${config.agentId}`,
     { method: 'DELETE', headers: authHeaders(config) }
   )
+  if (!res.ok) throw new Error(await res.text())
 }
 
 /** Pin how hard one model is asked to think, or clear the pin with level=null.
@@ -629,14 +648,15 @@ export interface ConnectionInfo {
   connected: boolean
   active: boolean
   always_on?: boolean
+  error?: string | null
   tools: number
   tokens: number
   needs: string | null
 }
 
-export async function getConnections(config: AppConfig): Promise<{ servers: ConnectionInfo[]; active_tool_tokens: number; itpm_limit: number }> {
+export async function getConnections(config: AppConfig): Promise<{ servers: ConnectionInfo[]; active_tool_tokens: number; itpm_limit: number | null }> {
   const res = await fetch(`${config.apiBase}/connections`, { headers: authHeaders(config)})
-  if (!res.ok) return { servers: [], active_tool_tokens: 0, itpm_limit: 30000 }
+  if (!res.ok) return { servers: [], active_tool_tokens: 0, itpm_limit: null }
   return res.json()
 }
 
@@ -689,6 +709,9 @@ export async function microsoftDisconnect(config: AppConfig): Promise<void> {
 export interface CustomMcpServer {
   name: string
   transport: 'stdio' | 'http'
+  allowed_agents?: string[]
+  allowed_tools?: string[] | null
+  read_only_tools?: string[]
   command: string | string[]
   url: string
   /** Credential values come back MASKED; sending one back unchanged keeps the
@@ -701,6 +724,7 @@ export interface CustomMcpServer {
   connected?: boolean
   tools?: number
   tokens?: number
+  error?: string | null
 }
 
 export async function getCustomMcpServers(
@@ -1067,6 +1091,8 @@ export interface SourceAgentInfo {
 }
 
 export interface MemorySources {
+  authority?: string
+  assignable?: boolean
   files: string[]          // editable /memories/*.md files to choose from
   agents: SourceAgentInfo[]
 }
@@ -1111,7 +1137,11 @@ export interface ConfigFieldInfo {
   placeholder: string
   options: string[]
   is_set: boolean
-  value?: string | number | boolean   // present for non-secret fields
+  value?: string | number | boolean | null   // present for non-secret fields
+  pending_restart?: boolean
+  overridden?: boolean
+  nullable?: boolean
+  env_key?: string
   hint?: string                       // masked hint for secret fields
 }
 
@@ -1123,9 +1153,56 @@ export interface ConfigGroupInfo {
 }
 
 export interface ConfigSaveResult {
+  revision?: number
   applied_live: string[]
   restart_required: string[]
   rejected: string[]
+}
+
+export interface ConfigSnapshot {
+  groups: ConfigGroupInfo[]
+  revision: number
+  instance_id: string
+  restart_required: string[]
+  restart: { available: boolean; detail: string; state: string }
+  setting_count: number
+}
+export interface ConfigPolicy { id: string; label: string; revision: number; value: Record<string, unknown>; schema: Record<string, unknown> }
+
+async function configResponse(res: Response): Promise<any> {
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || `Configuration request failed (${res.status})`)
+  return data
+}
+export async function getConfigSnapshot(config: AppConfig): Promise<ConfigSnapshot> {
+  return configResponse(await fetch(`${config.apiBase}/config`, { headers: authHeaders(config), cache: 'no-store' }))
+}
+export async function getConfigPolicies(config: AppConfig): Promise<ConfigPolicy[]> {
+  return (await configResponse(await fetch(`${config.apiBase}/config/policies`, { headers: authHeaders(config) }))).policies
+}
+export async function saveConfigPolicy(config: AppConfig, policy: ConfigPolicy, value: Record<string, unknown>): Promise<ConfigPolicy[]> {
+  return (await configResponse(await fetch(`${config.apiBase}/config/policies/${policy.id}`, {
+    method: 'PUT', headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ expected_revision: policy.revision, value }),
+  }))).policies
+}
+export async function restartBackend(config: AppConfig, revision: number, requestId: string): Promise<{ accepted: boolean; status: string; instance_id: string }> {
+  return configResponse(await fetch(`${config.apiBase}/config/restart`, {
+    method: 'POST', headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ expected_revision: revision, request_id: requestId }),
+  }))
+}
+export async function waitForBackend(config: AppConfig, previousInstance: string, timeout = 90000): Promise<string> {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    try {
+      const response = await fetch(`${config.apiBase}/health/ready`, { cache: 'no-store', signal: AbortSignal.timeout(2500) })
+      const value = await response.json()
+      if (response.ok && value.status === 'ready' && value.instance_id && value.instance_id !== previousInstance) return value.instance_id
+    } catch { /* only readiness is polled; restart requests are never retried here */ }
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  throw new Error('Restart could not be confirmed. If the address or API key changed, update the client connection settings.')
 }
 
 export async function getConfig(config: AppConfig): Promise<ConfigGroupInfo[]> {
@@ -1139,18 +1216,20 @@ export async function getConfig(config: AppConfig): Promise<ConfigGroupInfo[]> {
 }
 
 /** Persist only the changed keys. Secrets left untouched must NOT be sent;
- *  sending a secret as '' clears its override. */
+ *  sending an empty credential disables it; reset removes the override. */
 export async function saveConfig(
   config: AppConfig,
-  values: Record<string, string | number | boolean>,
+  values: Record<string, string | number | boolean | null>,
+  expectedRevision: number,
+  requestId: string,
+  reset: string[] = [],
 ): Promise<ConfigSaveResult> {
   const res = await fetch(`${config.apiBase}/config`, {
     method: 'PUT',
     headers: authHeaders(config, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ values }),
+    body: JSON.stringify({ values, expected_revision: expectedRevision, request_id: requestId, reset }),
   })
-  if (!res.ok) throw new Error(`Save failed (${res.status})`)
-  return res.json()
+  return configResponse(res)
 }
 
 /* ── Per-agent model routing ──────────────────────────────────────────────── */
@@ -1373,4 +1452,226 @@ export async function getReminderHistory(
   })
   if (!res.ok) return []
   return (await res.json()).history ?? []
+}
+
+export async function reconnectConnection(config: AppConfig, server: string): Promise<void> {
+  const res = await fetch(`${config.apiBase}/mcp/servers/${encodeURIComponent(server)}/reconnect`, {
+    method: 'POST', headers: authHeaders(config),
+  })
+  if (!res.ok) throw new Error(`Reconnect failed (${res.status})`)
+}
+
+/** Native durable worker controls. These never target the parent reply/run. */
+export interface WorkerExecution {
+  last_sequence?: number
+  result?: string | { report?: string; reason?: string } | null
+  id?: string
+  execution_id: string
+  agent?: string
+  role?: string
+  owner_agent?: string
+  label?: string
+  status?: string
+  execution_type?: 'legion' | 'forge'
+  source?: 'legion' | 'forge'
+  session_id?: number
+  room_session_id?: number
+  ticket?: number
+  running_s?: number
+  task?: string
+  worker?: string
+  model?: string
+  backend?: 'legion' | 'forge'
+  agent_id?: string
+  can_interrupt?: boolean
+  can_message?: boolean
+}
+
+export async function fetchWorkerExecutions(config: AppConfig, sessionId?: number): Promise<WorkerExecution[]> {
+  const query = sessionId == null ? '' : `?session_id=${sessionId}`
+  const res = await fetch(`${config.apiBase}/legion/executions${query}`, { headers: authHeaders(config) })
+  if (!res.ok) throw new Error(`Worker history unavailable (${res.status})`)
+  const data = await res.json()
+  const rows: WorkerExecution[] = Array.isArray(data) ? data : data.executions ?? []
+  return rows.map(row => ({ ...row, execution_id: row.execution_id || row.id || '' })).filter(row => row.execution_id)
+}
+
+export async function interruptWorker(config: AppConfig, executionId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${config.apiBase}/legion/executions/${encodeURIComponent(executionId)}/interrupt`, {
+    method: 'POST', headers: authHeaders(config),
+  })
+  if (!res.ok) throw new Error(`Task stop was not confirmed (${res.status})`)
+  return res.json()
+}
+
+export async function messageWorker(config: AppConfig, executionId: string, text: string, messageId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${config.apiBase}/legion/executions/${encodeURIComponent(executionId)}/messages`, {
+    method: 'POST', headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ text, message_id: messageId }),
+  })
+  if (!res.ok) throw new Error(`Task input was not confirmed (${res.status})`)
+  return res.json()
+}
+
+export async function* attachWorkerExecution(
+  config: AppConfig, executionId: string, signal: AbortSignal, after = 0,
+): AsyncGenerator<Record<string, unknown>> {
+  yield* workerFrames(config, `/legion/executions/${encodeURIComponent(executionId)}/attach?after=${after}`, signal)
+}
+
+export async function* attachSessionWorkers(config: AppConfig, sessionId: number, signal: AbortSignal, after = 0, onActivity?: () => void) {
+  yield* workerFrames(config, `/legion/sessions/${sessionId}/attach?after=${after}`, signal, onActivity)
+}
+
+async function* workerFrames(config: AppConfig, path: string, signal: AbortSignal, onActivity?: () => void): AsyncGenerator<Record<string, unknown>> {
+  const res = await fetch(`${config.apiBase}${path}`, {
+    headers: authHeaders(config), signal,
+  })
+  const { decodeWorkerFrames } = await import('./workerTransport')
+  yield* decodeWorkerFrames(res, signal, onActivity)
+}
+
+export interface WorkerSessionSnapshot {
+  session_id: number
+  sequence: number
+  omitted: number
+  cards: { parent_step_id: string; parent_message_id?: string | null; run: import('./types').SubagentRun }[]
+}
+
+export async function snapshotSessionWorkers(config: AppConfig, sessionId: number, signal: AbortSignal): Promise<WorkerSessionSnapshot> {
+  const res = await fetch(`${config.apiBase}/legion/sessions/${sessionId}/snapshot`, { headers: authHeaders(config), signal })
+  const { WorkerTransportError, readWorkerJson } = await import('./workerTransport')
+  const body = await readWorkerJson(res, signal) as WorkerSessionSnapshot
+  if (!body || body.session_id !== sessionId || !Number.isSafeInteger(body.sequence) || body.sequence < 0 || !Array.isArray(body.cards) || body.cards.length > 64
+    || body.cards.some(card => !card || !/^[a-f0-9]{32}$/.test(card.parent_step_id) || !card.run
+      || !/^[a-f0-9]{32}$/.test(card.run.executionId || card.run.id)
+      || typeof card.run.agent !== 'string' || typeof card.run.label !== 'string' || !Array.isArray(card.run.steps)
+      || !Number.isSafeInteger(card.run.lastSequence) || (card.run.lastSequence ?? -1) < 0)) {
+    throw new WorkerTransportError('Worker recovery returned an invalid snapshot', false)
+  }
+  return body
+}
+
+export async function inspectWorkerExecution(config: AppConfig, executionId: string): Promise<WorkerExecution> {
+  const res = await fetch(`${config.apiBase}/legion/executions/${encodeURIComponent(executionId)}`, { headers: authHeaders(config) })
+  if (!res.ok) throw new Error(`Worker status unavailable (${res.status})`)
+  return res.json()
+}
+
+export interface PersonalitySettings {
+  instructions: string
+  tone: 'default' | 'familiar' | 'professional'
+  humor: 'default' | 'off' | 'dry' | 'playful'
+  directness: 'default' | 'gentle' | 'direct'
+  response_length: 'default' | 'brief' | 'detailed'
+}
+
+export interface AgentPersonalityInfo {
+  agent_id: string
+  name: string
+  domain: string
+  settings: PersonalitySettings
+}
+
+async function personalityRequest(config: AppConfig, body?: { agent_id: string; settings: PersonalitySettings }): Promise<AgentPersonalityInfo[]> {
+  const res = await fetch(`${config.apiBase}/agents/personalities`, {
+    method: body ? 'POST' : 'GET',
+    headers: authHeaders(config, body ? { 'Content-Type': 'application/json' } : {}),
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export function fetchAgentPersonalities(config: AppConfig): Promise<AgentPersonalityInfo[]> {
+  return personalityRequest(config)
+}
+
+export function saveAgentPersonality(config: AppConfig, agentId: string, settings: PersonalitySettings): Promise<AgentPersonalityInfo[]> {
+  return personalityRequest(config, { agent_id: agentId, settings })
+}
+
+
+export interface VoiceSettings {
+  stability?: number
+  similarity_boost?: number
+  style?: number
+  speed?: number
+  use_speaker_boost?: boolean
+}
+
+export interface VoiceAgentInfo {
+  agent_id: string
+  name: string
+  domain: string
+  /** The profile's own default (or the engine default if the profile has none). */
+  default_voice: string
+  /** The owner's pin, or null if this agent still uses the profile default. */
+  voice_id: string | null
+  /** What will actually speak right now — voice_id if set, else default_voice. */
+  effective_voice: string
+  voice_settings: VoiceSettings | null
+  languages?: Record<'tr' | 'en', {
+    voice_id: string | null
+    effective_voice: string
+    voice_settings: VoiceSettings | null
+    effective_voice_settings: VoiceSettings | null
+  }>
+}
+
+export type VoiceAgentPatch = { language?: 'tr' | 'en'; voice_id?: string | null } & {
+  [K in keyof VoiceSettings]?: VoiceSettings[K] | null
+}
+
+/** One voice from GET /voice/voices — spans every configured engine. */
+export interface VoiceOption {
+  id: string // full "provider:model:voice" ref
+  name: string
+  provider: 'azure' | 'openai' | 'elevenlabs' | string
+  model: string
+  locale: string
+  gender: string
+  display: string
+}
+
+export async function fetchVoiceAgents(config: AppConfig): Promise<VoiceAgentInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/agents`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).agents ?? []
+  } catch { return [] }
+}
+
+export async function fetchVoiceOptions(config: AppConfig): Promise<VoiceOption[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/voices`, { headers: authHeaders(config) })
+    if (!res.ok) return []
+    return (await res.json()).voices ?? []
+  } catch { return [] }
+}
+
+/**
+ * Save an agent's voice pin and/or tuning. Pass `null` for `voiceId` to clear
+ * the pin back to the profile default; pass `null` for a tuning value to clear
+ * that ONE knob back to ElevenLabs' own default (undefined leaves it as is —
+ * only send the keys that actually changed).
+ */
+export async function saveVoiceAgent(
+  config: AppConfig, agentId: string,
+  patch: VoiceAgentPatch,
+): Promise<VoiceAgentInfo[]> {
+  try {
+    const res = await fetch(`${config.apiBase}/voice/agents/${agentId}`, {
+      method: 'PUT',
+      headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) throw new Error('Voice settings could not be saved')
+    return (await res.json()).agents ?? []
+  } catch { throw new Error('Voice settings could not be saved') }
+}
+
+/** Reset only the selected language, or the shared fallback if omitted. */
+export async function clearVoiceAgent(config: AppConfig, agentId: string, language?: 'tr' | 'en'): Promise<VoiceAgentInfo[]> {
+  return saveVoiceAgent(config, agentId, language ? { language } : {})
 }

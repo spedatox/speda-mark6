@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +34,16 @@ import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.designsystem.type.HbType
 import com.speda.heartbreaker.domain.SubagentRun
 import com.speda.heartbreaker.domain.SubagentStep
+import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.domain.foldSubagentEvent
+import com.speda.heartbreaker.domain.workerLabel
+import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.ui.settings.GlassField
+import com.speda.heartbreaker.ui.settings.SettingsButton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import java.util.UUID
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.prose.ProseText
 
@@ -45,17 +58,47 @@ import com.speda.heartbreaker.ui.prose.ProseText
  * reverted.
  */
 @Composable
-fun SubagentPanel(runs: List<SubagentRun>, modifier: Modifier = Modifier) {
+fun SubagentPanel(runs: List<SubagentRun>, modifier: Modifier = Modifier, config: AppConfig? = null, api: IgorApi? = null) {
     if (runs.isEmpty()) return
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        runs.forEach { run -> SubagentRunCard(run) }
+        runs.forEach { run -> key(run.id) { SubagentRunCard(run, config, api) } }
     }
 }
 
 @Composable
-private fun SubagentRunCard(run: SubagentRun) {
+private fun SubagentRunCard(initialRun: SubagentRun, config: AppConfig?, api: IgorApi?) {
     val palette = LocalHbPalette.current
     var open by remember { mutableStateOf(false) }
+    var run by remember(initialRun.id) { mutableStateOf(initialRun) }
+    var reconnect by remember { mutableStateOf(0) }
+    var notice by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var pendingInput by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(initialRun) {
+        if ((initialRun.lastSequence ?: 0) >= (run.lastSequence ?: 0)) {
+            run = initialRun.copy(model = initialRun.model ?: run.model,
+                canInterrupt = initialRun.canInterrupt ?: run.canInterrupt, canMessage = initialRun.canMessage ?: run.canMessage)
+        }
+    }
+    val executionId = run.executionId
+    LaunchedEffect(open, executionId, config, api, reconnect) {
+        if (!open || executionId == null || config == null || api == null) return@LaunchedEffect
+        try {
+            val metadata = api.inspectWorkerExecution(config, executionId)
+            val snapshot = metadata.toRun()
+            if ((metadata.lastSequence ?: 0) >= (run.lastSequence ?: 0)) run = run.copy(ownerAgent = snapshot.ownerAgent ?: run.ownerAgent, workerRole = snapshot.workerRole ?: run.workerRole,
+                executionType = snapshot.executionType, model = snapshot.model, status = snapshot.status,
+                running = snapshot.running, report = snapshot.report ?: run.report,
+                canInterrupt = snapshot.canInterrupt, canMessage = snapshot.canMessage)
+            api.attachWorkerExecution(config, executionId, run.lastSequence ?: 0).collect { envelope ->
+                val data = envelope.data as? JsonObject
+                if (envelope.type == "subagent" && data != null) run = foldSubagentEvent(run, data)
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { notice = "Connection lost. Reconnect to recover this task's progress." }
+    }
 
     Column(
         Modifier
@@ -86,11 +129,11 @@ private fun SubagentRunCard(run: SubagentRun) {
                     maxLines = 1,
                 )
                 if (run.agent.isNotEmpty() && run.label.isNotEmpty()) {
-                    HbText(run.agent, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint, maxLines = 1)
+                    HbText(workerLabel(run), style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint, maxLines = 2)
                 }
             }
             HbText(
-                if (run.running) "running" else if (run.ok == false) "failed" else "done",
+                run.status ?: if (run.running) "running" else if (run.ok == false) "failed" else "done",
                 style = HbType.readout.copy(fontSize = 10.sp),
                 color = dotColor,
             )
@@ -102,7 +145,47 @@ private fun SubagentRunCard(run: SubagentRun) {
                     HbText(it, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textDim)
                     Spacer(Modifier.height(8.dp))
                 }
+                if (executionId != null && config != null && api != null) {
+                    run.model?.let { HbText(it, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsButton("Stop task", enabled = !busy && run.running && run.canInterrupt != false, onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    api.interruptWorker(config, executionId)
+                                    notice = "Stop requested for this task. Waiting for its confirmed state."
+                                } catch (cancelled: CancellationException) { throw cancelled }
+                                catch (error: Exception) { notice = "Task stop was not confirmed." }
+                                finally { busy = false }
+                            }
+                        })
+                        SettingsButton("Reconnect", enabled = !busy, onClick = { notice = ""; reconnect += 1 })
+                    }
+                    if (run.running && run.canMessage != false) {
+                        GlassField(draft, { draft = it.take(6000) }, "Steer this task at its next safe boundary", singleLine = false)
+                        SettingsButton("Send to task", enabled = !busy && draft.isNotBlank(), onClick = {
+                            val text = draft.trim()
+                            if (pendingInput?.first != text) pendingInput = text to UUID.randomUUID().toString().replace("-", "")
+                            val messageId = pendingInput!!.second
+                            scope.launch {
+                                busy = true
+                                try {
+                                    api.messageWorker(config, executionId, text, messageId)
+                                    notice = "Input accepted. Delivery is recorded at a worker boundary."
+                                    draft = ""
+                                    pendingInput = null
+                                } catch (cancelled: CancellationException) { throw cancelled }
+                                catch (error: Exception) { notice = "Task input was not confirmed. Retrying unchanged text keeps the same input ID." }
+                                finally { busy = false }
+                            }
+                        })
+                    }
+                    if (notice.isNotBlank()) HbText(notice, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
+                    Spacer(Modifier.height(8.dp))
+                }
                 run.steps.forEach { step -> SubagentStepView(step) }
+                if (run.activityPartial) HbText("Showing a bounded activity preview. The saved task journal retains earlier activity.",
+                    style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
                 run.report?.takeIf { it.isNotBlank() }?.let {
                     Spacer(Modifier.height(8.dp))
                     ProseText(it)
@@ -119,18 +202,10 @@ private fun SubagentStepView(step: SubagentStep) {
         "text" -> step.text?.takeIf { it.isNotBlank() }?.let {
             ProseText(it, modifier = Modifier.padding(vertical = 4.dp))
         }
-        "tool" -> Row(
-            Modifier.fillMaxWidth().padding(vertical = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HbText("›", style = HbType.readout.copy(fontSize = 11.sp), color = palette.accentDim)
-            HbText(
-                step.tool ?: "tool",
-                style = HbType.readout.copy(fontSize = 11.sp),
-                color = palette.textDim,
-                maxLines = 1,
-            )
+        "tool" -> Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            HbText("› ${step.tool ?: "tool"}", style = HbType.readout.copy(fontSize = 11.sp), color = palette.accentDim)
+            step.input?.let { HbText(it.toString().take(16000), style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint) }
+            step.result?.let { HbText(it.take(16000), style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim) }
         }
     }
 }

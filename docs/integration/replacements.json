@@ -1,0 +1,374 @@
+{
+  "scope": "Intentional native replacements, not assertions of identical legacy interfaces or live-service validation.",
+  "skills": {
+    "memory": {
+      "status": "superseded",
+      "replacement": "Iacon prepared context and single-batch memory_lookup with exact owner evidence, temporal qualifiers and source IDs.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "search_memory": {
+      "status": "superseded",
+      "replacement": "Iacon prepared context and single-batch memory_lookup with exact owner evidence, temporal qualifiers and source IDs.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "memory_edit": {
+      "status": "superseded",
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "ledger_append": {
+      "status": "superseded",
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "registry_upsert": {
+      "status": "superseded",
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "narrative_revise": {
+      "status": "superseded",
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "memory_event": {
+      "status": "superseded",
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "memory_state": {
+      "status": "superseded",
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "record_observation": {
+      "status": "superseded",
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "forget_observation": {
+      "status": "superseded",
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "memory_audit": {
+      "status": "superseded",
+      "replacement": "Orion durable Iacon interpretation/review/publication and persistent maintenance budgets. Legacy file-rewrite audit jobs are retired.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "explore_memory": {
+      "status": "superseded",
+      "replacement": "Iacon stable entities, typed record links and evidence inspection replace the legacy observation graph. The old graph tool is intentionally retired; no claim of an identical graph browser.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "record_course_memory": {
+      "status": "superseded",
+      "replacement": "Iacon course entities, linked evidence-backed episodes/documents and bounded memory_lookup. Course notes use the same writer authority, not a second course-memory database.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_client_memory.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "read_course_memory": {
+      "status": "superseded",
+      "replacement": "Iacon course entities, linked evidence-backed episodes/documents and bounded memory_lookup. Course notes use the same writer authority, not a second course-memory database.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_client_memory.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "inspect_patterns": {
+      "status": "superseded",
+      "replacement": "Evidence-backed inferred claims and explicit correction/retraction in Iacon replace mutable repetition scores and pattern voting. No separate legacy pattern learner is restored.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "pattern_feedback": {
+      "status": "superseded",
+      "replacement": "Evidence-backed inferred claims and explicit correction/retraction in Iacon replace mutable repetition scores and pattern voting. No separate legacy pattern learner is restored.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "list_library": {
+      "status": "superseded",
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "search_library": {
+      "status": "superseded",
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "read_library": {
+      "status": "superseded",
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "finance_record": {
+      "status": "superseded",
+      "replacement": "Solus exact ledger and immutable receipts replace model-written finance memory. Legacy records remain retained and are never silently merged or dual-written.",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_capture.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "dispatch_agent": {
+      "status": "superseded",
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "read_agent_channel": {
+      "status": "superseded",
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "dispatch_status": {
+      "status": "superseded",
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "house_party": {
+      "status": "superseded",
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "workshop_status": {
+      "status": "superseded",
+      "replacement": "Native Projects/Workshop status, bindings and revisioned execution claims replace the old WorkspaceService authority.",
+      "evidence": [
+        "tests/test_projects.py",
+        "tests/test_project_teams.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "workshop_update": {
+      "status": "superseded",
+      "replacement": "Native Projects/Workshop status, bindings and revisioned execution claims replace the old WorkspaceService authority.",
+      "evidence": [
+        "tests/test_projects.py",
+        "tests/test_project_teams.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    "recall_conversations": {
+      "status": "superseded",
+      "replacement": "Bounded local Iacon personal lookup plus literal conversation_history retrieval with original source/message IDs. This intentionally replaces the old paid embedding query path; it does not claim identical semantic ranking.",
+      "evidence": [
+        "tests/test_history_lookup.py",
+        "tests/test_history_lookup_postgres.py",
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "use_toolset": {
+      "status": "superseded",
+      "replacement": "Native tool_search and per-agent registry discovery expose exact authorized schemas. Toolset prose cannot grant capabilities or load retired engine tools.",
+      "evidence": [
+        "tests/test_worker_policy.py",
+        "tests/test_client_compat.py"
+      ]
+    }
+  },
+  "routes": {
+    "GET /memory/observations": {
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    "POST /memory/observations": {
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    "POST /memory/observations/{observation_id}/end": {
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    "DELETE /memory/observations/{observation_id}": {
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    "POST /admin/memory/shadow": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "GET /admin/memory/status": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "GET /admin/memory/verify": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "POST /admin/memory/split": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "POST /admin/memory/shard": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "POST /admin/memory/render": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "POST /admin/memory/compose": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "POST /admin/memory/reindex": {
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    "GET /agents/asks": {
+      "status": "superseded",
+      "replacement": "Retired remote-peer permission expansion. GET returns no pending peer asks; POST denies with 410. Native capability grants, Coordinator authority and Forge claims remain mandatory.",
+      "evidence": [
+        "tests/test_worker_policy.py"
+      ]
+    },
+    "POST /agents/asks/{ask_id}": {
+      "status": "superseded",
+      "replacement": "Retired remote-peer permission expansion. GET returns no pending peer asks; POST denies with 410. Native capability grants, Coordinator authority and Forge claims remain mandatory.",
+      "evidence": [
+        "tests/test_worker_policy.py"
+      ]
+    },
+    "GET /config": {
+      "status": "verified_local_mocked",
+      "replacement": "Complete Settings-derived owner catalog, atomic versioned overrides, native policy editors and managed restart; startup settings apply together after restart.",
+      "evidence": [
+        "tests/test_configuration.py",
+        "tests/test_configuration_postgres.py",
+        "tests/test_configuration_process.py"
+      ]
+    },
+    "PUT /config": {
+      "status": "verified_local_mocked",
+      "replacement": "Complete Settings-derived owner catalog, atomic versioned overrides, native policy editors and managed restart; startup settings apply together after restart.",
+      "evidence": [
+        "tests/test_configuration.py",
+        "tests/test_configuration_postgres.py",
+        "tests/test_configuration_process.py"
+      ]
+    },
+    "GET /admin/evals/behavior-config": {
+      "status": "verified_local_mocked",
+      "replacement": "Authenticated native evaluation snapshot: real model/thinking policy revisions, allowed tools by persona, Legion/Autobot/Decepticon roles and running public settings. Runtime evidence never certifies parity or production acceptance.",
+      "evidence": [
+        "tests/test_behavior_config.py"
+      ]
+    }
+  }
+}

@@ -71,6 +71,7 @@ function SessionItem({ session, active, onSelect, config, running }: {
     } else {
       setDisplayTitle(next)
     }
+    return undefined
   }, [session.title])
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -297,7 +298,7 @@ function ProjectsNav({ config, active, onOpen }: {
     const load = () => {
       fetchProjects(config).then(list => {
         if (alive) setPinned(list.filter(p => p.pinned).slice(0, 5))
-      })
+      }).catch(() => { if (alive) setPinned([]) })
     }
     load()
     window.addEventListener('speda:projects-changed', load)

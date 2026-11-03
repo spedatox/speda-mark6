@@ -121,7 +121,7 @@ fun SystemsBoardScreen(
     }
 
     val ollamaUp = models.any { it.provider == "ollama" }
-    val pct = if (servers.itpmLimit > 0) (servers.activeToolTokens * 100 / servers.itpmLimit.coerceAtLeast(1)) else 0
+    val pct = if ((servers.itpmLimit ?: 0) > 0) (servers.activeToolTokens * 100 / (servers.itpmLimit ?: 0).coerceAtLeast(1)) else 0
     val gaugeColor = if (pct > 100) palette.red else if (pct > 70) palette.amber else palette.green
 
     BackHandler(onBack = onClose)
@@ -230,13 +230,13 @@ fun SystemsBoardScreen(
             SectionHeader(t.systemsBoard.tokenBudget)
             Panel {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                    HbText("${pct}%", style = HbType.headerBar.copy(fontSize = 28.sp), color = gaugeColor)
-                    HbText(t.systemsBoard.prefixSaturation, style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
+                    HbText(if (servers.itpmLimit == null) "—" else "${pct}%", style = HbType.headerBar.copy(fontSize = 28.sp), color = gaugeColor)
+                    HbText(if (servers.itpmLimit == null) "On demand" else t.systemsBoard.prefixSaturation, style = HbType.readout.copy(fontSize = 9.sp), color = palette.icon)
                 }
                 Spacer(Modifier.height(6.dp))
                 SegBar(pct = pct, color = gaugeColor)
                 HbText(
-                    "~${servers.activeToolTokens} / ${servers.itpmLimit} ITPM",
+                    if (servers.itpmLimit != null) "~${servers.activeToolTokens} / ${servers.itpmLimit} ITPM" else "Tools load on demand",
                     style = HbType.readout.copy(fontSize = 9.sp),
                     color = palette.icon,
                     modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),

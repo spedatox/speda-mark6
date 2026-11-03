@@ -126,7 +126,7 @@ export default function HousePartyModal({
 
         {/* Cost flags */}
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem' }}>
-          {['Heavy', 'Expensive', 'Prototype'].map(f => (
+          {['High stakes', 'All hands'].map(f => (
             <span key={f} style={{
               padding: '0.2rem 0.6rem', borderRadius: 999,
               border: `1px solid ${AMBER}55`, background: 'rgba(242,183,92,0.08)',
@@ -140,9 +140,9 @@ export default function HousePartyModal({
           margin: 0, fontFamily: 'var(--font-read)', fontSize: '0.84rem', lineHeight: 1.55,
           color: 'var(--hb-text-dim)',
         }}>
-          Engaging summons the <strong style={{ color: 'var(--hb-text)' }}>entire roster</strong> in
-          parallel at full model grade with domain boundaries relaxed — costly, and still
-          experimental. Reserve it for genuinely high-stakes, all-hands operations.
+          Engaging opens a separate Speda-led room with the <strong style={{ color: 'var(--hb-text)' }}>entire roster</strong>.
+          Reserve it for high-stakes, all-hands situations. Speda coordinates who speaks;
+          existing model settings, permissions and spending limits remain in force.
         </p>
 
         {objective && (

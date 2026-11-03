@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState } from 'react'
-import { fetchAgentComms, getHouseParty, setHouseParty, fetchActiveLegionRuns, attachLegionStream } from '../lib/api'
-import type { AgentCommEntry, ActiveLegionRun } from '../lib/api'
+import { fetchAgentComms, getHouseParty, setHouseParty, fetchActiveLegionRuns, attachLegionStream, fetchWorkerExecutions } from '../lib/api'
+import type { AgentCommEntry, ActiveLegionRun, WorkerExecution } from '../lib/api'
 import type { AppConfig, SubagentRun } from '../lib/types'
-import { foldLegionEvent } from '../lib/subagentFold'
+import { foldLegionEvent, workerLabel } from '../lib/subagentFold'
 import { useIsMobile } from '../lib/useIsMobile'
 import { CommFeed, AvatarStack } from './CommBubble'
 import SubagentDetailView from './SubagentDetailView'
@@ -34,6 +34,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   const [party, setParty] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [legionRuns, setLegionRuns] = useState<ActiveLegionRun[]>([])
+  const [executions, setExecutions] = useState<WorkerExecution[]>([])
   const [openRun, setOpenRun] = useState<SubagentRun | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const feedRef = useRef<HTMLDivElement>(null)
@@ -48,6 +49,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         // Always clear — an unreachable backend must not skeleton this forever.
         .finally(() => setLoaded(true))
       fetchActiveLegionRuns(config).then(setLegionRuns)
+      fetchWorkerExecutions(config).then(setExecutions).catch(() => {})
     }
     load()
     getHouseParty(config).then(setParty)
@@ -66,13 +68,25 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
     attachAbort.current?.abort()
     const ctrl = new AbortController()
     attachAbort.current = ctrl
-    setOpenRun({ id: `legion-bg-${run.ticket}`, agent: run.agent, label: run.label, running: true, steps: [], source: 'legion' })
+    setOpenRun({ id: run.execution_id || `legion-bg-${run.ticket}`, executionId: run.execution_id, ownerAgent: run.owner_agent, workerRole: run.role, executionType: run.execution_type, status: run.status, agent: run.agent, label: run.label, running: true, steps: [], source: run.execution_type === 'forge' ? 'forge' : 'legion' })
+    if (run.execution_id) return
     ;(async () => {
       for await (const event of attachLegionStream(config, run.ticket, ctrl.signal)) {
         setOpenRun(prev => foldLegionEvent(prev, event))
       }
     })().catch(() => { /* aborted or dropped connection — the tray row still reflects /legion/active */ })
   }
+
+  const openExecution = (execution: WorkerExecution) => {
+    attachAbort.current?.abort()
+    setOpenRun({ id: execution.execution_id, executionId: execution.execution_id,
+      agent: execution.role || execution.worker || execution.agent || 'worker', label: execution.label || execution.task || 'Worker task',
+      ownerAgent: execution.owner_agent || execution.agent_id, workerRole: execution.role || execution.worker,
+      executionType: execution.execution_type || execution.backend, source: execution.execution_type === 'forge' || execution.backend === 'forge' ? 'forge' : 'legion',
+      status: execution.status, model: execution.model, canInterrupt: execution.can_interrupt, canMessage: execution.can_message,
+      running: ['queued', 'running', 'staging', 'waiting_input', 'waiting_dependency'].includes(execution.status || ''), steps: [] })
+  }
+  const legacyRuns = legionRuns.filter(run => !run.execution_id || !executions.some(execution => execution.execution_id === run.execution_id))
 
   const closeLegionRun = () => {
     attachAbort.current?.abort()
@@ -171,7 +185,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
       {/* Background legionnaires currently deployed — none of these own a
           message of their own (they outlive the turn that dispatched them),
           so this row is their only entry point into the live detail view. */}
-      {legionRuns.length > 0 && (
+      {legacyRuns.length > 0 && (
         <div style={{
           display: 'flex', flexDirection: 'column', gap: 4,
           padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -180,9 +194,9 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase',
             color: 'var(--hb-cyan)',
           }}>
-            {t.commsTray.legionRunning(legionRuns.length)}
+            {t.commsTray.legionRunning(legacyRuns.length)}
           </span>
-          {legionRuns.map(run => (
+          {legacyRuns.map(run => (
             <button
               key={run.ticket}
               onClick={() => openLegionRun(run)}
@@ -210,7 +224,22 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         </div>
       )}
 
-      {openRun && <SubagentDetailView run={openRun} onClose={closeLegionRun} />}
+      {executions.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', maxHeight: 200, overflowY: 'auto' }}>
+          <span style={{ fontSize: '0.68rem', color: 'var(--hb-cyan)' }}>WORKER TASKS · RECENT HISTORY</span>
+          {executions.slice(0, 8).map(execution => {
+            const role = execution.role || execution.worker || execution.agent || 'worker'
+            const running = ['queued', 'running', 'staging', 'waiting_input', 'waiting_dependency'].includes(execution.status || '')
+            return <button key={execution.execution_id} type="button" onClick={() => openExecution(execution)}
+              style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '5px 0', background: 'transparent', border: 0, textAlign: 'left', color: 'var(--hb-text-dim)', cursor: 'pointer' }}>
+              <span style={{ color: running ? 'var(--hb-cyan)' : 'var(--hb-text)' }}>{workerLabel({ id: execution.execution_id, agent: role, label: '', running, steps: [], workerRole: role, ownerAgent: execution.owner_agent || execution.agent_id, executionType: execution.execution_type || execution.backend, source: execution.execution_type === 'forge' || execution.backend === 'forge' ? 'forge' : 'legion' })} · {execution.status}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{execution.label || execution.task}</span>
+            </button>
+          })}
+        </div>
+      )}
+
+      {openRun && <SubagentDetailView key={openRun.id} run={openRun} onClose={closeLegionRun} />}
 
       <div
         ref={feedRef}

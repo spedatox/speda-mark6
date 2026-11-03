@@ -46,6 +46,18 @@ export interface SubagentRun {
   report?: string
   steps: SubagentStep[]
   source?: 'legion' | 'peer' | 'forge'
+  /** Native durable execution identity, distinct from the parent reply/run. */
+  executionId?: string
+  ownerAgent?: string
+  workerRole?: string
+  executionType?: 'legion' | 'forge'
+  status?: string
+  model?: string
+  canInterrupt?: boolean
+  canMessage?: boolean
+  lastSequence?: number
+  seenEventIds?: string[]
+  activityPartial?: boolean
 }
 
 export interface ImageBlock {
@@ -104,6 +116,8 @@ export interface ReportMeta {
 }
 
 export interface ChatMessage {
+  coordinationStepId?: string
+  isWorkerAnchor?: boolean
   id: string
   role: Role
   content: string
@@ -146,6 +160,9 @@ export interface ChatMessage {
 }
 
 export interface Session {
+  cwd?: string | null
+  host_id?: string | null
+  workshop_project_id?: string | null
   id: number
   title: string | null
   started_at: string
@@ -170,6 +187,10 @@ export interface Session {
  * switches the entire project set. There is no shared project.
  */
 export interface Project {
+  cwd: string
+  host_id: string
+  workshop_project_id: string
+  version: number
   id: number
   agent_id: string
   name: string
@@ -214,7 +235,7 @@ export interface AppConfig {
 
 /** How hard a model is asked to think. Mirrors llm_client.THINKING_LEVELS —
  *  the backend is the source of truth for the vocabulary. */
-export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high'
+export type ThinkingLevel = string
 
 export const THINKING_LEVELS: ThinkingLevel[] = ['none', 'low', 'medium', 'high']
 
@@ -233,6 +254,7 @@ export interface ModelInfo {
    *  False for Ollama and NVIDIA — the control is shown disabled, not hidden,
    *  so the absence is legible rather than mysterious. */
   thinking_supported?: boolean
+  thinking_options?: ThinkingLevel[]
 }
 
 /** One question in a mid-turn interaction from a peer. */

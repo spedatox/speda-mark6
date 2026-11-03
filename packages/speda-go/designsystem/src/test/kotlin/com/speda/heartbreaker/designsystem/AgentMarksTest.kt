@@ -85,9 +85,10 @@ class AgentMarksTest {
             assertTrue("$id starts above the box: ${b.minY}", b.minY >= -2.5f)
             assertTrue("$id overflows right: ${b.maxX}", b.maxX <= 102.5f)
             assertTrue("$id overflows bottom: ${b.maxY}", b.maxY <= 102.5f)
-            // The larger dimension is the one that got normalised to the box.
+            // Traced marks fill the box. Friday retains the supplied SVG margins
+            // (about 90.5 units), without renormalising the owner artwork.
             assertEquals(
-                "$id is not scaled to the box", 100f,
+                "$id is not scaled to the box", if (id == "nightcrawler") 90.5f else 100f,
                 maxOf(b.width, b.height), 2.5f,
             )
         }
@@ -99,6 +100,18 @@ class AgentMarksTest {
         for (id in AgentMarks.PATHS.keys) {
             assertTrue("$id is not a known brand", Brands.BRANDS.containsKey(id))
         }
+    }
+
+    @Test
+    fun fridayAliasesKeepOneHistoricalRosterEntry() {
+        assertEquals(Brands.BRANDS["nightcrawler"], Brands.BRANDS["friday"])
+        assertEquals("Friday", Brands.BRANDS.getValue("friday").name)
+        assertEquals("nightcrawler", Brands.BRANDS.getValue("friday").agentId)
+        assertEquals(AgentMarks.PATHS["nightcrawler"], AgentMarks.PATHS["friday"])
+        assertTrue(AgentMarks.has("friday"))
+        assertEquals(8, Brands.BRANDS.size)
+        assertEquals(8, Brands.ROSTER.size)
+        assertEquals(1, Brands.ROSTER.count { it == "nightcrawler" || it == "friday" })
     }
 
     /** Warroom has no art yet — has() must say so rather than throwing. */

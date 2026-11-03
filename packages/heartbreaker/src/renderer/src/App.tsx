@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { ChatContext, chatReducer, initialState } from './store/chat'
+import { ChatContext, chatReducer, initialState, type ChatState } from './store/chat'
 import { saveMessages } from './store/messageCache'
 import { SettingsContext, useSettingsProvider, useSettings } from './store/settings'
 import { ProfileContext } from './components/Sidebar'
@@ -23,7 +23,7 @@ import PendingAsksTray from './components/PendingAsksTray'
 import ConnectionSetupModal from './components/ConnectionSetupModal'
 import { Skeleton } from './components/Skeleton'
 import type { AppConfig } from './lib/types'
-import { fetchSessions, getHouseParty, setHouseParty, getLockdown } from './lib/api'
+import { fetchSessions, fetchMessages, readHouseParty, standDownHouseParty, getLockdown } from './lib/api'
 import { resolveConnection } from './lib/connection'
 import { useT } from './lib/i18n'
 import { useScreenLock } from './lib/useScreenLock'
@@ -72,7 +72,22 @@ function buildProfile(agentId: string): AppProfile {
 
 function AppInner() {
   const [state, dispatch] = useReducer(chatReducer, initialState)
-  const [profile, setProfile] = useState<AppProfile>(DEFAULT_PROFILE)
+  const chatStateRef = useRef(state)
+  chatStateRef.current = state
+  const previousChatRef = useRef<ChatState | null>(null)
+  const [partyError, setPartyError] = useState('')
+  const partyExitPending = useRef(false)
+  const [profile, setProfile] = useState<AppProfile>(() => {
+    try {
+      const saved = localStorage.getItem('speda-last-agent')
+      if (saved && BRANDS[saved]) return buildProfile(saved)
+    } catch { /* Storage can be disabled by the browser. */ }
+    return DEFAULT_PROFILE
+  })
+  useEffect(() => {
+    if (profile.agentId === 'warroom') return
+    try { localStorage.setItem('speda-last-agent', profile.agentId) } catch { /* Optional preference. */ }
+  }, [profile.agentId])
   const [arrival, setArrival] = useState<AppProfile | null>(null)
   const arrivalRef = useRef<AppProfile | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -119,7 +134,7 @@ function AppInner() {
   /** Where an in-flight ENTER cinematic is heading (standby vs engaged). */
   const pendingRef = useRef<WarMode>('standby')
   /** The agent to return to after stand down — the last non-warroom profile. */
-  const prevAgentRef = useRef(DEFAULT_PROFILE.agentId)
+  const prevAgentRef = useRef(profile.agentId)
   const profileRef = useRef(profile)
   profileRef.current = profile
   const configRef = useRef(config)
@@ -195,6 +210,7 @@ function AppInner() {
     fetchSessions(cfg)
       .then(s => { if (configRef.current?.agentId === agentId) dispatch({ type: 'SET_SESSIONS', payload: s }) })
       .catch(() => { if (configRef.current?.agentId === agentId) dispatch({ type: 'SET_SESSIONS', payload: [] }) })
+    return cfg
   }, [])
 
   /** Open the war room from the UI — branded STANDBY (protocol offline). */
@@ -215,7 +231,15 @@ function AppInner() {
   const exitWarRoom = useCallback((userInitiated: boolean) => {
     if (warModeRef.current === 'off' || activationRef.current) return
     if (userInitiated && warModeRef.current === 'engaged' && configRef.current) {
-      setHouseParty(configRef.current, false).catch(() => {})
+      if (partyExitPending.current) return
+      partyExitPending.current = true
+      const requestedConfig = configRef.current
+      setPartyError('')
+      void standDownHouseParty(requestedConfig).then(() => {
+        if (configRef.current === requestedConfig && warModeRef.current !== 'off') setActivation('standdown')
+      }).catch(cause => setPartyError(cause instanceof Error ? cause.message : String(cause)))
+        .finally(() => { partyExitPending.current = false })
+      return
     }
     setActivation('standdown')
   }, [])
@@ -226,11 +250,23 @@ function AppInner() {
       stopPartyCycle()
       const prev = buildProfile(prevAgentRef.current)
       setProfile(prev)   // applyTheme effect snaps the palette back under the veil
-      retarget(prev.agentId)
+      const restoredConfig = retarget(prev.agentId)
+      const saved = previousChatRef.current
+      previousChatRef.current = null
+      if (saved && saved.config?.agentId === prev.agentId && saved.config.apiBase === restoredConfig.apiBase && saved.config.apiKey === restoredConfig.apiKey) {
+        dispatch({ type: 'RESTORE_CHAT', payload: { ...saved, config: restoredConfig } })
+        if (saved.activeSessionId != null) {
+          const sid = saved.activeSessionId
+          void fetchMessages(restoredConfig, sid).then(messages => {
+            if (configRef.current?.agentId === prev.agentId && chatStateRef.current.activeSessionId === sid)
+              dispatch({ type: 'SELECT_SESSION', payload: { sessionId: sid, messages } })
+          }).catch(() => {})
+        }
+      }
     } else {
       // Entering the war room (standby or engaged) — same takeover either way.
       const cur = profileRef.current
-      if (cur.agentId !== 'warroom') prevAgentRef.current = cur.agentId
+      if (cur.agentId !== 'warroom') { prevAgentRef.current = cur.agentId; previousChatRef.current = chatStateRef.current }
       startPartyCycle(cur.accent)
       setProfile(WARROOM_PROFILE)
       retarget('warroom')
@@ -249,7 +285,9 @@ function AppInner() {
     if (!config) return
     let live = true
     const check = async () => {
-      const engaged = await getHouseParty(config)
+      let engaged: boolean
+      try { engaged = await readHouseParty(config) }
+      catch { return } // Retain the last confirmed mode while disconnected.
       if (!live || activationRef.current || arrivalRef.current) return   // never interrupt a running cinematic
       const wm = warModeRef.current
       if (engaged && wm === 'off') engageParty()
@@ -402,6 +440,7 @@ function AppInner() {
           onExitWarRoom={() => exitWarRoom(true)}
         />
         <PendingAsksTray config={config} />
+        {partyError && <div role="alert" className="hb-room-error" style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 10060, background: 'var(--hb-base)' }}>{partyError}</div>}
         {connectionPrompt && (
           <ConnectionSetupModal
             initialApiBase={config.apiBase}

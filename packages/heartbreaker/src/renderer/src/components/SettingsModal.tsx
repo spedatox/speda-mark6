@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, reconnectConnection, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, microsoftLoginUrl, microsoftStatus, microsoftDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationAgents, createAutomation, updateAutomation, testAutomation, telegramConnect, telegramStatus } from '../lib/api'
 import { AutomationBuilder, describeHook, describeSchedule } from './AutomationBuilder'
 import { AutomationRunHistory } from './AutomationRunHistory'
 import VoicesTab from './VoicesTab'
@@ -99,12 +99,12 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
   // ── Connections ───────────────────────────────────────────────────────────
   const [conns, setConns] = useState<ConnectionInfo[]>([])
   const [connsLoaded, setConnsLoaded] = useState(false)
-  const [connBudget, setConnBudget] = useState({ used: 0, limit: 30000 })
+  const [connBudget, setConnBudget] = useState({ used: 0, limit: 0 })
   const loadConns = async () => {
     try {
       const r = await getConnections(config)
       setConns(r.servers)
-      setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit })
+      setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit ?? 0 })
     } finally {
       // Always clear — an unreachable backend must not skeleton this forever.
       setConnsLoaded(true)
@@ -421,15 +421,15 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.65)',
-        backdropFilter: 'blur(6px)',
+        // Keep the scrim unfiltered so the window can blur the page itself.
+        background: 'rgba(0,0,0,0.38)',
         animation: 'fadeIn 0.15s ease',
       }}
     >
       {/* The settings surface is a proper WINDOW, not a dialog box — it is where
           the owner configures the whole system, and the old 720×600 panel made
           eight tabs of real content scroll in a letterbox. */}
-      <div className="hb-island" style={{
+      <div className="hb-glass hb-island hb-settings-window" style={{
         width: 'min(1240px, 94vw)', height: 'min(820px, 90vh)',
         background: 'var(--glass-sheen), var(--glass-fill)',
         backdropFilter: 'blur(44px) saturate(170%)',
@@ -591,7 +591,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
             )}
 
             {/* Configuration tab — every backend setting, API keys included */}
-            {tab === 'config' && <ConfigTab config={config} />}
+            {tab === 'config' && <ConfigTab key={config.apiBase} config={config} onNavigate={setTab} />}
             {tab === 'personalities' && <PersonalityTab config={config} />}
 
             {/* Connections tab — toggle MCP servers live */}
@@ -682,6 +682,7 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
 
                   {/* Prefix budget bar */}
                   {(() => {
+                    if (!connBudget.limit) return <p style={{ color: 'var(--hb-text-faint)' }}>Tools load on demand. Provider limits are configured separately.</p>
                     const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
                     const over = connBudget.used > connBudget.limit
                     const col = over ? '#e5897c' : pct > 80 ? 'var(--hb-amber-bright)' : 'var(--hb-cyan)'
@@ -730,11 +731,12 @@ export default function SettingsModal({ config, onClose, onEngageLockdown }: Pro
                         name={c.label}
                         desc={c.connected
                           ? (c.always_on ? t.settingsConnections.toolsAlwaysOn(c.tools) : t.settingsConnections.toolsOnDemand(c.tools))
-                          : (c.needs ? t.settingsConnections.needs(c.needs) : t.settingsConnections.offline)}
+                          : (c.error || (c.needs ? t.settingsConnections.needs(c.needs) : t.settingsConnections.offline))}
                       >
+                        {!c.connected && c.active && <PillBtn onClick={() => { void reconnectConnection(config, c.server).catch(() => {}).finally(loadConns) }}>Reconnect</PillBtn>}
                         <Switch
-                          on={c.active && c.connected}
-                          disabled={!c.connected}
+                          on={c.active}
+
                           onChange={v => toggleConn(c.server, v)}
                           title={c.connected
                             ? (c.active ? t.settingsConnections.activeClickDisable : t.settingsConnections.disabledClickEnable)

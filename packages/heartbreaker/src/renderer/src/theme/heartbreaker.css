@@ -15,6 +15,53 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+@import './rich-blocks.css';
+@import './frosted-glass.css';
+
+/* Coordinator rooms: one public transcript, attributed speakers and real membership. */
+.hb-mention-input { width:100%; min-height:25px; max-height:200px; overflow-y:auto; background:transparent; border:0; outline:0; color:var(--hb-text); font:0.9375rem/1.65 'SamsungOne','Inter',sans-serif; white-space:pre-wrap; overflow-wrap:anywhere; caret-color:var(--hb-cyan); user-select:text; }
+.hb-mention-input[data-empty="true"]:before { content:attr(data-placeholder); color:var(--hb-text-dim); pointer-events:none; position:absolute; }
+.hb-agent-mention { display:inline-flex; align-items:center; gap:4px; padding:0 5px; border-radius:5px; background:rgba(var(--hb-accent-rgb),.12); color:var(--hb-text); vertical-align:baseline; white-space:nowrap; line-height:1.5; }
+.hb-agent-mention svg { flex-shrink:0; align-self:center; }
+.hb-agent-mention strong { font-weight:700; }
+.hb-mention-menu { position:fixed; z-index:10060; width:min(272px,calc(100vw - 16px)); padding:5px; overflow-y:auto; background:var(--hb-petrol); color:var(--hb-text); border:1px solid var(--hb-edge-bright); border-radius:12px; box-shadow:0 12px 36px rgba(0,0,0,.4); font-family:'SamsungOne','Inter',sans-serif; }
+.hb-mention-menu-title,.hb-mention-empty { padding:8px 10px; color:var(--hb-text-dim); font-size:.75rem; }
+.hb-mention-menu button { display:flex; width:100%; align-items:center; gap:10px; border:0; border-radius:7px; padding:9px 10px; background:transparent; color:inherit; font:inherit; font-size:.85rem; cursor:pointer; text-align:left; }
+.hb-mention-menu button[aria-selected="true"] { background:rgba(var(--hb-accent-rgb),.18); color:var(--hb-cyan-bright); }
+@media(pointer:coarse) { .hb-mention-menu button { min-height:44px; } }
+.hb-room-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--hb-line); flex-shrink:0; }
+.hb-room-toolbar>div:first-child { margin-right:auto; }
+.hb-room-toolbar strong,.hb-room-party-heading { font-family:var(--font-ui); font-size:0.9rem; font-weight:600; letter-spacing:.06em; }
+.hb-room-caption { display:block; color:var(--hb-text-dim); font-size:.75rem; line-height:1.5; }
+.hb-room-invite { display:flex; align-items:center; gap:7px; max-width:100%; }
+.hb-room-overlay { position:fixed; inset:0; z-index:10040; background:rgba(0,0,0,.36); display:flex; align-items:flex-start; justify-content:center; padding:90px 16px 16px; }
+.hb-room-picker { width:min(360px,100%); padding:18px; border:1px solid var(--hb-line); border-radius:16px; background:var(--hb-petrol); color:var(--hb-text); box-shadow:var(--glass-shadow); }
+.hb-room-picker-title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; font-size:.9rem; }
+.hb-room-picker-title button { color:var(--hb-text-dim); background:transparent; border:0; font-size:22px; cursor:pointer; }
+.hb-room-picker .hb-btn { padding:6px 12px; font-size:.8rem; }
+.hb-room-invite .hb-form-select { color:var(--hb-text); background:var(--hb-petrol); border:1px solid var(--hb-line); border-radius:9px; padding:6px 9px; font:inherit; font-size:.8rem; max-width:100%; }
+.hb-room-toolbar .hb-btn { min-height:32px; padding:5px 12px; font-size:.8rem; }
+.hb-room-hpp,.hb-room-protocol strong { color:var(--hb-amber-bright); }
+.hb-room-members { display:flex; flex-wrap:wrap; gap:8px; padding:10px 20px; flex-shrink:0; border-bottom:1px solid var(--hb-line); }
+.hb-room-member { display:inline-flex; align-items:center; gap:7px; color:var(--hb-text); font-size:.8rem; }
+.hb-room-member small { color:var(--hb-cyan-bright); font-size:.65rem; }
+.hb-room-member button,.hb-room-reply-context>button { color:var(--hb-text-dim); background:transparent; border:0; padding:3px 7px; cursor:pointer; }
+.hb-room-layout { display:flex; flex:1; min-height:0; min-width:0; overflow:hidden; }
+.hb-room-transcript { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+.hb-room-party { width:182px; flex-shrink:0; padding:18px 14px; border-left:1px solid var(--hb-line); background:var(--hb-base); overflow-y:auto; }
+.hb-room-player { display:flex; align-items:center; gap:10px; margin-top:18px; }
+.hb-room-player strong { font-size:.85rem; font-weight:500; }
+.hb-room-party-heading { color:var(--hb-amber-bright); }
+.hb-room-reply-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:7px 20px; font-size:.75rem; color:var(--hb-text-dim); flex-shrink:0; }
+.hb-room-error { padding:8px 20px; font-size:.8rem; color:var(--hb-amber-bright); overflow-wrap:anywhere; flex-shrink:0; }
+.hb-room-speaker { display:flex; align-items:center; gap:9px; margin-bottom:10px; font-size:.85rem; }
+.hb-room-speaker strong { font-weight:500; }
+.hb-room-speaker time { color:var(--hb-text-dim); font-size:.7rem; }
+.hb-room-notice { display:flex; align-items:center; justify-content:center; gap:9px; margin:19px 0; color:var(--hb-text-dim); font-size:.78rem; }
+.hb-room-notice:before,.hb-room-notice:after { content:''; height:1px; background:var(--hb-line); flex:1; }
+.hb-room-reply { display:block; background:transparent; border:0; color:var(--hb-text-dim); font-size:.73rem; padding:0 0 16px; margin-top:-12px; cursor:pointer; }
+@media(max-width:900px) { .hb-room-layout { flex-direction:column; } .hb-room-party { order:-1; width:auto; max-height:135px; display:flex; gap:15px; flex-wrap:wrap; border-left:0; border-bottom:1px solid var(--hb-line); padding:10px 15px; } .hb-room-party-heading { flex-basis:100%; } .hb-room-player { margin-top:0; } .hb-room-toolbar,.hb-room-members { padding:10px 14px; } }
+@media(pointer:coarse) { .hb-room-toolbar button,.hb-room-member button,.hb-room-reply,.hb-room-reply-context button { min-height:44px; min-width:44px; } .hb-room-invite .hb-form-select { min-height:44px; font-size:16px; } }
 
 /* SamsungOne — the real Samsung UI font, for readable body copy */
 @font-face {
@@ -98,10 +145,10 @@
      take the colour of what it frames; making the rim brand-coloured is what
      turned every panel into a tinted box. --hb-edge-bright (accent) is the
      focused/active rim, and that is where the brand shows. */
-  --hb-edge:        rgba(255, 255, 255, 0.10);        /* resting glass rim — neutral */
+  --hb-edge:        rgba(255, 255, 255, 0.14);        /* resting glass rim — neutral */
   --hb-edge-bright: rgba(var(--hb-accent-rgb), 0.40); /* focused / hovered rim */
-  --hb-holo-fill:   var(--glass-tint);          /* re-hued frost (follows the agent) */
-  --hb-holo-blur:   blur(38px) saturate(160%);  /* the frost itself */
+  --hb-holo-fill:   var(--glass-fill);          /* re-hued frost (follows the agent) */
+  --hb-holo-blur:   blur(32px) saturate(135%);  /* the frost itself */
   --hb-holo-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, 0.16),   /* top specular catch */
     0 24px 60px rgba(0, 0, 0, 0.5);              /* deep, soft lift off the void */
@@ -116,14 +163,14 @@
      Dark-adapted from the reference glass-card: a rim-lit frosted slab with a
      top specular streak, a left light edge, a bottom slab-thickness rim, a faint
      inner glass glow, and a soft drop that lifts it off the void. The fill is a
-     dark occluding base (nested backdrop roots cancel a child's blur, so the
-     fill must occlude on its own) with a milky tint layered on top. Rounded
-     corners per the reference. Tint/active/amber are thin modifiers on top. */
-  --glass-menu:     rgba(11, 16, 22, 0.95);        /* opaque fill for dropdowns/menus */
-  --glass-fill:     rgba(7, 11, 17, 0.42);         /* occluding dark base */
-  --glass-tint:     rgba(230, 238, 246, 0.07);     /* frost — lit face */
-  --glass-tint-2:   rgba(230, 238, 246, 0.02);     /* frost — shaded face */
-  --glass-tint-hi:  rgba(230, 238, 246, 0.12);     /* hover wash */
+     translucent dark base with a milky tint layered on top. Backdrop blur
+     diffuses the atmosphere through the pane. Nested menus have their own
+     denser fill for legibility. Tint/active/amber are thin modifiers on top. */
+  --glass-menu:     rgba(11, 16, 22, 0.98);        /* nested dropdowns/menus */
+  --glass-fill:     rgba(7, 11, 17, 0.45);         /* let the blurred backdrop through */
+  --glass-tint:     rgba(230, 238, 246, 0.10);     /* frost — lit face */
+  --glass-tint-2:   rgba(230, 238, 246, 0.025);    /* frost — shaded face */
+  --glass-tint-hi:  rgba(230, 238, 246, 0.15);     /* hover wash */
   /* The slab is lit ACROSS its face at 160deg, not washed flat. Two stops. */
   --glass-sheen:    linear-gradient(160deg, var(--glass-tint), var(--glass-tint-2));
   --glass-sheen-hi: linear-gradient(160deg, var(--glass-tint-hi), var(--glass-tint));
@@ -451,8 +498,8 @@
   background: transparent;
   border: none;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hb-holo-blur);
+  -webkit-backdrop-filter: var(--hb-holo-blur);
 }
 .glass-ghost:hover { background: var(--glass-tint); }
 
@@ -595,13 +642,9 @@ body {
    .hb-btn-ghost  icon-glyph button — invisible slab, glass wash on hover
    Consumers must NOT set inline border/background/box-shadow (they'd win the
    cascade and break the material); tint via `color` only. */
-/* CRITICAL: glass fills must OCCLUDE on their own. Most of these controls sit
-   inside an ancestor that already has backdrop-filter (sidebar, composer,
-   modal, every .hb-holo slab) — a nested backdrop root, so the child's own
-   blur is cancelled by Chromium and a whisper fill turns into a see-through
-   mess. Every fill below is therefore a dark occluding base with the milky
-   tint layered on top; blur stays as progressive enhancement for the
-   top-level cases where it does work. */
+/* Nested controls share the parent's diffused backdrop. Keep their fill
+   translucent so the sheen and rim retain depth; reserve --glass-menu for
+   menus that need to cover content behind a nested backdrop root. */
 .hb-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   color: var(--hb-icon-bright);
@@ -1073,6 +1116,7 @@ textarea { font-family: var(--font-read) !important; letter-spacing: 0 !importan
    an unclassed button (the chips the tabs build from bare style objects) is a
    pill. A tab that wants something else says so with a class, which then wins
    by being more specific than `:not([class])`. */
+.hb-settings-window { --hb-text-faint: color-mix(in srgb, var(--hb-text-dim) 90%, transparent); }
 .hb-settings input:not([type=range]),
 .hb-settings textarea,
 .hb-settings select        { border-radius: var(--r-tile) !important; }

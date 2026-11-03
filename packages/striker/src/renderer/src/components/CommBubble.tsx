@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
-import { agentColor, fmtCommTime } from '../lib/agents'
+import { agentDisplayName, agentColor, fmtCommTime } from '../lib/agents'
 import { hasMark } from '../lib/agentMarks'
 import AgentMark from './AgentMark'
 
@@ -146,16 +146,16 @@ export function Bubble({ e, mine = false, compact = false }: {
           display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3,
           fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
         }}>
-          <span style={{ color: from, fontWeight: 700 }}>{e.from_agent.toUpperCase()}</span>
+          <span style={{ color: from, fontWeight: 700 }}>{agentDisplayName(e.from_agent).toUpperCase()}</span>
           <span style={{ color: 'var(--hb-icon-dim)' }}>▸</span>
-          <span style={{ color: to, fontWeight: 700 }}>{e.to_agent.toUpperCase()}</span>
+          <span style={{ color: to, fontWeight: 700 }}>{agentDisplayName(e.to_agent).toUpperCase()}</span>
           <span style={{ color: 'var(--hb-icon-dim)' }}>{fmtCommTime(e.created_at)}</span>
           {e.protocol === 'house_party' && <span style={{ color: 'var(--hb-amber)' }}>HP</span>}
           {e.kind === 'broadcast' && <span style={{ color: 'var(--hb-amber)' }}>BROADCAST</span>}
           <span style={{ flex: 1 }} />
           <CopyBtn
             tint={from}
-            text={result ? `${e.task}\n\n--- ${e.to_agent.toUpperCase()} ---\n${result}` : e.task}
+            text={result ? `${e.task}\n\n--- ${agentDisplayName(e.to_agent).toUpperCase()} ---\n${result}` : e.task}
           />
           {clipped && (
             <button
@@ -181,7 +181,7 @@ export function Bubble({ e, mine = false, compact = false }: {
             margin: '0.4rem 0 0', fontFamily: MONO, fontSize: '0.56rem',
             letterSpacing: '0.12em', color: 'var(--hb-amber)',
           }}>
-            {e.to_agent.toUpperCase()} WORKING<span style={{ animation: 'hbBlink 1.1s ease-in-out infinite' }}>…</span>
+            {agentDisplayName(e.to_agent).toUpperCase()} WORKING<span style={{ animation: 'hbBlink 1.1s ease-in-out infinite' }}>…</span>
             {' '}<LiveElapsed since={e.created_at} />
           </p>
         ) : result && (
@@ -193,7 +193,7 @@ export function Bubble({ e, mine = false, compact = false }: {
               display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2,
               fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.08em',
             }}>
-              <span style={{ color: to, fontWeight: 700 }}>{e.to_agent.toUpperCase()}</span>
+              <span style={{ color: to, fontWeight: 700 }}>{agentDisplayName(e.to_agent).toUpperCase()}</span>
               {failed && <span style={{ color: 'var(--hb-red)' }}>{e.status.toUpperCase()}</span>}
               {e.duration_ms != null && (
                 <span style={{ color: 'var(--hb-icon-dim)' }}>{(e.duration_ms / 1000).toFixed(1)}s</span>

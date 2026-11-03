@@ -1,0 +1,218 @@
+{
+  "anthropic_api_key": {
+    "label": "Anthropic API Key"
+  },
+  "openai_api_key": {
+    "label": "OpenAI API Key"
+  },
+  "gemini_api_key": {
+    "label": "Google Gemini API Key"
+  },
+  "vertex_project_id": {
+    "label": "Vertex AI Project ID"
+  },
+  "vertex_credentials_file": {
+    "label": "Vertex Service-Account JSON"
+  },
+  "vertex_location": {
+    "label": "Vertex AI Location"
+  },
+  "zai_api_key": {
+    "label": "z.ai (GLM) API Key"
+  },
+  "deepseek_api_key": {
+    "label": "DeepSeek API Key"
+  },
+  "nvidia_api_key": {
+    "label": "NVIDIA NIM API Key"
+  },
+  "ollama_base_url": {
+    "label": "Ollama Base URL"
+  },
+  "llm_main_model": {
+    "label": "Main Model Override"
+  },
+  "llm_background_model": {
+    "label": "Background Model Override"
+  },
+  "mcp_enabled": {
+    "label": "MCP Servers Enabled"
+  },
+  "telegram_webhook_secret": {
+    "label": "Webhook Secret"
+  },
+  "telegram_bot_token": {
+    "label": "Speda Bot Token (legacy alias)"
+  },
+  "n8n_api_url": {
+    "label": "n8n API URL"
+  },
+  "n8n_api_key": {
+    "label": "n8n API Key"
+  },
+  "n8n_secret": {
+    "label": "n8n Trigger Secret"
+  },
+  "speda_callback_url": {
+    "label": "Speda Callback URL"
+  },
+  "google_client_id": {
+    "label": "Google Client ID"
+  },
+  "google_client_secret": {
+    "label": "Google Client Secret"
+  },
+  "google_refresh_token": {
+    "label": "Google Refresh Token"
+  },
+  "google_oauth_redirect": {
+    "label": "OAuth Redirect"
+  },
+  "microsoft_client_id": {
+    "label": "Application (client) ID"
+  },
+  "microsoft_client_secret": {
+    "label": "Client Secret Value"
+  },
+  "microsoft_tenant": {
+    "label": "Tenant"
+  },
+  "microsoft_refresh_token": {
+    "label": "Microsoft Refresh Token"
+  },
+  "microsoft_oauth_redirect": {
+    "label": "OAuth Redirect"
+  },
+  "notion_client_id": {
+    "label": "Notion Client ID"
+  },
+  "notion_client_secret": {
+    "label": "Notion Client Secret"
+  },
+  "notion_api_key": {
+    "label": "Notion API Key (legacy)"
+  },
+  "notion_oauth_redirect": {
+    "label": "OAuth Redirect"
+  },
+  "tavily_api_key": {
+    "label": "Tavily API Key"
+  },
+  "exa_api_key": {
+    "label": "Exa API Key"
+  },
+  "brave_search_api_key": {
+    "label": "Brave Search API Key"
+  },
+  "alpha_vantage_api_key": {
+    "label": "Alpha Vantage API Key"
+  },
+  "github_token": {
+    "label": "GitHub Token"
+  },
+  "google_maps_api_key": {
+    "label": "Google Maps API Key"
+  },
+  "owner_home_lat": {
+    "label": "Home Latitude"
+  },
+  "owner_home_lng": {
+    "label": "Home Longitude"
+  },
+  "nosyapi_api_key": {
+    "label": "NosyAPI Key"
+  },
+  "abuseipdb_api_key": {
+    "label": "AbuseIPDB Key"
+  },
+  "abuse_ch_api_key": {
+    "label": "abuse.ch Auth-Key"
+  },
+  "otx_api_key": {
+    "label": "AlienVault OTX Key"
+  },
+  "shodan_api_key": {
+    "label": "Shodan Key"
+  },
+  "hunter_api_key": {
+    "label": "Hunter.io Key"
+  },
+  "etherscan_api_key": {
+    "label": "Etherscan Key"
+  },
+  "intelx_api_key": {
+    "label": "Intelligence X Key"
+  },
+  "blockchair_api_key": {
+    "label": "Blockchair Key"
+  },
+  "aircraft_tracking_base_url": {
+    "label": "Aircraft Tracking API Base URL"
+  },
+  "owner_timezone": {
+    "label": "Owner Timezone"
+  },
+  "sandbox_url": {
+    "label": "Sandbox URL"
+  },
+  "browser_url": {
+    "label": "Browser URL"
+  },
+  "browser_token": {
+    "label": "Browser Token"
+  },
+  "browser_fallback_enabled": {
+    "label": "Render When Fetch Comes Back Empty"
+  },
+  "browser_max_chars": {
+    "label": "Browser Page Text Cap"
+  },
+  "browser_max_images": {
+    "label": "Page Images Returned"
+  },
+  "playwright_mcp_url": {
+    "label": "Public-Web Browser (playwright-mcp) URL"
+  },
+  "gpt_researcher_url": {
+    "label": "GPT-Researcher URL"
+  },
+  "shannon_url": {
+    "label": "Shannon URL"
+  },
+  "temp_outputs_dir": {
+    "label": "Temp Outputs Dir"
+  },
+  "elevenlabs_api_key": {
+    "label": "ElevenLabs API Key"
+  },
+  "azure_speech_key": {
+    "label": "Azure Speech Key"
+  },
+  "azure_speech_region": {
+    "label": "Azure Region"
+  },
+  "tts_default_voice": {
+    "label": "Default Voice"
+  },
+  "tts_locale": {
+    "label": "Spoken Locale Override"
+  },
+  "chat_max_output_tokens": {
+    "label": "Max Reply Length (tokens)"
+  },
+  "speda_api_key": {
+    "label": "Service API Key (X-API-Key)"
+  },
+  "house_party_passphrase": {
+    "label": "House Party Passphrase"
+  },
+  "cors_allowed_origins": {
+    "label": "CORS Allowed Origins"
+  },
+  "log_level": {
+    "label": "Log Level"
+  },
+  "debug": {
+    "label": "Debug Mode"
+  }
+}

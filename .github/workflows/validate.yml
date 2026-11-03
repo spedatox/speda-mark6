@@ -1,0 +1,70 @@
+name: Renovated validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build the production runtime and verification image
+        run: |
+          docker build --target production -t speda-renovated:ci .
+          docker build --target test -t speda-renovated-test:ci .
+      - name: SQLite and disposable PostgreSQL contracts
+        run: |
+          mkdir -p "$RUNNER_TEMP/speda-evidence" "$RUNNER_TEMP/speda-postgres"
+          docker run -d --name speda-test-postgres --network none --memory 768m \
+            --mount "type=bind,src=$RUNNER_TEMP/speda-postgres,dst=/var/lib/postgresql/data" \
+            -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_USER=release -e POSTGRES_DB=speda_release \
+            postgres:16-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
+          for attempt in $(seq 1 60); do
+            if docker exec speda-test-postgres pg_isready -U release -d speda_release; then break; fi
+            sleep 1
+          done
+          docker run --rm --network container:speda-test-postgres \
+            -e SPEDA_TEST_POSTGRES_URL=postgresql+asyncpg://release@127.0.0.1:5432/speda_release \
+            --mount "type=bind,src=$RUNNER_TEMP/speda-evidence,dst=/evidence" \
+            speda-renovated-test:ci python -m pytest tests -q -p no:cacheprovider \
+            --ignore=tests/test_docker_release.py --basetemp /tmp/speda-tests --junitxml /evidence/backend.xml
+      - name: Real Docker isolation, timeout, cancellation and teardown
+        run: |
+          docker pull python:3.11.17-slim-bookworm@sha256:f06d01d4ba3f8ad5af45a3ec87df19c1d317d8e8961edc0fabda61811af6f7cf
+          mkdir -p "$RUNNER_TEMP/speda-cells"
+          docker run --rm --network none \
+            --mount type=bind,src=/usr/bin/docker,dst=/usr/bin/docker,readonly \
+            --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+            --mount "type=bind,src=$RUNNER_TEMP/speda-cells,dst=$RUNNER_TEMP/speda-cells" \
+            --mount "type=bind,src=$RUNNER_TEMP/speda-evidence,dst=/evidence" \
+            -e "SPEDA_TEST_CELL_ROOT=$RUNNER_TEMP/speda-cells" \
+            -e SPEDA_TEST_CELL_IMAGE=python:3.11.17-slim-bookworm \
+            speda-renovated-test:ci python -m pytest tests/test_docker_release.py -q -p no:cacheprovider \
+            --basetemp /tmp/speda-docker-tests --junitxml /evidence/docker.xml
+      - name: Retain verification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: backend-verification
+          path: ${{ runner.temp }}/speda-evidence
+  clients:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Typecheck, behavioral tests and desktop/web builds
+        run: |
+          docker run --rm -e ELECTRON_SKIP_BINARY_DOWNLOAD=1 --mount "type=bind,src=$PWD,dst=/work" -w /work \
+            node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d sh -ec '
+            npm ci --no-audit --no-fund
+            npm run heartbreaker:typecheck
+            npm run striker:typecheck
+            npm run test:workers
+            npm run heartbreaker:build
+            npm run striker:build
+            npm run heartbreaker:web:build
+            npm run striker:web:build'

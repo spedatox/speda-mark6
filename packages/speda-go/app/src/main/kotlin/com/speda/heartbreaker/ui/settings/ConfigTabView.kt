@@ -59,6 +59,7 @@ import com.speda.heartbreaker.ui.HbText
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -73,12 +74,23 @@ import kotlinx.serialization.json.jsonPrimitive
 fun ConfigTabView(config: AppConfig, graph: AppGraph) {
     val scope = rememberCoroutineScope()
     val t = LocalStrings.current
+    val tr = t == com.speda.heartbreaker.i18n.Tr
 
     var groups by remember { mutableStateOf<List<ConfigGroupInfo>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<ConfigSaveResult?>(null) }
+    var revision by remember { mutableStateOf<Int?>(null) }
+    var instance by remember { mutableStateOf("") }
+    var canRestart by remember { mutableStateOf(false) }
+    var needsRestart by remember { mutableStateOf(false) }
+    var restarting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    var saveId by remember { mutableStateOf<String?>(null) }
+    var restartId by remember { mutableStateOf<String?>(null) }
+    val resets = remember { mutableStateMapOf<String, Boolean>() }
 
     // Only DIRTY fields live here; the value is already the wire JsonElement.
     val edits = remember { mutableStateMapOf<String, JsonElement>() }
@@ -87,11 +99,14 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
 
     suspend fun load() {
         loading = true
-        val g = graph.api.getConfig(config)
-        groups = g
-        // Open the first group by default so the panel isn't a wall of collapsed rows.
-        if (open.isEmpty() && g.isNotEmpty()) open[g.first().id] = true
-        loading = false
+        try {
+            val snapshot = graph.api.getConfigSnapshot(config)
+            groups = snapshot.groups; revision = snapshot.revision; instance = snapshot.instanceId
+            canRestart = snapshot.restart.available; needsRestart = snapshot.restartRequired.isNotEmpty()
+            if (open.isEmpty() && groups.isNotEmpty()) open[groups.first().id] = true
+            error = ""
+        } catch (e: Exception) { error = e.message ?: "Configuration unavailable" }
+        finally { loading = false }
     }
     LaunchedEffect(config) { load() }
 
@@ -112,10 +127,15 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
                 .padding(horizontal = 16.dp, vertical = 4.dp),
         ) {
             SectionHeader(t.settingsTabs.config.label)
-            Hint(t.settingsConfig.intro)
+            Hint(if (tr) "Kaydedilen sunucu ayarları yeniden başlatmada etkinleşir. Boş anahtar kapatır; geçersiz kılmayı sıfırlamak dağıtım değerine döner." else "Saved server settings apply together on restart. Empty credentials disable them; resetting an override restores the deployment value.")
+            if (error.isNotEmpty()) Hint(error)
+            if (notice.isNotEmpty()) Hint(notice)
+            SettingsButton(if (tr) "Kaydedilen ayarları yeniden yükle" else "Reload saved settings (keep draft)", enabled = !saving && !restarting, onClick = { scope.launch { load() } })
+            if (!canRestart && !loading) Hint(if (tr) "Yeniden başlatma için sunucuyu python -m app.supervisor ile başlatın." else "Start the server with python -m app.supervisor to enable restart.")
             Spacer(Modifier.height(12.dp))
 
             SourceOfTruthPanel(config, graph)
+            ConfigPoliciesView(config, graph)
             Spacer(Modifier.height(12.dp))
 
             if (loading) {
@@ -139,6 +159,9 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
                         dirtyCount = groupDirty,
                         onToggle = { open[g.id] = !(open[g.id] == true) },
                         edits = edits,
+                        resets = resets,
+                        editable = !saving && !restarting,
+                        onEdited = { saveId = null },
                         reveal = reveal,
                         t = t,
                     )
@@ -151,23 +174,43 @@ fun ConfigTabView(config: AppConfig, graph: AppGraph) {
         // Save bar — pinned to the bottom of the tab (the web's sticky footer).
         if (!loading) {
             SaveBar(
-                dirtyCount = edits.size,
-                saving = saving,
+                dirtyCount = (edits.keys + resets.keys).size,
+                saving = saving || restarting,
                 result = result,
-                onDiscard = { edits.clear(); result = null },
+                onDiscard = { edits.clear(); resets.clear(); saveId = null; result = null },
                 onSave = {
-                    if (edits.isNotEmpty() && !saving) {
+                    if ((edits.isNotEmpty() || resets.isNotEmpty()) && !saving && !restarting && revision != null) {
                         scope.launch {
                             saving = true; result = null
-                            val r = graph.api.saveConfig(config, edits.toMap(), t)
-                            result = r
-                            edits.clear()
-                            load()
-                            saving = false
+                            try {
+                                val id = saveId ?: java.util.UUID.randomUUID().toString().also { saveId = it }
+                                result = graph.api.saveConfig(config, edits.toMap(), revision!!, id, resets.keys.toList())
+                                edits.clear(); resets.clear(); saveId = null; restartId = null
+                                load()
+                            } catch (e: Exception) { error = e.message ?: "Configuration save failed" }
+                            finally { saving = false }
                         }
                     }
                 },
                 t = t,
+            )
+            if (needsRestart || result != null) SettingsButton(
+                if (restarting) (if (tr) "Yeniden başlatılıyor…" else "Restarting…") else (if (tr) "Arka ucu yeniden başlat" else "Restart backend"),
+                enabled = canRestart && edits.isEmpty() && resets.isEmpty() && !saving && !restarting,
+                onClick = {
+                    scope.launch {
+                        restarting = true; error = ""
+                        notice = if (tr) "Yeni arka uç bekleniyor…" else "Waiting for the new backend…"
+                        try {
+                            val id = restartId ?: java.util.UUID.randomUUID().toString().also { restartId = it }
+                            graph.api.restartBackend(config, revision!!, id)
+                            graph.api.waitForBackend(config, instance)
+                            notice = if (tr) "Arka uç yeniden başladı. API anahtarı veya adres değiştiyse bağlantıyı güncelleyin." else "Backend restarted. Update connection settings if its API key or address changed."
+                            restartId = null; result = null; load()
+                        } catch (e: Exception) { notice = ""; error = e.message ?: "Restart was not confirmed" }
+                        finally { restarting = false }
+                    }
+                },
             )
         }
     }
@@ -180,6 +223,9 @@ private fun ConfigGroup(
     dirtyCount: Int,
     onToggle: () -> Unit,
     edits: MutableMap<String, JsonElement>,
+    resets: MutableMap<String, Boolean>,
+    editable: Boolean,
+    onEdited: () -> Unit,
     reveal: MutableMap<String, Boolean>,
     t: AppStrings,
 ) {
@@ -219,9 +265,14 @@ private fun ConfigGroup(
                         dirty = f.key in edits,
                         revealed = reveal[f.key] == true,
                         onReveal = { reveal[f.key] = !(reveal[f.key] == true) },
-                        onChange = { edits[f.key] = it },
-                        onReset = { edits.remove(f.key) },
+                        onChange = { if (editable) { onEdited(); resets.remove(f.key); edits[f.key] = it } },
+                        onReset = { if (editable) { onEdited(); edits.remove(f.key); resets.remove(f.key) } },
                         t = t,
+                    )
+                    if (f.overridden) SettingsButton(
+                        if (t == com.speda.heartbreaker.i18n.Tr) (if (resets[f.key] == true) "Kaydetmede sıfırlanacak" else "Kayıtlı geçersiz kılmayı sıfırla") else (if (resets[f.key] == true) "Will reset on save" else "Reset saved override"),
+                        enabled = editable,
+                        onClick = { onEdited(); edits.remove(f.key); resets[f.key] = true },
                     )
                 }
             }
@@ -312,9 +363,10 @@ private fun ConfigFieldRow(
                     value = current,
                     onValueChange = { s ->
                         // int fields serialize as JSON numbers (like the web), not strings.
-                        if (f.type == "int") {
-                            val digits = s.filter { it.isDigit() }
-                            onChange(if (digits.isEmpty()) JsonPrimitive("") else JsonPrimitive(digits.toLong()))
+                        if (f.type == "int" || f.type == "float") {
+                            val numeric = s.toDoubleOrNull()
+                            onChange(if (s.isEmpty() && f.nullable) JsonNull else if (numeric == null) JsonPrimitive(s)
+                                else if (f.type == "int" && numeric % 1.0 == 0.0) JsonPrimitive(numeric.toLong()) else JsonPrimitive(numeric))
                         } else {
                             onChange(JsonPrimitive(s))
                         }
@@ -412,7 +464,7 @@ private fun SaveBar(
                 )
             }
         }
-        if (dirtyCount > 0) SettingsButton(t.settingsConfig.discard, onClick = onDiscard)
+        if (dirtyCount > 0) SettingsButton(t.settingsConfig.discard, onClick = onDiscard, enabled = !saving)
         SettingsButton(
             if (saving) t.settingsConfig.saving else t.settingsConfig.saveChanges,
             onClick = onSave,
@@ -442,8 +494,8 @@ private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
     fun fileName(p: String) = p.removePrefix("/memories/")
 
     Column(Modifier.fillMaxWidth().hbGlass(shape = HbGlassShape.Ctl).padding(12.dp)) {
-        HbText(t.settingsConfig.sourceOfTruthTitle, style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = palette.text)
-        Hint(t.settingsConfig.sourceOfTruthHint)
+        HbText(if (d.assignable) t.settingsConfig.sourceOfTruthTitle else "Iacon Catalogue", style = HbType.read.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold), color = palette.text)
+        Hint(if (d.assignable) t.settingsConfig.sourceOfTruthHint else "All agents use the shared Iacon catalogue. Orion maintains evidence-backed, versioned records.")
         Spacer(Modifier.height(8.dp))
         d.agents.forEach { a ->
             val options = buildList {
@@ -458,10 +510,12 @@ private fun SourceOfTruthPanel(config: AppConfig, graph: AppGraph) {
             ) {
                 Column(Modifier.width(110.dp)) {
                     HbText(a.name.ifEmpty { a.agentId }, style = HbType.read.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium), color = palette.text, maxLines = 1)
-                    HbText(a.source?.let { fileName(it) } ?: "—", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint, maxLines = 1)
+                    HbText(if (d.assignable) a.source?.let { fileName(it) } ?: "—" else "Iacon", style = HbType.readout.copy(fontSize = 10.sp), color = palette.textFaint, maxLines = 1)
                 }
                 Box(Modifier.weight(1f)) {
-                    InlineSelect(
+                    if (!d.assignable) {
+                        Hint("Shared governed memory")
+                    } else InlineSelect(
                         value = if (current.isEmpty()) (a.default?.let { t.settingsConfig.default(fileName(it)) } ?: t.settingsConfig.none) else fileName(current),
                         options = options.map { if (it.isEmpty()) (a.default?.let { d0 -> t.settingsConfig.default(fileName(d0)) } ?: t.settingsConfig.none) else fileName(it) },
                     ) { picked ->

@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-24",
+  "scope": "Local renovated Mark VI; fixture providers, temporary databases and isolated project directories",
+  "full_suite": {
+    "command": "python -m pytest tests -q --tb=short --basetemp <external scratch>",
+    "postgres": "PostgreSQL 16.14 on loopback; independent random test schemas",
+    "passed": 158,
+    "seconds": 151.41,
+    "note": "Collected before the final stop-reply uncertain-tool case was parametrized. Final changed paths were rerun below."
+  },
+  "final_contract_suite": {
+    "command": "python -m pytest tests/test_coordination.py tests/test_projects.py tests/test_coordination_api.py tests/test_coordination_postgres.py -q --tb=short --basetemp <external scratch>",
+    "passed": 43,
+    "seconds": 62.96,
+    "covers": [
+      "Separate persona contributions, consult returns and attributed reconnect",
+      "Owner scope, idempotent admission, shared parallel reservations",
+      "Paid response replay and held uncertain provider/tool outcomes",
+      "Queued owner-message isolation and separate reply/task/run stop scopes",
+      "Stable project identity, snapshot isolation and checkpoint revision conflicts",
+      "Dependent review of the exact worker artifact and retained interrupted claims",
+      "Actual Forge loop with fixture Cell and provider; native Kimi continuation",
+      "Authenticated APIs, paused spending gate and versioned decision records"
+    ]
+  },
+  "additional_checks": {
+    "room_javascript": "Node vm.Script parse passed",
+    "forge_provenance": "All original hashes match except the three declared adapters",
+    "git_diff_check": "passed",
+    "first_and_final_reference_checkouts": "clean"
+  },
+  "paid_provider_calls": 0,
+  "production_deployed": false,
+  "not_verified": [
+    "Live Hisar mounts, Docker teardown and restart continuation",
+    "Owner-reviewed character fidelity and actual model response quality",
+    "Live provider latency and spending-rate calibration",
+    "Full production migration and rollback"
+  ]
+}

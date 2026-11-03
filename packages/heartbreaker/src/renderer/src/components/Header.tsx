@@ -28,14 +28,14 @@ import { useT } from '../lib/i18n'
  * Workspace selector for anonymous Forge workers deployed through Legion.
  * Every Mark VI persona can delegate against the selected workspace.
  */
-function ForgeLink({ config }: { config: AppConfig }) {
+function ForgeLink({ config, boundCwd, locked }: { config: AppConfig; boundCwd?: string; locked?: boolean }) {
   const t = useT()
   const { settings, update } = useSettings()
   const [browserOpen, setBrowserOpen] = useState(false)
-  const cwd = settings.forgeCwd
+  const cwd = locked ? boundCwd || '' : settings.forgeCwd
   // Show the trailing folder name (the meaningful part). Hisar paths are always
   // POSIX with forward slashes — the UI uses the vault path as-is.
-  const folderName = cwd ? (cwd.replace(/\/+$/, '').split('/').pop() || cwd) : ''
+  const folderName = cwd ? (cwd.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || cwd) : ''
 
   return (
     <>
@@ -56,8 +56,9 @@ function ForgeLink({ config }: { config: AppConfig }) {
           maxWidth: 200, padding: '0 0.2rem 0 0.45rem',
         }}>
           <button
+            disabled={locked}
             onClick={() => setBrowserOpen(true)}
-            title={cwd ? t.header.workspaceSet(cwd) : t.header.workspaceUnset}
+            title={locked ? (cwd || 'This chat has no project folder') : cwd ? t.header.workspaceSet(cwd) : t.header.workspaceUnset}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
               border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
@@ -71,10 +72,10 @@ function ForgeLink({ config }: { config: AppConfig }) {
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
             </svg>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {folderName || t.header.setWorkspace}
+              {folderName || (locked ? 'No project folder' : t.header.setWorkspace)}
             </span>
           </button>
-          {cwd && (
+          {cwd && !locked && (
             <button
               onClick={() => update({ forgeCwd: '' })}
               title={t.header.clearWorkspace}
@@ -252,12 +253,16 @@ export default function Header({
   // list has nothing to read, so fall back to the store's activeProjectId and
   // resolve the name off the pinned list the sidebar already fetched.
   const [projectNames, setProjectNames] = useState<Record<number, string>>({})
+  const [projectFolders, setProjectFolders] = useState<Record<number, string>>({})
   useEffect(() => {
     if (!state.activeProjectId) return
     let alive = true
     fetchProjects(config).then(list => {
-      if (alive) setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
-    })
+      if (alive) {
+        setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
+        setProjectFolders(Object.fromEntries(list.map(p => [p.id, p.cwd])))
+      }
+    }).catch(() => { if (alive) setProjectNames({}) })
     return () => { alive = false }
   }, [config, state.activeProjectId])
   const projectName =
@@ -350,8 +355,14 @@ export default function Header({
 
       <div style={{ flex: 1, minWidth: 0 }} />
 
+      {state.activeSessionId != null && config.agentId !== 'warroom' && <button
+        className="hb-btn hb-tile" data-room-actions aria-label={t.room.actions} title={t.room.actions}
+        onClick={() => window.dispatchEvent(new CustomEvent('speda:room-actions'))}
+        style={{ width: 30, height: 30, flexShrink: 0, fontSize: 21 }}>⋯</button>}
+
       {/* Forge link — Optimus engine state + workspace (Optimus only) */}
-      <ForgeLink config={config} />
+      <ForgeLink config={config} locked={state.activeSessionId != null || state.activeProjectId != null}
+        boundCwd={activeSession?.cwd || (state.activeProjectId ? projectFolders[state.activeProjectId] : undefined)} />
 
       {/* The rail is NOT here — it floats above the telemetry column, out of
           this column's clipped overflow. Layout renders <DeckRail/>. This

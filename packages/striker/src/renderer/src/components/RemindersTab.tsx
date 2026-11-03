@@ -1,3 +1,5 @@
+import FormSelect from './FormSelect'
+import { agentDisplayName } from '../lib/agents'
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -143,7 +145,7 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
                 {d.text}
               </div>
               <div style={{ fontSize: '0.7rem', color: 'var(--hb-text-faint)', letterSpacing: '0.05em' }}>
-                {d.id} · {d.agent} · {d.days === '*' ? t.remindersTab.everyDay : d.days.split(',').map(n => DAY_LABELS[Number(n) - 1]).join(' ')}
+                {d.id} · {agentDisplayName(d.agent)} · {d.days === '*' ? t.remindersTab.everyDay : d.days.split(',').map(n => DAY_LABELS[Number(n) - 1]).join(' ')}
                 {' · '}{t.remindersTab.everyMinMax(d.every_minutes, d.max_asks)}
               </div>
             </div>
@@ -170,9 +172,9 @@ export default function RemindersTab({ config }: { config: AppConfig }): React.R
             </div>
             <div>
               <span style={label}>{t.remindersTab.askedBy}</span>
-              <select style={input} value={draft.agent} onChange={e => setDraft({ ...draft, agent: e.target.value })}>
-                {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <FormSelect aria-label={t.remindersTab.askedBy} style={input} value={draft.agent} onValueChange={value => setDraft({ ...draft, agent: value })}>
+                {AGENTS.map(a => <option key={a} value={a}>{agentDisplayName(a)}</option>)}
+              </FormSelect>
             </div>
           </div>
 

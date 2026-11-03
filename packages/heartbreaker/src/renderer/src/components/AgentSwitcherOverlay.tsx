@@ -105,7 +105,7 @@ export default function AgentSwitcherOverlay({
   currentAgentId: string
 }) {
   const t = useT()
-  const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, ROSTER.indexOf(currentAgentId)))
+  const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, ROSTER.indexOf(currentAgentId === 'friday' ? 'nightcrawler' : currentAgentId)))
   const [confirming, setConfirming] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const podRefs = useRef<(HTMLButtonElement | null)[]>([])

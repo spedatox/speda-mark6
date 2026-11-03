@@ -94,7 +94,7 @@ app.whenReady().then(() => {
   ipcMain.on('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
   ipcMain.on('window-maximize', (e) => {
     const w = BrowserWindow.fromWebContents(e.sender)
-    w?.isMaximized() ? w.unmaximize() : w.maximize()
+    if (w) w.isMaximized() ? w.unmaximize() : w.maximize()
   })
   ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender)?.close())
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Children, isValidElement, Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -16,6 +16,8 @@ import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
+import { TableBlock, TimelineBlock } from './StructuredBlock'
+import { normalizeCodeFences, recoverRichBlock, remarkRichBlocks } from '../lib/richBlocks'
 import MapBlock from './MapBlock'
 import AircraftBlock from './AircraftBlock'
 import BusBlock from './BusBlock'
@@ -25,15 +27,18 @@ import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 import HousePartyWarning from './HousePartyWarning'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
+import AgentMark from './AgentMark'
+import { BRANDS } from '../profile/brands'
+import AgentMentionText from './AgentMentionText'
 
-const RENDERABLE_LANGS = new Set(['html', 'svg'])
+const RENDERABLE_LANGS = new Set(['html', 'htm', 'widget', 'svg'])
 
 // Fence tags whose body is a payload parsed as a whole by a block renderer
 // below (ChartBlock/CalendarBlock/MapBlock/…/WidgetFrame). The typewriter holds
 // its reveal at the opening of one of these while it is still unclosed — half a
 // JSON object is not a chart. Every OTHER fence streams; see safeTarget.
 const HOLD_WHILE_OPEN = new Set([
-  'chart', 'calendar', 'map', 'aircraft', 'bus', ...RENDERABLE_LANGS,
+  'chart', 'calendar', 'table', 'timeline', 'map', 'aircraft', 'bus', ...RENDERABLE_LANGS,
 ])
 
 // House Party authorization is a real SSE event (`house_party_auth`) now, not a
@@ -859,7 +864,7 @@ function isSourcesParagraph(children: React.ReactNode): boolean {
 // Plugin arrays and config are hoisted to module scope so their identity is
 // stable across renders — recreating them inline makes react-markdown rebuild
 // its remark/rehype processor on every render, defeating its internal reuse.
-const REMARK_PLUGINS = [remarkGfm, remarkMath]
+const REMARK_PLUGINS = [remarkGfm, remarkMath, remarkRichBlocks]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const REHYPE_PLUGINS: any = [[rehypeKatex, { throwOnError: false, errorColor: '#f87171' }]]
 
@@ -875,12 +880,26 @@ const mdComponents: any = {
     }
     return <p>{children}</p>
   },
-  code({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) {
+  table({ children }: { children?: React.ReactNode }) {
+    return <div className="hb-rich-block hb-table-scroll" role="region" aria-label="Table" tabIndex={0}><table>{children}</table></div>
+  },
+  pre({ children }: { children?: React.ReactNode }) {
+    const child = Children.toArray(children)[0]
+    if (!isValidElement(child)) return <pre>{children}</pre>
+    const props = child.props as { className?: string; children?: React.ReactNode; 'data-title'?: string; 'data-pending'?: boolean }
     // Hyphens included — `language-hpp-warning` used to truncate to `hpp`, so
     // the alias set could never match its own primary tag.
-    const lang = /language-([\w-]+)/.exec(className || '')?.[1] ?? ''
-    const code = String(children).replace(/\n$/, '')
-    if (!inline && (lang || code.includes('\n'))) {
+    let lang = /language-([\w-]+)/.exec(props.className || '')?.[1]?.toLowerCase() ?? ''
+    let code = String(props.children).replace(/\n$/, '')
+    let title = props['data-title'] || ''
+    const recovered = recoverRichBlock(lang, code)
+    if (recovered) { lang = recovered.language; code = recovered.source; title ||= recovered.title }
+    if (props['data-pending'] && HOLD_WHILE_OPEN.has(lang)) {
+      return <div className="hb-rich-pending" role="status">Preparing {lang === 'html' || lang === 'htm' ? 'interactive widget' : lang}…</div>
+    }
+    if (lang === 'table') return <TableBlock source={code} title={title} />
+    if (lang === 'timeline') return <TimelineBlock source={code} title={title} />
+    {
       // Rich blocks run third-party renderers (MapLibre/WebGL, charting) on
       // model-authored input — each one is a place a throw can escape and, with
       // no boundary, blank the entire window. Isolate them individually so a bad
@@ -918,6 +937,8 @@ const mdComponents: any = {
       }
       return <CodeBlock language={lang}>{code}</CodeBlock>
     }
+  },
+  code({ children }: { children?: React.ReactNode }) {
     return (
       <code style={{
         background: 'rgba(var(--hb-accent-rgb),0.1)',
@@ -932,15 +953,6 @@ const mdComponents: any = {
 }
 
 /* ── Typewriter helpers ──────────────────────────────────────────────────── */
-
-/**
- * Ensure every ``` fence starts on its own line.
- * Models sometimes emit "...sentence.```html" with no preceding newline,
- * which ReactMarkdown ignores (fences must be at the start of a line).
- */
-function normalizeCodeFences(text: string): string {
-  return text.replace(/([^\n])```/g, '$1\n```')
-}
 
 /**
  * Prepare math for KaTeX without breaking currency or code.
@@ -969,9 +981,8 @@ function prepareMath(text: string): string {
  * output when we're only showing a partial string during streaming.
  */
 function sanitizePartialMarkdown(text: string): string {
-  // Close unclosed triple-backtick code fences
-  const fences = (text.match(/```/g) ?? []).length
-  if (fences % 2 !== 0) text += '\n```'
+  // CommonMark accepts an open fence at EOF. Preserve that fact so rich blocks
+  // can wait for completion instead of executing a half-written script.
   // Close unclosed single inline-backtick (exclude what's inside fences)
   const stripped = text.replace(/```[\s\S]*?```/g, '')
   const ticks = (stripped.match(/(?<!`)`(?!`)/g) ?? []).length
@@ -1190,13 +1201,14 @@ function UploadChip({ name, size }: { name: string; size: number }) {
 /* ── Props ───────────────────────────────────────────────────────────────── */
 interface Props {
   message: ChatMessage
+  showAttribution?: boolean
   onDelete?: () => void
   onRegenerate?: () => void
   onEditAndResend?: (newContent: string) => void
 }
 
 /* ── Component ───────────────────────────────────────────────────────────── */
-export default function Message({ message, onDelete, onRegenerate, onEditAndResend }: Props) {
+export default function Message({ message, showAttribution = true, onDelete, onRegenerate, onEditAndResend }: Props) {
   const t = useT()
   const { settings } = useSettings()
   const [hovered, setHovered] = useState(false)
@@ -1230,8 +1242,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
   // entire time the model spent writing the block — measured at 4.5s of dead
   // screen followed by ~900 characters arriving in one flash, which is the exact
   // "wait… wait… paragraph" this file is supposed to prevent. Slicing one is
-  // already safe: TextSegment runs sanitizePartialMarkdown, which closes an odd
-  // fence before ReactMarkdown ever sees it, so a partial block renders as a
+  // already safe: CommonMark accepts a fence open at EOF, so a partial block renders as a
   // growing CodeBlock — which is what streaming code should look like.
   const safeTarget = useCallback((text: string): number => {
     if (!streamingRef.current) return text.length
@@ -1243,7 +1254,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       if (openAt === -1) {
         const nl = text.indexOf('\n', i + 3)
         openAt = i
-        openTag = (nl === -1 ? text.slice(i + 3) : text.slice(i + 3, nl)).trim().toLowerCase()
+        openTag = (nl === -1 ? text.slice(i + 3) : text.slice(i + 3, nl)).trim().split(/[\s|]/)[0].toLowerCase()
       } else {
         openAt = -1
         openTag = ''
@@ -1484,7 +1495,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
                   // inside the bubble instead of stretching it past its max-width.
                   overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%',
                 }}>
-                  {message.content}
+                  <AgentMentionText text={message.content} />
                 </div>
               )}
               <div style={{ opacity: hovered ? 1 : 0, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
@@ -1520,6 +1531,11 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
       style={{ display: 'flex', marginBottom: '1.5rem', alignItems: 'flex-start', animation: 'fadeSlideIn 0.2s ease' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {showAttribution && message.speaker && <div className="hb-room-speaker">
+          <AgentMark agentId={message.speaker} size={29} />
+          <strong lang="en">{BRANDS[message.speaker]?.name ?? message.speaker}</strong>
+          {message.createdAt && <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>}
+        </div>}
         {/* This turn was not sent by the owner — a background job finished and
             woke the agent to deliver it. The receipt folds above the answer;
             the answer itself renders exactly as any other. */}
@@ -1584,7 +1600,8 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             the message bubble. Only one open at a time. */}
         {selectedSubagent && (
           <SubagentDetailView
-            run={selectedSubagent}
+            key={selectedSubagent.id}
+            run={message.subagents?.find(run => run.id === selectedSubagent.id) ?? selectedSubagent}
             onClose={() => setSelectedSubagent(null)}
           />
         )}

@@ -5,7 +5,7 @@
  *  profile's DocTheme accent (app/profiles/*.py). */
 
 export const AGENT_COLORS: Record<string, string> = {
-  speda: '#36abca', sentinel: '#d99c44', nightcrawler: '#9165e6',
+  speda: '#36abca', sentinel: '#d99c44', nightcrawler: '#9165e6', friday: '#9165e6',
   ultron: '#9e9e9e', scourge: '#d8483c', atomix: '#3fae74',
   optimus: '#2f4f8f', orion: '#e0703a', all: '#f2b75c', warroom: '#f2b75c',
 }
@@ -14,25 +14,27 @@ export const AGENT_COLORS: Record<string, string> = {
 export const ROSTER = ['speda', 'sentinel', 'nightcrawler', 'ultron', 'scourge', 'atomix', 'optimus', 'orion']
 
 /**
- * Who assembles for the House Party Protocol: Speda and the Superior Six.
- *
- * Orion is deliberately absent. It is Mark VI's own maintenance and memory
- * custodian — it keeps the record straight and the host healthy — not a field
- * agent, so it does not get pulled into an all-hands on the owner's work. Use
- * this, never ROSTER, for anything war-room or protocol shaped.
+ * House Party assembles everyone, including Orion, matching the Coordinator's
+ * full-roster warroom. This list is presentation/branding only; live membership
+ * is always read from the authenticated room.
  */
-export const PARTY_ROSTER = ROSTER.filter(id => id !== 'orion')
+export const PARTY_ROSTER = ROSTER
 
 export function agentColor(id: string): string {
   return AGENT_COLORS[id] ?? 'var(--hb-icon-bright)'
 }
 
 export function monogram(id: string): string {
-  return id.slice(0, 2).toUpperCase()
+  return agentDisplayName(id).slice(0, 2).toUpperCase()
 }
 
 export function fmtCommTime(iso: string): string {
   const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z')
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** Historical IDs remain storage/transport keys. */
+export function agentDisplayName(id: string): string {
+  return id === 'nightcrawler' || id === 'friday' ? 'Friday' : id
 }

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +49,8 @@ fun AppHeader(
     sessionTitle: String?,
     onToggleSidebar: () -> Unit,
     modifier: Modifier = Modifier,
+    onRoomActions: (() -> Unit)? = null,
+    roomActionsLabel: String = "Conversation participants",
 ) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
@@ -75,6 +79,11 @@ fun AppHeader(
             title = sessionTitle?.ifBlank { null } ?: t.sidebar.newLink,
             modifier = Modifier.weight(1f, fill = false),
         )
+        if (onRoomActions != null) {
+            Box(Modifier.size(36.dp).semantics { contentDescription = roomActionsLabel }.clickable(onClick = onRoomActions), contentAlignment = Alignment.Center) {
+                HbText("···", style = HbType.headerBar, color = palette.iconBright)
+            }
+        }
     }
 }
 

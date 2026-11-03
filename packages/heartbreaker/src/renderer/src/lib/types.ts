@@ -50,6 +50,18 @@ export interface SubagentRun {
    *  in-process Legion (Task) dispatch. Absent = 'peer', for events emitted
    *  before this field existed. */
   source?: 'legion' | 'peer' | 'forge' | 'dispatch'
+  /** Native durable execution identity; distinct from the parent reply/run. */
+  executionId?: string
+  ownerAgent?: string
+  workerRole?: string
+  executionType?: 'legion' | 'forge'
+  status?: string
+  model?: string
+  canInterrupt?: boolean
+  canMessage?: boolean
+  lastSequence?: number
+  seenEventIds?: string[]
+  activityPartial?: boolean
 }
 
 export interface ImageBlock {
@@ -108,6 +120,14 @@ export interface ReportMeta {
 }
 
 export interface ChatMessage {
+  speaker?: string
+  serverMessageId?: number
+  roomSequence?: number
+  roomOrder?: number
+  roomNotice?: { action: 'invite' | 'dismiss' | 'handoff'; agent_id: string }
+  createdAt?: string
+  coordinationStepId?: string
+  isWorkerAnchor?: boolean
   id: string
   role: Role
   content: string
@@ -150,6 +170,9 @@ export interface ChatMessage {
 }
 
 export interface Session {
+  cwd?: string | null
+  host_id?: string | null
+  workshop_project_id?: string | null
   id: number
   title: string | null
   started_at: string
@@ -174,6 +197,10 @@ export interface Session {
  * switches the entire project set. There is no shared project.
  */
 export interface Project {
+  cwd: string
+  host_id: string
+  workshop_project_id: string
+  version: number
   id: number
   agent_id: string
   name: string
@@ -218,7 +245,7 @@ export interface AppConfig {
 
 /** How hard a model is asked to think. Mirrors llm_client.THINKING_LEVELS —
  *  the backend is the source of truth for the vocabulary. */
-export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high'
+export type ThinkingLevel = string
 
 export const THINKING_LEVELS: ThinkingLevel[] = ['none', 'low', 'medium', 'high']
 
@@ -237,6 +264,7 @@ export interface ModelInfo {
    *  False for Ollama and NVIDIA — the control is shown disabled, not hidden,
    *  so the absence is legible rather than mysterious. */
   thinking_supported?: boolean
+  thinking_options?: ThinkingLevel[]
 }
 
 /** One question in a mid-turn interaction from a peer. */
@@ -279,9 +307,32 @@ export interface SSEEvent {
   // part of the answer. data is {text} per delta, or {redacted: true} for a
   // block Anthropic safety-redacted (nothing to show, just a marker).
   type: 'start' | 'chunk' | 'thinking' | 'tool' | 'tool_result' | 'file' | 'done' | 'error'
+      | 'room_event'
       | 'subagent' | 'permission_request' | 'house_party_auth' | 'lockdown_auth'
       | 'skyfall_arm'
   data: unknown
   session_id: number
   request_id: string
+}
+
+export interface RoomInfo {
+  id: string
+  title: string
+  lead: string
+  members: string[]
+  version: number
+  sequence: number
+  active_run: string | null
+}
+
+export interface RoomEvent {
+  schema_version: number
+  room_id: string
+  sequence: number
+  run_id: string | null
+  step_id: string | null
+  speaker: string
+  kind: string
+  payload: Record<string, unknown>
+  created_at: string
 }

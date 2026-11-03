@@ -60,7 +60,7 @@ export interface VoicePanel {
 /** Fenced languages that are an artefact in their own right, and which window
  *  kind each becomes. Anything else fenced is source code. */
 const FENCE_KIND: Record<string, PanelKind> = {
-  chart: 'chart', calendar: 'calendar', map: 'map', html: 'widget', svg: 'widget',
+  chart: 'chart', calendar: 'calendar', map: 'map', html: 'widget', htm: 'widget', widget: 'widget', svg: 'widget',
   table: 'table', math: 'math',
   // The presentation vocabulary — kinds that exist so a fact can be SHOWN
   // rather than spoken. Their bodies are small forgiving formats rather than
@@ -95,13 +95,13 @@ const LABEL: Record<PanelKind, string> = {
  *  board of six of them still reads as a row of figures. */
 const SIZE: Record<PanelKind, { w: number; h: number }> = {
   math:     { w: 440, h: 200 },
-  chart:    { w: 580, h: 350 },
+  chart:    { w: 600, h: 390 },
   map:      { w: 520, h: 380 },
-  calendar: { w: 620, h: 370 },
+  calendar: { w: 640, h: 480 },
   code:     { w: 500, h: 330 },
-  widget:   { w: 580, h: 390 },
-  table:    { w: 520, h: 300 },
-  stat:     { w: 260, h: 150 },
+  widget:   { w: 620, h: 430 },
+  table:    { w: 600, h: 420 },
+  stat:     { w: 280, h: 190 },
   image:    { w: 420, h: 320 },
   article:  { w: 400, h: 330 },
   card:     { w: 340, h: 340 },
@@ -109,7 +109,7 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
   quote:    { w: 400, h: 190 },
   // Tall rather than wide: it is a running list, and the thing worth seeing is
   // how many steps have happened, not each one's full width.
-  activity: { w: 420, h: 300 },
+  activity: { w: 340, h: 320 },
   // The widest of them, and tall. It is prose meant to be READ — the reason it
   // stopped being a three-line caption is that a subtitle only works when it is
   // in step with the voice, and it never was.
@@ -120,7 +120,7 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
  *  rich blocks (chart, calendar, map, code, widget) already draw their own
  *  panel — wrapping those in a second one would double every border. */
 export const FRAMED = new Set<PanelKind>([
-  'math', 'table', 'stat', 'image', 'article', 'card', 'timeline', 'quote',
+  'math', 'stat', 'image', 'article', 'card', 'quote',
   'activity', 'narration',
 ])
 
@@ -316,65 +316,39 @@ export function hasArtifacts(panels: VoicePanel[]): boolean {
   return panels.length > 0
 }
 
-/* ── Layout ────────────────────────────────────────────────────────────────
- * Shelf packing, left to right, wrapping down. Two rules beyond the obvious:
- * the docked orb owns the bottom-right corner and nothing may be placed under
- * it, and if the board overflows, every window scales down together rather
- * than the last ones falling off the bottom. */
-
+/* Canvas windows retain reading sizes. Overflow belongs to the board's scroll
+ * surface, never to a global scale factor that makes every window illegible. */
 export interface Placed extends VoicePanel { x: number; y: number; w: number; h: number }
+export const GAP = 16
 
-export const GAP = 14
-/** How far the fit pass may scale the whole board. The floor is a legibility
- *  limit; the ceiling stops a lone chart from becoming a billboard. */
-const MIN_SCALE = 0.55
-const MAX_SCALE = 1.45
-
-export function pack(
-  panels: VoicePanel[], W: number, H: number, reserveX: number, reserveY: number,
-): Placed[] {
-  // The orb's corner, as a quadrant: everything right of reserveX AND below
-  // reserveY is spoken for.
-  const hitsOrb = (x: number, y: number, w: number, h: number) =>
-    x + w > reserveX && y + h > reserveY
-
-  const run = (scale: number): { out: Placed[]; bottom: number } => {
-    const out: Placed[] = []
-    let x = GAP, y = GAP, rowH = 0
-    for (const p of panels) {
-      let w = Math.round(Math.min(SIZE[p.kind].w * scale, Math.max(240, W - GAP * 2)))
-      const h = Math.round(SIZE[p.kind].h * scale)
-
-      if (x > GAP && x + w > W - GAP) { x = GAP; y += rowH + GAP; rowH = 0 }
-      if (hitsOrb(x, y, w, h)) {
-        // Try the next shelf first — that is where the room usually is…
-        if (x > GAP) { x = GAP; y += rowH + GAP; rowH = 0 }
-        // …and if the shelf itself runs into the orb, narrow to clear it.
-        if (hitsOrb(x, y, w, h)) w = Math.max(240, Math.round(reserveX - GAP - x))
-      }
-
-      out.push({ ...p, x, y, w, h })
+export function pack(panels: VoicePanel[], W: number, H: number, reserveX: number, reserveY: number): Placed[] {
+  // Keep the dock's right strip clear while it overlaps this viewport. Reserving
+  // it for every row also keeps scrolled content from moving behind the orb.
+  const right = reserveY < H && reserveX >= 600 && reserveX < W ? reserveX : W
+  const available = Math.max(1, right - GAP * 2 - 12)
+  const out: Placed[] = []
+  let row: Placed[] = [], rowWidth = 0, y = GAP
+  const flush = () => {
+    if (!row.length) return
+    const flexible = row.filter(p => p.kind !== 'stat')
+    const spare = Math.max(0, available - rowWidth)
+    const extra = flexible.length ? spare / flexible.length : 0
+    let x = GAP
+    for (const p of row) {
+      const w = Math.min(available, p.w + (p.kind === 'stat' ? 0 : extra))
+      out.push({ ...p, x, y, w })
       x += w + GAP
-      rowH = Math.max(rowH, h)
     }
-    return { out, bottom: y + rowH + GAP }
+    y += Math.max(...row.map(p => p.h)) + GAP
+    row = []; rowWidth = 0
   }
-
-  // Find the LARGEST scale the board still fits at, rather than shrinking by
-  // the overflow ratio in one pass. Two reasons that pass was wrong: shrinking
-  // changes where rows wrap, so the corrected layout is shorter than the ratio
-  // predicted and leaves the bottom of the board empty; and with few windows
-  // there is room to grow, which a shrink-only rule can never use. Bisection is
-  // ~9 packs of a handful of rectangles — nothing, and it fills the board.
-  const fits = (s: number) => run(s).bottom <= H
-  let lo = MIN_SCALE, hi = MAX_SCALE
-  if (fits(hi)) return run(hi).out
-  for (let i = 0; i < 9; i++) {
-    const mid = (lo + hi) / 2
-    if (fits(mid)) lo = mid
-    else hi = mid
+  for (const panel of panels) {
+    const base = SIZE[panel.kind].w
+    const w = Math.min(base, available, base >= 500 && available >= 1000 && available < 1280 ? (available - GAP) / 2 : available)
+    if (row.length && rowWidth + GAP + w > available) flush()
+    row.push({ ...panel, x: 0, y, w, h: SIZE[panel.kind].h })
+    rowWidth += (row.length > 1 ? GAP : 0) + w
   }
-  // `lo` is only known to fit if something did; at the floor nothing does, and a
-  // board scaled to nothing is worse than one you have to drag a window on.
-  return run(lo).out
+  flush()
+  return out
 }

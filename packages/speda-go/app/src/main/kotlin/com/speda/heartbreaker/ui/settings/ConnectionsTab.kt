@@ -46,6 +46,8 @@ import com.speda.heartbreaker.domain.AppConfig
 import com.speda.heartbreaker.i18n.AppStrings
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -68,6 +70,7 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
     var mcp by remember { mutableStateOf(CustomMcpResult()) }
     var portals by remember { mutableStateOf(PortalsResult()) }
     var addingServer by remember { mutableStateOf(false) }
+    var mcpError by remember { mutableStateOf<String?>(null) }
     var addingPortal by remember { mutableStateOf(false) }
 
     suspend fun reload() { data = api.getConnections(config) }
@@ -131,13 +134,13 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
         SectionHeader(t.settingsConnections.toolBudget)
         Panel {
             val used = data.activeToolTokens
-            val limit = data.itpmLimit.coerceAtLeast(1)
+            val limit = (data.itpmLimit ?: 0).coerceAtLeast(1)
             val pct = (used.toFloat() / limit).coerceIn(0f, 1f)
             val over = used > limit
             val col = if (over) palette.red else if (pct > 0.8f) palette.amber else palette.green
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 HbText(t.settingsConnections.activeToolTokens, style = HbType.readout.copy(fontSize = 10.sp), color = palette.textDim)
-                HbText("~$used / $limit", style = HbType.readout.copy(fontSize = 10.sp), color = col)
+                HbText(if (data.itpmLimit == null) "On demand" else "~$used / $limit", style = HbType.readout.copy(fontSize = 10.sp), color = col)
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().height(6.dp).background(palette.accent.copy(alpha = 0.12f))) {
@@ -156,7 +159,7 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
             } else {
                 data.servers.forEachIndexed { i, c ->
                     if (i > 0) Spacer(Modifier.height(6.dp))
-                    ServerRow(c, t) { active ->
+                    ServerRow(c, t, onReconnect = { scope.launch { api.reconnectConnection(config, c.server); reload() } }) { active ->
                         data = data.copy(servers = data.servers.map { if (it.server == c.server) it.copy(active = active) else it })
                         scope.launch { api.setConnection(config, c.server, active); reload() }
                     }
@@ -168,6 +171,7 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
         // a code change. A DIFFERENT list from Toolsets above: those toggle the
         // engine's own managed servers, these are the owner's.
         SectionHeader(t.settingsConnections.customServers)
+        mcpError?.let { HbText(it, style = HbType.readout.copy(fontSize = 10.sp), color = palette.red) }
         Panel {
             if (mcp.servers.isEmpty() && !addingServer) {
                 HbText(t.settingsConnections.noCustomServers, style = HbType.readout.copy(fontSize = 11.sp), color = palette.textFaint)
@@ -184,10 +188,12 @@ fun ConnectionsTab(config: AppConfig, graph: AppGraph) {
                 AddMcpServerForm(
                     reserved = mcp.reserved,
                     onCancel = { addingServer = false },
-                    onSave = { name, transport, command, url, note ->
+                    onSave = { name, transport, command, url, note, credentials, agents, readOnly ->
                         scope.launch {
-                            val res = api.saveCustomMcpServer(config, name, transport, command, url, emptyMap(), emptyMap(), true, note)
-                            if (res.error == null) { addingServer = false; reloadMcp() }
+                            val res = api.saveCustomMcpServer(config, name, transport, command, url, if (transport == "stdio") credentials else emptyMap(), if (transport == "http") credentials else emptyMap(), true, note, agents, readOnly)
+                            mcpError = res.error
+                            reloadMcp()
+                            if (res.error == null) addingServer = false
                         }
                     },
                 )
@@ -282,7 +288,7 @@ private fun OAuthCard(
 }
 
 @Composable
-private fun ServerRow(c: ConnectionInfo, t: AppStrings, onToggle: (Boolean) -> Unit) {
+private fun ServerRow(c: ConnectionInfo, t: AppStrings, onReconnect: () -> Unit, onToggle: (Boolean) -> Unit) {
     val palette = LocalHbPalette.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatusDot(ok = c.connected, warnColor = palette.red)
@@ -290,13 +296,14 @@ private fun ServerRow(c: ConnectionInfo, t: AppStrings, onToggle: (Boolean) -> U
             HbText(c.label.ifEmpty { c.server }, style = HbType.read.copy(fontSize = 13.5.sp), color = palette.text, maxLines = 1)
             HbText(
                 if (c.connected) (if (c.alwaysOn) t.settingsConnections.toolsAlwaysOn(c.tools) else t.settingsConnections.toolsOnDemand(c.tools))
-                else (c.needs?.let { t.settingsConnections.needs(it) } ?: t.settingsConnections.offline),
+                else (c.error ?: c.needs?.let { t.settingsConnections.needs(it) } ?: t.settingsConnections.offline),
                 style = HbType.readout.copy(fontSize = 10.sp),
                 color = palette.textFaint,
                 maxLines = 1,
             )
         }
-        HbToggle(checked = c.active && c.connected, enabled = c.connected, color = palette.accent, onToggle = onToggle)
+        if (!c.connected && c.active) SettingsButton("Reconnect", onClick = onReconnect)
+        HbToggle(checked = c.active, enabled = true, color = palette.accent, onToggle = onToggle)
     }
 }
 
@@ -318,7 +325,7 @@ private fun McpServerRow(s: CustomMcpServer, onDelete: () -> Unit) {
 private fun AddMcpServerForm(
     reserved: List<String>,
     onCancel: () -> Unit,
-    onSave: (name: String, transport: String, command: String, url: String, note: String) -> Unit,
+    onSave: (name: String, transport: String, command: String, url: String, note: String, credentials: Map<String, String>, agents: List<String>, readOnly: List<String>) -> Unit,
 ) {
     val t = LocalStrings.current
     var name by remember { mutableStateOf("") }
@@ -326,6 +333,12 @@ private fun AddMcpServerForm(
     var command by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    var credentials by remember { mutableStateOf("{}") }
+    var agents by remember { mutableStateOf("speda") }
+    var readOnly by remember { mutableStateOf("") }
+    val parsedCredentials = runCatching {
+        kotlinx.serialization.json.Json.parseToJsonElement(credentials).jsonObject.mapValues { it.value.jsonPrimitive.content }
+    }.getOrNull()
     val nameClash = name.isNotBlank() && reserved.contains(name.trim())
 
     Column {
@@ -340,17 +353,23 @@ private fun AddMcpServerForm(
         Spacer(Modifier.height(8.dp))
         if (transport == "stdio") {
             FieldLabel("Command")
-            GlassField(command, { command = it }, placeholder = "npx -y @scope/server", singleLine = true, mono = true)
+            GlassField(command, { command = it }, placeholder = "npx -y @scope/server@1.2.3", singleLine = true, mono = true)
         } else {
             FieldLabel("URL")
             GlassField(url, { url = it }, placeholder = "https://example.com/mcp", singleLine = true, mono = true)
         }
         Spacer(Modifier.height(8.dp))
+        FieldLabel(if (transport == "http") "Headers (JSON)" else "Environment (JSON)")
+        GlassField(credentials, { credentials = it }, placeholder = "{}", singleLine = false, mono = true)
+        FieldLabel("Agent access (comma separated IDs)")
+        GlassField(agents, { agents = it }, placeholder = "speda", singleLine = true)
+        FieldLabel("Worker read-only tools (blank = no worker access)")
+        GlassField(readOnly, { readOnly = it }, placeholder = "", singleLine = true)
         FieldLabel("Note")
         GlassField(note, { note = it }, placeholder = "", singleLine = true)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SettingsButton(t.common.save, enabled = name.isNotBlank() && !nameClash, onClick = { onSave(name.trim(), transport, command, url, note) })
+            SettingsButton(t.common.save, enabled = name.isNotBlank() && !nameClash && parsedCredentials != null, onClick = { onSave(name.trim(), transport, command, url, note, parsedCredentials ?: emptyMap(), agents.split(",").map { it.trim() }.filter { it.isNotEmpty() }, readOnly.split(",").map { it.trim() }.filter { it.isNotEmpty() }) })
             SettingsButton(t.common.cancel, onClick = onCancel, tint = LocalHbPalette.current.textDim)
         }
     }

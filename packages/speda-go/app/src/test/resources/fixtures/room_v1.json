@@ -1,0 +1,11 @@
+[
+  {"room_id":"room","sequence":1,"run_id":"run","step_id":null,"speaker":"owner","kind":"user_message","payload":{"message_id":1,"text":"Plan the week"}},
+  {"room_id":"room","sequence":2,"run_id":"run","step_id":"lead","speaker":"speda","kind":"speaker_started","payload":{"mode":"owner"}},
+  {"room_id":"room","sequence":3,"run_id":"run","step_id":"lead","speaker":"speda","kind":"delta","payload":{"text":"Bringing Ultron in."}},
+  {"room_id":"room","sequence":4,"run_id":"run","step_id":"lead","speaker":"speda","kind":"tool","payload":{"data":{"id":"call","name":"collaborate","input":{"action":"invite"}}}},
+  {"room_id":"room","sequence":5,"run_id":"run","step_id":"lead","speaker":"speda","kind":"membership","payload":{"action":"invite","agent_id":"ultron","room":{"id":"room","title":"Study","lead":"speda","members":["speda","ultron"],"version":2,"sequence":5,"active_run":"run"}}},
+  {"room_id":"room","sequence":6,"run_id":"run","step_id":"lead","speaker":"speda","kind":"message","payload":{"message_id":2,"text":"Bringing Ultron in."}},
+  {"room_id":"room","sequence":7,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"speaker_started","payload":{"mode":"invite"}},
+  {"room_id":"room","sequence":8,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"delta","payload":{"text":"My own answer."}},
+  {"room_id":"room","sequence":9,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"message","payload":{"message_id":3,"text":"My own answer."}}
+]

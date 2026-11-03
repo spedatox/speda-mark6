@@ -338,7 +338,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   const [models, setModels] = useState<ModelInfo[]>([])
   const [servers, setServers] = useState<ConnectionInfo[]>([])
-  const [budgetTokens, setBudgetTokens] = useState({ used: 0, limit: 30000 })
+  const [budgetTokens, setBudgetTokens] = useState({ used: 0, limit: 0 })
   const [budgetMode, setBudgetMode] = useState(true)
   const [rtt, setRtt] = useState<number[]>([])
   const [memFiles, setMemFiles] = useState<MemoryFileInfo[]>([])
@@ -349,7 +349,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
 
   const loadConns = () => getConnections(config).then(r => {
     setServers(r.servers)
-    setBudgetTokens({ used: r.active_tool_tokens, limit: r.itpm_limit })
+    setBudgetTokens({ used: r.active_tool_tokens, limit: r.itpm_limit ?? 0 })
   }).catch(() => {})
 
   useEffect(() => {
@@ -561,13 +561,13 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
         <Panel title="TOKEN_BUDGET" style={{ flexShrink: 0, animation: 'hbRise 0.4s 0.16s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0.2rem 0.1rem 0.45rem' }}>
             <span className="hb-num-thin" style={{ fontSize: '2.6rem', color: gaugeColor }}>
-              {pct}<span style={{ fontSize: '1.1rem' }}>%</span>
+              {budgetTokens.limit ? <>{pct}<span style={{ fontSize: '1.1rem' }}>%</span></> : '—'}
             </span>
             <span style={{
               fontFamily: UI, fontSize: '0.56rem', fontWeight: 700,
               letterSpacing: '0.16em', color: 'var(--hb-icon)', lineHeight: 1.5,
             }}>
-              PREFIX<br/>SATURATION
+              {budgetTokens.limit ? <>PREFIX<br/>SATURATION</> : 'ON DEMAND'}
             </span>
           </div>
           <SegBar pct={pct} color={gaugeColor} />
@@ -575,7 +575,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
             fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.06em',
             color: 'var(--hb-icon)', margin: '0.35rem 0 0.6rem',
           }}>
-            ~{budgetTokens.used.toLocaleString()} / {budgetTokens.limit.toLocaleString()} ITPM
+            {budgetTokens.limit ? `~${budgetTokens.used.toLocaleString()} / ${budgetTokens.limit.toLocaleString()} ITPM` : 'Tools load on demand'}
           </p>
           {[...servers].sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(s => (
             <div key={s.server} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -594,7 +594,7 @@ export default function SystemsBoard({ config, onClose }: { config: AppConfig; o
                 }} />
               </span>
               <span style={{ width: 30, flexShrink: 0, textAlign: 'right', fontFamily: MONO, fontSize: '0.5rem', color: 'var(--hb-icon)' }}>
-                {(s.tokens / 1000).toFixed(1)}K
+                {budgetTokens.limit ? `${(s.tokens / 1000).toFixed(1)}K` : `${s.tools} tools`}
               </span>
             </div>
           ))}

@@ -18,4 +18,5 @@ export interface Brand {
 /** The runtime profile the UI consumes: a Brand plus the derived hover shade. */
 export interface AppProfile extends Brand {
   accentHover: string
+  suggestedPrompts?: string[]
 }

@@ -27,6 +27,7 @@ const POLL_MS = 3000
 
 export default function PendingAsksTray({ config }: { config: AppConfig }) {
   const [asks, setAsks] = useState<PendingAsk[]>([])
+  const [error, setError] = useState('')
   // ask_ids the owner just answered — hidden immediately so a click feels
   // instant, and kept out of the list until the backend stops returning them.
   const answeredRef = useRef<Set<string>>(new Set())
@@ -51,10 +52,16 @@ export default function PendingAsksTray({ config }: { config: AppConfig }) {
   const resolve = useCallback(async (ask: PendingAsk, approved: boolean, remember: boolean) => {
     answeredRef.current.add(ask.ask_id)
     setAsks(prev => prev.filter(a => a.ask_id !== ask.ask_id))
-    await answerAsk(config, ask.ask_id, approved, remember)
+    setError('')
+    try {
+      if (!await answerAsk(config, ask.ask_id, approved, remember)) throw new Error('Approval was not completed. Inspect the release status before retrying.')
+    } catch {
+      answeredRef.current.delete(ask.ask_id)
+      setError('Approval was not completed. Inspect the release status before retrying.')
+    }
   }, [config])
 
-  if (asks.length === 0) return null
+  if (asks.length === 0 && !error) return null
 
   return (
     <div style={{
@@ -64,6 +71,7 @@ export default function PendingAsksTray({ config }: { config: AppConfig }) {
       maxHeight: 'calc(100vh - 6rem)', overflowY: 'auto',
       zIndex: 60, pointerEvents: 'auto',
     }}>
+      {error && <div role="alert" className="hb-glass-sm" style={{ padding: 12 }}>{error}<button onClick={() => setError('')}>Dismiss</button></div>}
       {asks.map(ask => (
         <PermissionPrompt
           key={ask.ask_id}

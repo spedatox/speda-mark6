@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { createContext, useContext } from 'react'
-import type { ChatMessage, Session, AppConfig } from '../lib/types'
+import { foldRoomMessages, updateRoom } from '../lib/roomFold'
+import type { RoomInfo, RoomEvent } from '../lib/types'
+import type { ChatMessage, Session, AppConfig, SubagentRun } from '../lib/types'
 import { foldLegionEvent } from '../lib/subagentFold'
+import { mergeWorkerHistory, consolidateWorkerAnchors, upsertWorkerMessage } from '../lib/workerState'
 
 export interface TokenUsage {
   input: number
@@ -11,6 +14,9 @@ export interface TokenUsage {
 }
 
 export interface ChatState {
+  viewEpoch: number
+  room: RoomInfo | null
+  roomStream: { runId: string; cursor: number; placeholderId: string } | null
   config: AppConfig | null
   sessions: Session[]
   /** False until the first SET_SESSIONS lands (or again mid agent-switch, via
@@ -37,6 +43,9 @@ export interface ChatState {
 }
 
 export const initialState: ChatState = {
+  viewEpoch: 0,
+  room: null,
+  roomStream: null,
   config: null,
   sessions: [],
   sessionsLoaded: false,
@@ -48,15 +57,21 @@ export const initialState: ChatState = {
 }
 
 export type ChatAction =
+  | { type: 'SET_ROOM'; payload: { room: RoomInfo; sessionId: number } }
+  | { type: 'ROOM_STREAM_START'; payload: { room: RoomInfo; runId: string; placeholderId: string; sessionId: number } }
+  | { type: 'ROOM_EVENT'; payload: { event: RoomEvent; sessionId: number } }
+  | { type: 'ROOM_MEMBERSHIP'; payload: { event: RoomEvent; sessionId: number } }
+  | { type: 'RESTORE_CHAT'; payload: ChatState }
   | { type: 'SET_CONFIG'; payload: AppConfig }
   | { type: 'SET_SESSIONS'; payload: Session[] }
+  | { type: 'APPEND_SESSIONS'; payload: { sessions: Session[]; config: AppConfig } }
   /** Fired right as a re-fetch starts (agent switch) so the sidebar drops the
    *  PREVIOUS agent's stale list and skeletons instead of showing it mislabeled. */
   | { type: 'SESSIONS_LOADING' }
   /** `projectId` is passed when the caller already knows it (opening a chat
    *  from inside a project view, whose listing may reach us before the main
    *  session list has refreshed). Left off, it is read from the session row. */
-  | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[]; projectId?: number | null } }
+  | { type: 'SELECT_SESSION'; payload: { sessionId: number; messages: ChatMessage[]; projectId?: number | null; expectedViewEpoch?: number } }
   /** Start a new chat, optionally inside a project. Omitting projectId means a
    *  loose chat — it does NOT mean "keep the current one", so leaving a project
    *  can never leak its instructions into the next unrelated conversation. */
@@ -72,7 +87,8 @@ export type ChatAction =
   | { type: 'THINKING_DONE'; payload: { id: string; ms: number } }
   | { type: 'SET_STATUS'; payload: { id: string; status: string } }
   | { type: 'REWIND_MESSAGE'; payload: { id: string; status: string } }
-  | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number } }
+  | { type: 'TAG_MESSAGE_SESSION'; payload: { id: string; sessionId: number; stepId?: string; viewEpoch?: number } }
+  | { type: 'WORKER_SNAPSHOT'; payload: { id: string; sessionId: number; run: SubagentRun; parentStepId?: string; create?: boolean } }
   | { type: 'SET_MESSAGE_TRIGGER'; payload: { id: string; trigger: import('../lib/types').TriggerMeta } }
   | { type: 'ADD_TOOL'; payload: { id: string; tool: import('../lib/types').ToolBadge } }
   | { type: 'SUBAGENT'; payload: { id: string; event: Record<string, unknown> } }
@@ -87,16 +103,54 @@ export type ChatAction =
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
-    case 'SET_CONFIG':
-      return { ...state, config: action.payload }
+    case 'RESTORE_CHAT':
+      return { ...action.payload, viewEpoch: state.viewEpoch + 1, roomStream: null, isStreaming: false,
+        messages: action.payload.messages.map(message => ({ ...message, isStreaming: false, status: undefined })) }
+    case 'SET_ROOM':
+      if (state.activeSessionId !== action.payload.sessionId) return state
+      return { ...state, room: updateRoom(state.room, action.payload.room) }
+    case 'ROOM_STREAM_START':
+      if (state.activeSessionId !== action.payload.sessionId) return state
+      return { ...state, room: updateRoom(state.room, action.payload.room),
+        roomStream: { runId: action.payload.runId, cursor: 0, placeholderId: action.payload.placeholderId } }
+    case 'ROOM_MEMBERSHIP': {
+      if (state.activeSessionId !== action.payload.sessionId) return state
+      const messages = foldRoomMessages(state.messages, action.payload.event, '', action.payload.sessionId)
+      const confirmed = action.payload.event.payload.room as RoomInfo | undefined
+      return { ...state, messages, room: confirmed ? updateRoom(state.room, confirmed) : state.room }
+    }
+    case 'ROOM_EVENT': {
+      const { event, sessionId } = action.payload
+      if (state.activeSessionId !== sessionId || state.room?.id !== event.room_id ||
+          !state.roomStream || state.roomStream.runId !== event.run_id || event.sequence <= state.roomStream.cursor) return state
+      const confirmed = event.kind === 'membership' ? event.payload.room as RoomInfo | undefined : undefined
+      return { ...state, messages: foldRoomMessages(state.messages, event, state.roomStream.placeholderId, sessionId),
+        room: confirmed ? updateRoom(state.room, confirmed) : state.room,
+        roomStream: { ...state.roomStream, cursor: event.sequence } }
+    }
+    case 'SET_CONFIG': {
+      const changed = state.config && (state.config.apiBase !== action.payload.apiBase ||
+        state.config.apiKey !== action.payload.apiKey || state.config.agentId !== action.payload.agentId)
+      return { ...state, config: action.payload, ...(changed ? { viewEpoch: state.viewEpoch + 1,
+        room: null, roomStream: null, activeSessionId: null, activeProjectId: null, messages: [], isStreaming: false } : {}) }
+    }
 
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.payload, sessionsLoaded: true }
+      return { ...state, sessions: action.payload, sessionsLoaded: true,
+        activeProjectId: action.payload.find(s => s.id === state.activeSessionId)?.project_id ?? state.activeProjectId }
+
+    case 'APPEND_SESSIONS': {
+      const config = action.payload.config
+      if (!state.config || state.config.apiBase !== config.apiBase || state.config.apiKey !== config.apiKey || state.config.agentId !== config.agentId) return state
+      const known = new Set(state.sessions.map(session => session.id))
+      return { ...state, sessions: [...state.sessions, ...action.payload.sessions.filter(session => !known.has(session.id))] }
+    }
 
     case 'SESSIONS_LOADING':
       return { ...state, sessions: [], sessionsLoaded: false }
 
     case 'SELECT_SESSION': {
+      if (action.payload.expectedViewEpoch != null && action.payload.expectedViewEpoch !== state.viewEpoch) return state
       // Preserve any still-streaming bubble that belongs to the selected
       // session and isn't in the loaded payload — the reattach effect and the
       // history load race each other, and a wholesale replace here used to
@@ -104,19 +158,24 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const kept = state.messages.filter(
         m =>
           m.isStreaming &&
-          m.sessionId === action.payload.sessionId &&
-          !action.payload.messages.some(p => p.id === m.id)
+          m.sessionId === action.payload.sessionId
       )
+      const loaded = action.payload.messages.filter(message => !kept.some(live => live.id === message.id ||
+        (!!live.coordinationStepId && live.coordinationStepId === message.coordinationStepId && !message.isWorkerAnchor)))
       const opened = state.sessions.find(s => s.id === action.payload.sessionId)
+      const anchors = state.activeSessionId === action.payload.sessionId ? state.messages.filter(message => message.isWorkerAnchor) : []
       return {
         ...state,
+        viewEpoch: state.activeSessionId === action.payload.sessionId ? state.viewEpoch : state.viewEpoch + 1,
+        room: state.activeSessionId === action.payload.sessionId ? state.room : null,
+        roomStream: state.activeSessionId === action.payload.sessionId ? state.roomStream : null,
         activeSessionId: action.payload.sessionId,
         // Follow the opened chat into (or out of) its project, so the composer
         // and the header always name the workspace the transcript was written
         // in rather than whichever one happened to be open a moment ago.
         activeProjectId: action.payload.projectId ?? opened?.project_id ?? null,
-        messages: [...action.payload.messages, ...kept],
-        isStreaming: kept.length > 0,
+        messages: consolidateWorkerAnchors([...mergeWorkerHistory(loaded, state.activeSessionId === action.payload.sessionId ? state.messages : []), ...kept, ...anchors]),
+        isStreaming: kept.length > 0 || (state.activeSessionId === action.payload.sessionId && state.isStreaming),
         tokenUsage: {
           input: opened?.tokens_in ?? 0,
           output: opened?.tokens_out ?? 0,
@@ -125,12 +184,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'TAG_MESSAGE_SESSION':
+      if (action.payload.viewEpoch != null && action.payload.viewEpoch !== state.viewEpoch) return state
       return {
         ...state,
         activeSessionId: state.activeSessionId ?? action.payload.sessionId,
-        messages: state.messages.map(m =>
-          m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId } : m
-        ),
+        messages: consolidateWorkerAnchors(state.messages.map(m =>
+          m.id === action.payload.id ? { ...m, sessionId: action.payload.sessionId,
+            coordinationStepId: action.payload.stepId ?? m.coordinationStepId } : m
+        )),
       }
 
     // Provenance for a turn this client did not send — a background job
@@ -147,7 +208,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'NEW_CHAT':
       return {
-        ...state, activeSessionId: null, messages: [], isStreaming: false,
+        ...state, viewEpoch: state.viewEpoch + 1, room: null, roomStream: null, activeSessionId: null, messages: [], isStreaming: false,
         activeProjectId: action.payload?.projectId ?? null,
         tokenUsage: { input: 0, output: 0 },
       }
@@ -242,6 +303,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : m
         ),
       }
+
+    case 'WORKER_SNAPSHOT': {
+      if (state.activeSessionId !== action.payload.sessionId) return state
+      const { id, sessionId, run, parentStepId, create } = action.payload
+      return { ...state, messages: upsertWorkerMessage(state.messages, id, sessionId, run, parentStepId, create) }
+    }
 
     case 'SUBAGENT': {
       // One reducer case for every phase, because they all fold into the same

@@ -5,6 +5,7 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useSelectionContext } from './SelectionContext'
 import { useChatContext } from '../store/chat'
+import { mayClearSteeringDraft } from '../lib/useLiveSteering'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -17,6 +18,7 @@ import type { AppConfig, ModelInfo, ImageBlock, DocBlock, UploadedFile, Thinking
 import ThinkingLevelSlider from './ThinkingLevelSlider'
 import { useT } from '../lib/i18n'
 import type { Dict } from '../lib/i18n/en'
+import AgentMentionInput from './AgentMentionInput'
 
 interface AttachedFile {
   id: string
@@ -28,11 +30,12 @@ interface AttachedFile {
 }
 
 interface Props {
+  onValidateMessage?: (message: string) => string | null
   onSend: (message: string, opts?: { images?: ImageBlock[]; documents?: DocBlock[]; uploads?: UploadedFile[] }) => void
   onStop?: () => void
   /** Inject `message` into the turn that is CURRENTLY streaming, instead of
    *  waiting for it to finish. Resolves to whether it landed — false means the
-   *  running turn is not steerable (in-process, or it just ended), and the
+   *  running supervisor no longer accepts input, and the
    *  composer keeps the text rather than losing it. Absent entirely on a
    *  surface with no steering (only ChatMain wires this today). */
   onSteer?: (message: string) => Promise<boolean>
@@ -607,9 +610,9 @@ function MenuRow({ icon, label, value, valueColor, onClick }: {
   )
 }
 
-function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned, thinkingSupported, onThinking, onAttach, onToggleBudget, onVoice, onLanguage }: {
+function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned, thinkingSupported, thinkingOptions, onThinking, onAttach, onToggleBudget, onVoice, onLanguage }: {
   budget: boolean; listening: boolean; language: Locale
-  thinking: ThinkingLevel; thinkingPinned?: boolean; thinkingSupported: boolean
+  thinking: ThinkingLevel; thinkingPinned?: boolean; thinkingSupported: boolean; thinkingOptions?: ThinkingLevel[]
   onThinking: (level: ThinkingLevel) => void
   onAttach: () => void; onToggleBudget: () => void; onVoice: () => void
   onLanguage: (next: Locale) => void
@@ -725,13 +728,13 @@ function MobileToolsMenu({ budget, listening, language, thinking, thinkingPinned
           <MenuRow
             icon={<span style={{ fontSize: '0.72rem' }}>◇</span>}
             label={t.thinkingLevel.label}
-            value={thinkingSupported ? t.thinkingLevel.names[thinking] : t.thinkingLevel.na}
+            value={thinkingSupported ? ((t.thinkingLevel.names as Record<string, string>)[thinking] ?? thinking) : t.thinkingLevel.na}
             valueColor={thinkingSupported ? 'var(--hb-cyan-bright)' : 'var(--hb-icon-dim)'}
             onClick={() => thinkingSupported && setThinkingOpen(v => !v)}
           />
           {thinkingOpen && thinkingSupported && (
             <div style={{ padding: '0.55rem 0.85rem 0.7rem', borderTop: '1px solid rgba(var(--hb-accent-rgb),0.12)' }}>
-              <ThinkingLevelSlider value={thinking} pinned={thinkingPinned} supported onChange={onThinking} />
+              <ThinkingLevelSlider value={thinking} pinned={thinkingPinned} supported options={thinkingOptions} onChange={onThinking} />
             </div>
           )}
           {/* Available while streaming too — that is when barge-in happens. */}
@@ -786,6 +789,7 @@ const BG_PREFIX = '/bg '
 
 /* ── Main component ───────────────────────────────────────────────────────── */
 export default function InputBar({
+  onValidateMessage,
   onSend, onStop, onSteer, config, voiceMode, agentSpeaking, onSpeechStart, onMicState, micLevelRef,
 }: Props) {
   const t = useT()
@@ -794,7 +798,14 @@ export default function InputBar({
   const { language, setLanguage } = useLanguage(config)
   const profile = useProfile()
   const isMobile = useIsMobile()
-  const [value, setValue]           = useState('')
+  const [value, setValueState]      = useState('')
+  const draftRevision = useRef(0)
+  const draftScope = useRef({ sessionId: state.activeSessionId, agentId: config.agentId })
+  draftScope.current = { sessionId: state.activeSessionId, agentId: config.agentId }
+  const steeringInFlight = useRef(false)
+  const [steeringNotice, setSteeringNotice] = useState<string | null>(null)
+  useEffect(() => { setSteeringNotice(null) }, [state.activeSessionId, config.agentId])
+  const setValue = useCallback((next: React.SetStateAction<string>) => { draftRevision.current++; setValueState(next) }, [])
   const [focused, setFocused]       = useState(false)
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
   const [dragOver, setDragOver]     = useState(false)
@@ -803,7 +814,7 @@ export default function InputBar({
   const [voices, setVoices]         = useState<ModelInfo[]>([])
   const [budget, setBudget]         = useState(true)
   const [bgMode, setBgMode]         = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<HTMLDivElement>(null)
   const selectionContext = useSelectionContext(`${config.agentId}:${state.activeSessionId}:${state.activeProjectId}`, settings.locale, () => textareaRef.current?.focus())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
@@ -826,7 +837,7 @@ export default function InputBar({
   // forever no matter how many times it was set — the write reaching the server
   // each time, invisibly.
   const [thinkingSet, setThinkingSet] = useState<Record<string, ThinkingLevel>>({})
-  const activeThinking = thinkingSet[settings.model] ?? activeModel?.thinking ?? 'medium'
+  const activeThinking = thinkingSet[settings.model] ?? activeModel?.thinking ?? 'default'
   const activePinned = settings.model in thinkingSet || activeModel?.thinking_pinned
 
   const setThinking = useCallback((modelId: string, level: ThinkingLevel) => {
@@ -838,7 +849,18 @@ export default function InputBar({
     setThinkingSet(prev => ({ ...prev, [modelId]: level }))
     setModels(prev => prev.map(m =>
       m.id === modelId ? { ...m, thinking: level, thinking_pinned: true } : m))
-    setModelThinking(config, modelId, level).catch(() => {})
+    setModelThinking(config, modelId, level).then(ack => {
+      if (ack) {
+        setThinkingSet(prev => ({ ...prev, [modelId]: ack.thinking }))
+        return
+      }
+      setThinkingSet(prev => {
+        const next = { ...prev }
+        if (next[modelId] === level) delete next[modelId]
+        return next
+      })
+      fetchModels(config).then(setModels).catch(() => {})
+    })
   }, [config])
   // The voice catalogue is a separate call: Azure's list is a live per-region
   // lookup that can fail on its own, and a slow or dead voice endpoint must not
@@ -891,7 +913,7 @@ export default function InputBar({
     setAttachments(prev => { prev.forEach(a => URL.revokeObjectURL(a.url)); return [] })
   }
 
-  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const items = Array.from(e.clipboardData?.items ?? [])
     const imgs = items.filter(it => it.kind === 'file' && it.type.startsWith('image/'))
     if (imgs.length) {
@@ -920,6 +942,7 @@ export default function InputBar({
    * echoed back. submit() re-prepends it. The chip's × exits the mode and keeps
    * whatever task text was already typed as an ordinary message. */
   const onChangeValue = (next: string) => {
+    setSteeringNotice(null)
     if (!bgMode && next.startsWith(BG_PREFIX)) {
       setBgMode(true)
       setValue(next.slice(BG_PREFIX.length))
@@ -944,12 +967,25 @@ export default function InputBar({
     // the text in the composer rather than losing it or silently sending late.
     if (state.isStreaming) {
       if (bgMode || attachments.length > 0 || !msg || !onSteer) return
-      const landed = await onSteer(msg)
-      if (landed) { selectionContext.clear(); setValue(''); setTimeout(resize, 0) }
+      if (steeringInFlight.current) return
+      const revision = draftRevision.current
+      const scope = draftScope.current
+      steeringInFlight.current = true
+      setSteeringNotice(null)
+      try {
+        const landed = await onSteer(msg)
+        if (landed && mayClearSteeringDraft({ revision, ...scope }, { revision: draftRevision.current, ...draftScope.current })) {
+          selectionContext.clear(); setValue(''); setTimeout(resize, 0)
+        } else if (!landed && mayClearSteeringDraft({ revision, ...scope }, { revision: draftRevision.current, ...draftScope.current })) {
+          setSteeringNotice('Steering was not acknowledged. Your draft is retained; check the conversation or retry while this reply is active.')
+        }
+      } finally { steeringInFlight.current = false }
       return
     }
 
     if (!msg && attachments.length === 0) return
+    const validationError = onValidateMessage?.(msg)
+    if (validationError) { setSteeringNotice(validationError); return }
     const imageFiles = attachments.filter(a => a.isImage).map(a => a.file)
     const docFiles   = attachments.filter(a => !a.isImage).map(a => a.file)
     selectionContext.clear(); setValue(''); setBgMode(false); clearAttachments(); setTimeout(resize, 0)
@@ -970,7 +1006,7 @@ export default function InputBar({
     onSend(msg, Object.keys(opts).length ? opts : undefined)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
@@ -1061,6 +1097,7 @@ export default function InputBar({
     <div className="hb-composer" style={{ padding: '0.5rem 1.25rem 0.875rem', flexShrink: 0 }}>
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
         {selectionContext.panel}
+        {steeringNotice && <div role="status" style={{ color: 'var(--hb-text-muted)', fontSize: '0.75rem', padding: '0.4rem 0' }}>{steeringNotice}</div>}
 
         {/* ── Composer panel — precision-machined holographic glass ─────── */}
         <div
@@ -1169,27 +1206,18 @@ export default function InputBar({
             </div>
           )}
 
-          {/* Textarea */}
+          {/* Text and inline agent mentions */}
           <div style={{ padding: '1.05rem 1.05rem 0.5rem' }}>
-            <textarea
+            <AgentMentionInput
               ref={textareaRef}
-              rows={1}
               value={value}
-              onChange={e => onChangeValue(e.target.value)}
+              onChange={onChangeValue}
+              members={state.room?.members}
               onKeyDown={handleKeyDown}
               onPaste={onPaste}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder={bgMode ? 'Describe the background task…' : t.inputBar.placeholder}
-              style={{
-                width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                resize: 'none', color: 'var(--hb-text)',
-                fontSize: '0.9375rem', lineHeight: 1.65,
-                fontFamily: "'SamsungOne','Inter',sans-serif",
-                overflowY: 'hidden', maxHeight: 200,
-                caretColor: 'var(--hb-cyan)',
-                userSelect: 'text',
-              }}
             />
           </div>
 
@@ -1210,6 +1238,7 @@ export default function InputBar({
                   thinking={activeThinking}
                   thinkingPinned={activePinned}
                   thinkingSupported={activeModel?.thinking_supported !== false}
+                  thinkingOptions={activeModel?.thinking_options}
                   onThinking={lvl => setThinking(settings.model, lvl)}
                   onAttach={() => fileInputRef.current?.click()}
                   onToggleBudget={toggleBudget}
@@ -1274,7 +1303,7 @@ export default function InputBar({
                   such a model explains why the control went dead instead of
                   silently removing it from the row. */}
               {!isMobile && <ThinkingLevelSlider compact value={activeThinking} pinned={activePinned}
-                supported={activeModel?.thinking_supported !== false}
+                supported={activeModel?.thinking_supported !== false} options={activeModel?.thinking_options}
                 onChange={lvl => setThinking(settings.model, lvl)} />}
               <ModelPicker
                 models={models}

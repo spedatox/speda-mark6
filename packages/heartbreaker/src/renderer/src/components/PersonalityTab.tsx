@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import FormSelect from './FormSelect'
 import { useEffect, useState } from 'react'
 import { fetchAgentPersonalities, saveAgentPersonality } from '../lib/api'
 import type { AgentPersonalityInfo, PersonalitySettings } from '../lib/api'
@@ -77,23 +78,23 @@ export default function PersonalityTab({ config }: { config: AppConfig }) {
       </div>}
       {current && draft && <>
         <SettingsField label={a.agent}>
-          <select aria-label={a.agent} value={selected} disabled={busy} style={fieldStyle}
-            onChange={event => { setSelected(event.target.value); setSaved(false); setError('') }}>
+          <FormSelect aria-label={a.agent} value={selected} disabled={busy} style={fieldStyle}
+            onValueChange={value => { setSelected(value); setSaved(false); setError('') }}>
             {agents.map(item => <option key={item.agent_id} value={item.agent_id}>{item.name}</option>)}
-          </select>
+          </FormSelect>
         </SettingsField>
         <div style={{ color: 'var(--hb-text-dim)', fontSize: '0.8125rem' }}>{current.domain}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: 16 }}>
           {controls.map(control => <SettingsField key={control.key} label={control.label}>
-            <select aria-label={control.label} value={draft[control.key]} disabled={busy} style={fieldStyle}
-              onChange={event => change({ [control.key]: event.target.value } as Partial<PersonalitySettings>)}>
+            <FormSelect aria-label={control.label} value={draft[control.key]} disabled={busy} style={fieldStyle}
+              onValueChange={value => change({ [control.key]: value } as Partial<PersonalitySettings>)}>
               {control.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </FormSelect>
           </SettingsField>)}
         </div>
         <SettingsField label={a.instructions}>
           <textarea aria-label={a.instructions} value={draft.instructions} disabled={busy} maxLength={6000}
-            placeholder={a.placeholder} style={{ ...fieldStyle, minHeight: 190, resize: 'vertical', lineHeight: 1.6 }}
+            placeholder={a.placeholder} style={{ ...fieldStyle, minHeight: 190, padding: '12px 16px', resize: 'vertical', lineHeight: 1.6 }}
             onChange={event => change({ instructions: event.target.value })} />
         </SettingsField>
         <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-dim)' }}>{a.instructionsHint} · {draft.instructions.length}/6000</div>

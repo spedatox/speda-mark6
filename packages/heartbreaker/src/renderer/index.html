@@ -16,7 +16,7 @@
       blob:file:/// workers regardless of CSP. That is why main/index.ts serves
       the packaged renderer over app://bundle/ instead of file://.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; frame-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* https: wss:" />
     <title>Speda Mark VI</title>
   </head>
   <body>

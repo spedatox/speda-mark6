@@ -89,7 +89,7 @@ export interface AppSettings {
 }
 
 const DEFAULT: AppSettings = {
-  model: 'claude-sonnet-4-6',
+  model: (import.meta.env.VITE_DEFAULT_MODEL as string | undefined)?.trim() || 'claude-sonnet-4-6',
   systemPrompt: '',
   temperature: 0.7,
   locale: 'tr',

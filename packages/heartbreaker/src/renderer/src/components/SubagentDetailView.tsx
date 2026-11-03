@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { SubagentRun, SubagentStep } from '../lib/types'
+import { foldLegionEvent, workerLabel } from '../lib/subagentFold'
+import { attachWorkerExecution, inspectWorkerExecution, interruptWorker, messageWorker, newRequestId } from '../lib/api'
+import { useChatContext } from '../store/chat'
 import CodeBlock from './CodeBlock'
 import ErrorBoundary from './ErrorBoundary'
 
@@ -215,7 +218,102 @@ interface Props {
  * markdown and code-block pipeline as the main chat, scoped to one delegation.
  * The close button and Escape key dismiss it.
  */
-export default function SubagentDetailView({ run, onClose }: Props) {
+export default function SubagentDetailView({ run: initialRun, onClose }: Props) {
+  const { state } = useChatContext()
+  const [run, setRun] = useState(initialRun)
+  const [notice, setNotice] = useState('')
+  const [controlBusy, setControlBusy] = useState(false)
+  const [draft, setDraftState] = useState('')
+  const draftRevision = useRef(0)
+  const setDraft = (value: string) => { draftRevision.current++; setDraftState(value) }
+  const [reconnect, setReconnect] = useState(0)
+  const lastSequence = useRef(initialRun.lastSequence ?? 0)
+  const selectedExecution = useRef(initialRun.executionId ?? initialRun.id)
+  const pendingMessage = useRef<{ text: string; id: string } | null>(null)
+  const config = state.config
+  const executionId = run.executionId
+  const currentSelection = useRef(initialRun.executionId ?? initialRun.id)
+  currentSelection.current = initialRun.executionId ?? initialRun.id
+  const mounted = useRef(true)
+  const replaying = useRef(false)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+
+  useEffect(() => {
+    if (selectedExecution.current !== (initialRun.executionId ?? initialRun.id)) {
+      selectedExecution.current = initialRun.executionId ?? initialRun.id
+      lastSequence.current = initialRun.lastSequence ?? 0
+      pendingMessage.current = null
+      replaying.current = false
+      setControlBusy(false)
+      setNotice('')
+      setDraft('')
+    } else if (replaying.current) return
+    else lastSequence.current = Math.max(lastSequence.current, initialRun.lastSequence ?? 0)
+    setRun(previous => previous.id === initialRun.id && (previous.lastSequence ?? 0) > (initialRun.lastSequence ?? 0)
+      ? previous : initialRun)
+  }, [initialRun])
+  useEffect(() => {
+    if (!config || !executionId) return
+    const controller = new AbortController()
+    const fullReplay = replaying.current
+    void inspectWorkerExecution(config, executionId).then(info => {
+      if (controller.signal.aborted || selectedExecution.current !== executionId) return
+      setRun(previous => {
+        if ((previous.lastSequence ?? 0) > (info.last_sequence ?? 0)) return { ...previous, model: previous.model ?? info.model }
+        return { ...previous, ownerAgent: info.owner_agent || info.agent_id || previous.ownerAgent,
+          workerRole: info.role || info.worker || previous.workerRole, executionType: info.execution_type || info.backend,
+          status: info.status, model: info.model, canInterrupt: info.can_interrupt, canMessage: info.can_message,
+          running: ['admitted', 'queued', 'running', 'staging', 'waiting_input', 'waiting_dependency', 'cancel_requested'].includes(info.status ?? 'unknown'),
+          report: typeof info.result === 'string' ? info.result : info.result?.report ?? info.result?.reason ?? previous.report }
+      })
+    }).catch(error => { if (!controller.signal.aborted) setNotice(String(error.message || error)) })
+    ;(async () => {
+      for await (const event of attachWorkerExecution(config, executionId, controller.signal, lastSequence.current)) {
+        if (controller.signal.aborted || selectedExecution.current !== executionId) break
+        setRun(previous => {
+          const next = foldLegionEvent(previous, event)
+          lastSequence.current = Math.max(lastSequence.current, next.lastSequence ?? 0)
+          return next
+        })
+      }
+      if (fullReplay && !controller.signal.aborted && currentSelection.current === executionId) {
+        replaying.current = false
+        setNotice('Recorded activity loaded.')
+      }
+    })().catch(error => {
+      if (!controller.signal.aborted) setNotice(`Connection lost. Reconnect to recover task progress. ${error.message || ''}`)
+    })
+    return () => controller.abort()
+  }, [config, executionId, reconnect])
+
+  const controlStyle = { padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)',
+    background: 'rgba(255,255,255,0.04)', color: 'var(--hb-text)', cursor: 'pointer', font: 'inherit', fontSize: '0.78rem' }
+  const stopTask = async () => {
+    if (!config || !executionId || controlBusy || currentSelection.current !== executionId) return
+    setControlBusy(true)
+    try {
+      await interruptWorker(config, executionId)
+      if (mounted.current && currentSelection.current === executionId) setNotice('Stop requested for this task. Waiting for its confirmed state.')
+    } catch (error) { if (mounted.current && currentSelection.current === executionId) setNotice(error instanceof Error ? error.message : 'Task stop was not confirmed') }
+    finally { if (mounted.current && currentSelection.current === executionId) setControlBusy(false) }
+  }
+  const sendInput = async () => {
+    if (!config || !executionId || !draft.trim() || controlBusy || currentSelection.current !== executionId) return
+    const text = draft.trim()
+    if (pendingMessage.current?.text !== text) pendingMessage.current = { text, id: newRequestId().replace(/-/g, '') }
+    const pending = pendingMessage.current
+    const revision = draftRevision.current
+    setControlBusy(true)
+    try {
+      const receipt = await messageWorker(config, executionId, text, pending.id)
+      if (!mounted.current || currentSelection.current !== executionId) return
+      setNotice(receipt.status === 'delivered' ? 'Input delivered at a worker boundary; its response remains pending.'
+        : 'Input accepted for this task. Delivery is recorded at a worker boundary.')
+      if (pendingMessage.current === pending) pendingMessage.current = null
+      if (draftRevision.current === revision) setDraft('')
+    } catch (error) { if (mounted.current && currentSelection.current === executionId) setNotice(error instanceof Error ? error.message : 'Task input was not confirmed') }
+    finally { if (mounted.current && currentSelection.current === executionId) setControlBusy(false) }
+  }
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -293,7 +391,7 @@ export default function SubagentDetailView({ run, onClose }: Props) {
             fontSize: '0.72rem', color: 'var(--hb-text-dim)',
             letterSpacing: '0.04em',
           }}>
-            {run.source === 'forge' ? `Forge · ${run.agent.replace(/^forge_/, '')}` : run.agent}
+            {workerLabel(run)}
           </span>
         </div>
 
@@ -320,6 +418,30 @@ export default function SubagentDetailView({ run, onClose }: Props) {
           <IconClose />
         </button>
       </div>
+
+      {executionId && config && (
+        <section aria-label="Worker controls" style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.78rem', color: 'var(--hb-text-dim)' }}>
+            <span>{run.status || (running ? 'running' : 'finished')}{run.model ? ` · ${run.model}` : ''}</span>
+            <button style={controlStyle} type="button" disabled={controlBusy || !running || run.canInterrupt === false} onClick={stopTask}>Stop task</button>
+            <button style={controlStyle} type="button" disabled={controlBusy} onClick={() => { setNotice(''); setReconnect(value => value + 1) }}>Reconnect</button>
+            {run.activityPartial && <button style={controlStyle} type="button" disabled={controlBusy} onClick={() => {
+              replaying.current = true; lastSequence.current = 0
+              setRun(previous => ({ ...previous, steps: [], lastSequence: 0, seenEventIds: [], activityPartial: false }))
+              setNotice('Loading recorded activity…'); setReconnect(value => value + 1)
+            }}>Load recorded activity</button>}
+          </div>
+          {running && run.canMessage !== false && (
+            <form onSubmit={event => { event.preventDefault(); void sendInput() }} style={{ display: 'flex', gap: 8 }}>
+              <textarea aria-label="Message this task" value={draft} onChange={event => setDraft(event.target.value)} maxLength={6000} rows={2}
+                placeholder="Steer this task at its next safe boundary"
+                style={{ flex: 1, minWidth: 0, resize: 'vertical', color: 'var(--hb-text)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 6, padding: 8 }} />
+              <button style={controlStyle} type="submit" disabled={controlBusy || !draft.trim()}>Send to task</button>
+            </form>
+          )}
+          {notice && <span role="status" style={{ color: 'var(--hb-text-dim)', fontSize: '0.78rem' }}>{notice}</span>}
+        </section>
+      )}
 
       {/* ── Body — the chat-like thread ─────────────────────────────────── */}
       <div

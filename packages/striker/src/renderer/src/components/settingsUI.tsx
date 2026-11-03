@@ -109,11 +109,12 @@ export function Switch({ on, onChange, disabled, title }: {
 }
 
 /** A pill action — the settings pane's only button shape. */
-export function PillBtn({ onClick, children, tone = 'neutral', title }: {
+export function PillBtn({ onClick, children, tone = 'neutral', title, disabled }: {
   onClick?: () => void
   children: React.ReactNode
   tone?: 'neutral' | 'accent' | 'danger'
   title?: string
+  disabled?: boolean
 }) {
   const skin = tone === 'accent'
     ? { border: '1px solid rgba(var(--hb-accent-rgb),0.32)', background: 'rgba(var(--hb-accent-rgb),0.12)', color: 'var(--hb-cyan-bright)' }
@@ -123,13 +124,14 @@ export function PillBtn({ onClick, children, tone = 'neutral', title }: {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={title}
       className="glass-round"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
         height: 32, padding: '0 14px', flexShrink: 0,
         fontFamily: 'var(--font-read)', fontSize: '0.845rem',
-        cursor: 'pointer', ...skin,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1, ...skin,
       }}
     >
       {children}
@@ -208,4 +210,34 @@ export const fieldStyle: React.CSSProperties = {
   outline: 'none',
   transition: 'border-color 0.15s, background 0.15s',
   userSelect: 'text',
+}
+
+export function SliderField({ label, value, min, max, step, onChange, low, high, format }: {
+  label: string
+  value: number
+  min: number; max: number; step: number
+  onChange: (v: number) => void
+  low: string; high: string
+  /** How to render the live value — defaults to one decimal place. */
+  format?: (v: number) => string
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: '0.845rem', color: 'var(--hb-text-dim)' }}>{label}</span>
+        <span style={{ fontSize: '0.845rem', color: 'var(--hb-cyan)', fontVariantNumeric: 'tabular-nums' }}>
+          {format ? format(value) : value.toFixed(1)}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{ width: '100%' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{low}</span>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>{high}</span>
+      </div>
+    </div>
+  )
 }

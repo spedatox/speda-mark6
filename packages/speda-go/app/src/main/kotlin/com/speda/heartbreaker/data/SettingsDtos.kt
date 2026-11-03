@@ -26,6 +26,7 @@ data class ConnectionInfo(
     val tools: Int = 0,
     @SerialName("always_on") val alwaysOn: Boolean = false,
     val needs: String? = null,
+    val error: String? = null,
 )
 
 /** GET /connections — server list plus the prompt-prefix token budget. */
@@ -33,7 +34,7 @@ data class ConnectionInfo(
 data class ConnectionsResult(
     val servers: List<ConnectionInfo> = emptyList(),
     @SerialName("active_tool_tokens") val activeToolTokens: Int = 0,
-    @SerialName("itpm_limit") val itpmLimit: Int = 30000,
+    @SerialName("itpm_limit") val itpmLimit: Int? = null,
 )
 
 /** GET /automations — one proactive n8n watcher. */
@@ -188,6 +189,8 @@ data class ConfigFieldInfo(
     val label: String = "",
     val type: String = "text",           // text | password | bool | int | select | url
     val secret: Boolean = false,
+    val nullable: Boolean = false,
+    val overridden: Boolean = false,
     @SerialName("requires_restart") val requiresRestart: Boolean = false,
     val help: String = "",
     val placeholder: String = "",
@@ -209,10 +212,33 @@ data class ConfigGroupInfo(
 
 @Serializable
 data class ConfigSaveResult(
+    val revision: Int = 0,
     @SerialName("applied_live") val appliedLive: List<String> = emptyList(),
     @SerialName("restart_required") val restartRequired: List<String> = emptyList(),
     val rejected: List<String> = emptyList(),
 )
+
+@Serializable
+data class ConfigRestartInfo(val available: Boolean = false)
+
+@Serializable
+data class ConfigSnapshot(
+    val groups: List<ConfigGroupInfo> = emptyList(),
+    val revision: Int,
+    @SerialName("instance_id") val instanceId: String,
+    @SerialName("restart_required") val restartRequired: List<String> = emptyList(),
+    val restart: ConfigRestartInfo = ConfigRestartInfo(),
+)
+
+@Serializable
+data class ConfigPolicy(
+    val id: String, val label: String, val revision: Int,
+    val value: kotlinx.serialization.json.JsonObject,
+    val schema: kotlinx.serialization.json.JsonObject,
+)
+
+@Serializable
+data class ConfigPolicies(val policies: List<ConfigPolicy> = emptyList())
 
 /** Per-agent source-of-truth memory file assignment. */
 @Serializable
@@ -226,6 +252,8 @@ data class SourceAgentInfo(
 
 @Serializable
 data class MemorySources(
+    val assignable: Boolean = true,
+    val authority: String? = null,
     val files: List<String> = emptyList(),
     val agents: List<SourceAgentInfo> = emptyList(),
 )

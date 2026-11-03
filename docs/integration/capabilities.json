@@ -1,0 +1,5095 @@
+{
+  "source_commit": "c24c92f9c1126f8d07fb17a713d919ccef9bb3c5",
+  "routes": [
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "get_schedule",
+      "method": "GET",
+      "path": "/academic/schedule",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "put_schedule",
+      "method": "PUT",
+      "path": "/academic/schedule",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "sync_attendance",
+      "method": "POST",
+      "path": "/academic/attendance",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "attendance_summary",
+      "method": "GET",
+      "path": "/academic/attendance/summary",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "ask_pending",
+      "method": "POST",
+      "path": "/academic/ask-pending",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "handler": "register_device",
+      "method": "POST",
+      "path": "/devices/register",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "behavior_configuration",
+      "method": "GET",
+      "path": "/admin/evals/behavior-config",
+      "status": "verified_local_mocked",
+      "replacement": "Authenticated native evaluation snapshot: real model/thinking policy revisions, allowed tools by persona, Legion/Autobot/Decepticon roles and running public settings. Runtime evidence never certifies parity or production acceptance.",
+      "evidence": [
+        "tests/test_behavior_config.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "cleanup_outputs",
+      "method": "DELETE",
+      "path": "/admin/outputs",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "drain_background_jobs",
+      "method": "POST",
+      "path": "/admin/tasks/drain",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_shadow_report",
+      "method": "POST",
+      "path": "/admin/memory/shadow",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_status",
+      "method": "GET",
+      "path": "/admin/memory/status",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_verify",
+      "method": "GET",
+      "path": "/admin/memory/verify",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_split",
+      "method": "POST",
+      "path": "/admin/memory/split",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_shard",
+      "method": "POST",
+      "path": "/admin/memory/shard",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_render",
+      "method": "POST",
+      "path": "/admin/memory/render",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_compose",
+      "method": "POST",
+      "path": "/admin/memory/compose",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "handler": "memory_reindex",
+      "method": "POST",
+      "path": "/admin/memory/reindex",
+      "status": "superseded",
+      "replacement": "Iacon maintenance and revision-fenced incremental publication replace legacy file segmentation/compose/index jobs. Old maintenance commands are not exposed as aliases.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_personalities",
+      "method": "GET",
+      "path": "/agents/personalities",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_personality_set",
+      "method": "POST",
+      "path": "/agents/personalities",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "list_agents",
+      "method": "GET",
+      "path": "/agents",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_comms",
+      "method": "GET",
+      "path": "/agents/comms",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_models",
+      "method": "GET",
+      "path": "/agents/models",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_model_set",
+      "method": "POST",
+      "path": "/agents/models",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_telegram_model_set",
+      "method": "POST",
+      "path": "/agents/telegram-models",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "legion_models",
+      "method": "GET",
+      "path": "/agents/legion-models",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "legion_model_set",
+      "method": "POST",
+      "path": "/agents/legion-models",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "house_party_state",
+      "method": "GET",
+      "path": "/agents/house-party",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "house_party_toggle",
+      "method": "POST",
+      "path": "/agents/house-party",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "lockdown_state",
+      "method": "GET",
+      "path": "/agents/lockdown",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "lockdown_toggle",
+      "method": "POST",
+      "path": "/agents/lockdown",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "list_pending_asks",
+      "method": "GET",
+      "path": "/agents/asks",
+      "status": "superseded",
+      "replacement": "Retired remote-peer permission expansion. GET returns no pending peer asks; POST denies with 410. Native capability grants, Coordinator authority and Forge claims remain mandatory.",
+      "evidence": [
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "answer_pending_ask",
+      "method": "POST",
+      "path": "/agents/asks/{ask_id}",
+      "status": "superseded",
+      "replacement": "Retired remote-peer permission expansion. GET returns no pending peer asks; POST denies with 410. Native capability grants, Coordinator authority and Forge claims remain mandatory.",
+      "evidence": [
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "handler": "agent_websocket",
+      "method": "WEBSOCKET",
+      "path": "/agents/ws/{agent_id}",
+      "status": "superseded",
+      "replacement": "Coordinator rooms and collaboration; retired remote dispatch refuses production connections"
+    },
+    {
+      "source": "packages/igor/app/routers/aircraft.py",
+      "handler": "get_aircraft_track",
+      "method": "GET",
+      "path": "/aircraft/track/{tail_number}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "list_automations",
+      "method": "GET",
+      "path": "/automations",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "automation_agents",
+      "method": "GET",
+      "path": "/automations/agents",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "create_automation",
+      "method": "POST",
+      "path": "/automations",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "update_automation",
+      "method": "PUT",
+      "path": "/automations/{automation_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "test_automation",
+      "method": "POST",
+      "path": "/automations/{automation_id}/test",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "automation_runs",
+      "method": "GET",
+      "path": "/automations/{automation_id}/runs",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "workflow_drift",
+      "method": "GET",
+      "path": "/automations/drift",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "toggle_automation",
+      "method": "POST",
+      "path": "/automations/{automation_id}/toggle",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "delete_automation",
+      "method": "DELETE",
+      "path": "/automations/{automation_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "automations_status",
+      "method": "GET",
+      "path": "/automations/status",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "telegram_connect",
+      "method": "POST",
+      "path": "/automations/telegram/connect",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "handler": "telegram_status",
+      "method": "GET",
+      "path": "/automations/telegram/status",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "handler": "list_portals",
+      "method": "GET",
+      "path": "/connections/portals",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "handler": "save",
+      "method": "POST",
+      "path": "/connections/portals",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "handler": "login_now",
+      "method": "POST",
+      "path": "/connections/portals/{name}/login",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "handler": "forget",
+      "method": "POST",
+      "path": "/connections/portals/{name}/forget",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "handler": "remove",
+      "method": "DELETE",
+      "path": "/connections/portals/{name}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "list_models",
+      "method": "GET",
+      "path": "/models",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "set_model_thinking_endpoint",
+      "method": "POST",
+      "path": "/models/thinking",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "welcome",
+      "method": "GET",
+      "path": "/welcome/{agent_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "get_budget_mode_endpoint",
+      "method": "GET",
+      "path": "/budget-mode",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "set_budget_mode_endpoint",
+      "method": "POST",
+      "path": "/budget-mode",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "get_messages",
+      "method": "GET",
+      "path": "/sessions/{session_id}/messages",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "export_session",
+      "method": "GET",
+      "path": "/sessions/{session_id}/export",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "list_sessions",
+      "method": "GET",
+      "path": "/sessions",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "delete_session",
+      "method": "DELETE",
+      "path": "/sessions/{session_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "rename_session",
+      "method": "PATCH",
+      "path": "/sessions/{session_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat",
+      "method": "POST",
+      "path": "/chat",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat_agent",
+      "method": "POST",
+      "path": "/chat/{agent_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat_active",
+      "method": "GET",
+      "path": "/chat/active",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat_attach",
+      "method": "GET",
+      "path": "/chat/attach/{request_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat_cancel",
+      "method": "POST",
+      "path": "/chat/cancel/{request_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "chat_steer",
+      "method": "POST",
+      "path": "/chat/steer/{request_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "handler": "websocket_chat",
+      "method": "WEBSOCKET",
+      "path": "/ws",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/config.py",
+      "handler": "get_config",
+      "method": "GET",
+      "path": "/config",
+      "status": "verified_local_mocked",
+      "replacement": "Complete Settings-derived owner catalog, atomic versioned overrides, native policy editors and managed restart; startup settings apply together after restart.",
+      "evidence": [
+        "tests/test_configuration.py",
+        "tests/test_configuration_postgres.py",
+        "tests/test_configuration_process.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/config.py",
+      "handler": "put_config",
+      "method": "PUT",
+      "path": "/config",
+      "status": "verified_local_mocked",
+      "replacement": "Complete Settings-derived owner catalog, atomic versioned overrides, native policy editors and managed restart; startup settings apply together after restart.",
+      "evidence": [
+        "tests/test_configuration.py",
+        "tests/test_configuration_postgres.py",
+        "tests/test_configuration_process.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "list_connections",
+      "method": "GET",
+      "path": "/connections",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "toggle_connection",
+      "method": "POST",
+      "path": "/connections",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "list_custom_mcp",
+      "method": "GET",
+      "path": "/connections/mcp",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "save_custom_mcp",
+      "method": "POST",
+      "path": "/connections/mcp",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "remove_custom_mcp",
+      "method": "DELETE",
+      "path": "/connections/mcp/{name}",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "google_login",
+      "method": "GET",
+      "path": "/connections/google/login",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "google_status",
+      "method": "GET",
+      "path": "/connections/google/status",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "google_disconnect",
+      "method": "POST",
+      "path": "/connections/google/disconnect",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "google_callback",
+      "method": "GET",
+      "path": "/oauth/google/callback",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "microsoft_login",
+      "method": "GET",
+      "path": "/connections/microsoft/login",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "microsoft_status",
+      "method": "GET",
+      "path": "/connections/microsoft/status",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "microsoft_disconnect",
+      "method": "POST",
+      "path": "/connections/microsoft/disconnect",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "microsoft_callback",
+      "method": "GET",
+      "path": "/oauth/microsoft/callback",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "notion_login",
+      "method": "GET",
+      "path": "/connections/notion/login",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "notion_status",
+      "method": "GET",
+      "path": "/connections/notion/status",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "notion_disconnect",
+      "method": "POST",
+      "path": "/connections/notion/disconnect",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "handler": "notion_callback",
+      "method": "GET",
+      "path": "/oauth/notion/callback",
+      "status": "verified_local_mocked",
+      "replacement": "Native connection manager and browser-bound one-use OAuth service",
+      "evidence": [
+        "tests/test_connections.py",
+        "tests/test_connections_postgres.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "handler": "doormat_state",
+      "method": "GET",
+      "path": "/host/doormat",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "handler": "stage",
+      "method": "POST",
+      "path": "/host/doormat/stage",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "handler": "cutover",
+      "method": "POST",
+      "path": "/host/doormat/cutover",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "handler": "retire",
+      "method": "POST",
+      "path": "/host/doormat/retire",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "handler": "abort",
+      "method": "DELETE",
+      "path": "/host/doormat",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/files.py",
+      "handler": "download_file",
+      "method": "GET",
+      "path": "/files/{name}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/files.py",
+      "handler": "file_meta",
+      "method": "GET",
+      "path": "/files/{name}/meta",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health",
+      "method": "GET",
+      "path": "/health",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_live",
+      "method": "GET",
+      "path": "/health/live",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_ready",
+      "method": "GET",
+      "path": "/health/ready",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_ingest",
+      "method": "POST",
+      "path": "/health/ingest",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_status",
+      "method": "GET",
+      "path": "/health/status",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_freshness",
+      "method": "GET",
+      "path": "/health/freshness",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_sync_demand",
+      "method": "GET",
+      "path": "/health/sync-demand",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "handler": "health_wipe",
+      "method": "DELETE",
+      "path": "/health/data",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/hisar.py",
+      "handler": "hisar_dirs",
+      "method": "GET",
+      "path": "/hisar/dirs",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/compatibility/test_hisar_skill.py",
+        "tests/compatibility/test_hisar_workspace_create.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/hisar.py",
+      "handler": "create_hisar_dir",
+      "method": "POST",
+      "path": "/hisar/dirs",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/compatibility/test_hisar_skill.py",
+        "tests/compatibility/test_hisar_workspace_create.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/import_chats.py",
+      "handler": "index_history_endpoint",
+      "method": "POST",
+      "path": "/admin/index-history",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/import_chats.py",
+      "handler": "index_embeddings_endpoint",
+      "method": "POST",
+      "path": "/admin/index-embeddings",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/import_chats.py",
+      "handler": "import_chats",
+      "method": "POST",
+      "path": "/admin/import-chats",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "worker_executions",
+      "method": "GET",
+      "path": "/legion/executions",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "worker_execution",
+      "method": "GET",
+      "path": "/legion/executions/{execution_id}",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "worker_events",
+      "method": "GET",
+      "path": "/legion/executions/{execution_id}/events",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "interrupt_worker",
+      "method": "POST",
+      "path": "/legion/executions/{execution_id}/interrupt",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "worker_event_artifact",
+      "method": "GET",
+      "path": "/legion/executions/{execution_id}/event-artifacts/{digest}",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "message_worker",
+      "method": "POST",
+      "path": "/legion/executions/{execution_id}/messages",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "attach_worker",
+      "method": "GET",
+      "path": "/legion/executions/{execution_id}/attach",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "legion_active",
+      "method": "GET",
+      "path": "/legion/active",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "handler": "legion_attach",
+      "method": "GET",
+      "path": "/legion/attach/{ticket}",
+      "status": "verified_local_mocked",
+      "replacement": "Native Coordinator child records and Forge project projection",
+      "evidence": [
+        "tests/test_legion_api.py",
+        "tests/test_legion_integration.py",
+        "tests/test_legion_postgres.py",
+        "tests/test_worker_policy.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "handler": "get_citation_source",
+      "method": "GET",
+      "path": "/library/sources/{citation_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "handler": "reconcile",
+      "method": "POST",
+      "path": "/library/reconcile",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "handler": "get_settings",
+      "method": "GET",
+      "path": "/library/settings",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "handler": "save_settings",
+      "method": "PUT",
+      "path": "/library/settings",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "handler": "progress",
+      "method": "POST",
+      "path": "/library/progress",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/lifeboat.py",
+      "handler": "scan_host",
+      "method": "POST",
+      "path": "/host/lifeboat/scan",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/lifeboat.py",
+      "handler": "ack_level",
+      "method": "POST",
+      "path": "/host/lifeboat/ack",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/lifeboat.py",
+      "handler": "lifeboat_assessment",
+      "method": "GET",
+      "path": "/host/lifeboat",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/lifeboat.py",
+      "handler": "reset_watch",
+      "method": "DELETE",
+      "path": "/host/lifeboat",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/mail.py",
+      "handler": "scan_mail",
+      "method": "POST",
+      "path": "/mail/watch/scan",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/mail.py",
+      "handler": "mark_mail_seen",
+      "method": "POST",
+      "path": "/mail/watch/seen",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/media.py",
+      "handler": "proxy_image",
+      "method": "GET",
+      "path": "/media/proxy",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "list_memory_files",
+      "method": "GET",
+      "path": "/memory/files",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "list_memory_folders",
+      "method": "GET",
+      "path": "/memory/folders",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "commit_memory_file",
+      "method": "PUT",
+      "path": "/memory/files",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "get_memory_sources",
+      "method": "GET",
+      "path": "/memory/sources",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "set_memory_source",
+      "method": "PUT",
+      "path": "/memory/sources",
+      "status": "superseded",
+      "replacement": "Shared Iacon catalogue; no per-agent canonical file writers"
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "delete_memory_file",
+      "method": "DELETE",
+      "path": "/memory/files",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "rename_memory_file",
+      "method": "POST",
+      "path": "/memory/files/rename",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "memory_revisions",
+      "method": "GET",
+      "path": "/memory/files/revisions",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "restore_memory_file",
+      "method": "POST",
+      "path": "/memory/files/restore",
+      "status": "verified_local_mocked",
+      "evidence": [
+        "tests/test_client_memory.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "list_observations",
+      "method": "GET",
+      "path": "/memory/observations",
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "create_observation",
+      "method": "POST",
+      "path": "/memory/observations",
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "end_observation",
+      "method": "POST",
+      "path": "/memory/observations/{observation_id}/end",
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "handler": "delete_observation",
+      "method": "DELETE",
+      "path": "/memory/observations/{observation_id}",
+      "status": "superseded",
+      "replacement": "Iacon records, evidence, explicit retraction and reviewed state lifecycle; no second observation writer.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/navigation.py",
+      "handler": "get_route_geometry",
+      "method": "GET",
+      "path": "/navigation/route/{route_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/navigation.py",
+      "handler": "get_place_set",
+      "method": "GET",
+      "path": "/navigation/places/{set_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/news.py",
+      "handler": "news_poll",
+      "method": "POST",
+      "path": "/news/poll",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/news.py",
+      "handler": "news_items",
+      "method": "GET",
+      "path": "/news/items",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/news.py",
+      "handler": "list_watches",
+      "method": "GET",
+      "path": "/news/watch",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/news.py",
+      "handler": "add_watch",
+      "method": "POST",
+      "path": "/news/watch",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "run_backup",
+      "method": "POST",
+      "path": "/admin/octavius/backup",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "status",
+      "method": "GET",
+      "path": "/admin/octavius",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "list_backups",
+      "method": "GET",
+      "path": "/admin/octavius/backups",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "fetch",
+      "method": "POST",
+      "path": "/admin/octavius/fetch",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "restore",
+      "method": "POST",
+      "path": "/admin/octavius/restore",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "handler": "restore_status",
+      "method": "GET",
+      "path": "/admin/octavius/restore",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/outlook.py",
+      "handler": "scan_outlook",
+      "method": "POST",
+      "path": "/outlook/watch/scan",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/outlook.py",
+      "handler": "mark_outlook_seen",
+      "method": "POST",
+      "path": "/outlook/watch/seen",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "list_projects",
+      "method": "GET",
+      "path": "/projects",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "create_project",
+      "method": "POST",
+      "path": "/projects",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "get_project",
+      "method": "GET",
+      "path": "/projects/{project_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "update_project",
+      "method": "PATCH",
+      "path": "/projects/{project_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "delete_project",
+      "method": "DELETE",
+      "path": "/projects/{project_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "list_project_sessions",
+      "method": "GET",
+      "path": "/projects/{project_id}/sessions",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "list_project_files",
+      "method": "GET",
+      "path": "/projects/{project_id}/files",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "add_project_file",
+      "method": "POST",
+      "path": "/projects/{project_id}/files",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "handler": "delete_project_file",
+      "method": "DELETE",
+      "path": "/projects/{project_id}/files/{file_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "tick",
+      "method": "POST",
+      "path": "/reminders/tick",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "list_definitions",
+      "method": "GET",
+      "path": "/reminders/definitions",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "save_definition",
+      "method": "PUT",
+      "path": "/reminders/definitions/{reminder_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "remove_definition",
+      "method": "DELETE",
+      "path": "/reminders/definitions/{reminder_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "open_reminders",
+      "method": "GET",
+      "path": "/reminders/open",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "reminder_history",
+      "method": "GET",
+      "path": "/reminders/history",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "handler": "answer",
+      "method": "POST",
+      "path": "/reminders/answer",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "list_projects",
+      "method": "GET",
+      "path": "/protocols/skyfall/projects",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "upsert_project",
+      "method": "PUT",
+      "path": "/protocols/skyfall/projects",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "delete_project",
+      "method": "DELETE",
+      "path": "/protocols/skyfall/projects/{project_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "arm",
+      "method": "POST",
+      "path": "/protocols/skyfall/arm/{project_id}",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "fire",
+      "method": "POST",
+      "path": "/protocols/skyfall/fire",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "handler": "abort",
+      "method": "POST",
+      "path": "/protocols/skyfall/abort",
+      "status": "pending"
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "auth_status",
+      "method": "GET",
+      "path": "/solus/api/v1/auth-status",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "password_login",
+      "method": "POST",
+      "path": "/solus/api/v1/login",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "password_setup",
+      "method": "POST",
+      "path": "/solus/api/v1/setup",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "password_change",
+      "method": "POST",
+      "path": "/solus/api/v1/password",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "import_preview",
+      "method": "POST",
+      "path": "/solus/api/v1/books/{book_id}/import-preview",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "reconciliation_preview",
+      "method": "POST",
+      "path": "/solus/api/v1/books/{book_id}/reconciliation-preview",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "ui",
+      "method": "GET",
+      "path": "/solus/",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "ui",
+      "method": "GET",
+      "path": "/solus/",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "login",
+      "method": "POST",
+      "path": "/solus/api/v1/session",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "session",
+      "method": "GET",
+      "path": "/solus/api/v1/session",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "logout",
+      "method": "DELETE",
+      "path": "/solus/api/v1/session",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "command",
+      "method": "POST",
+      "path": "/solus/api/v1/commands",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "receipt",
+      "method": "GET",
+      "path": "/solus/api/v1/receipts/{key}",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "resolve_receipt",
+      "method": "POST",
+      "path": "/solus/api/v1/receipts/{key}/resolve",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "books",
+      "method": "GET",
+      "path": "/solus/api/v1/books",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "legacy",
+      "method": "GET",
+      "path": "/solus/api/v1/legacy",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "handler": "report",
+      "method": "GET",
+      "path": "/solus/api/v1/books/{book_id}/{resource}",
+      "status": "mounted_contract_unverified",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_http.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/routers/telegram.py",
+      "handler": "telegram_webhook",
+      "method": "POST",
+      "path": "/telegram/webhook/{agent_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/telegram.py",
+      "handler": "telegram_link",
+      "method": "GET",
+      "path": "/telegram/link/{agent_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/telegram.py",
+      "handler": "telegram_status",
+      "method": "GET",
+      "path": "/telegram/status",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/trigger.py",
+      "handler": "trigger",
+      "method": "POST",
+      "path": "/trigger/{agent_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "voice_status",
+      "method": "GET",
+      "path": "/voice/status",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "voices",
+      "method": "GET",
+      "path": "/voice/voices",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "voice_agents",
+      "method": "GET",
+      "path": "/voice/agents",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "set_voice_agent",
+      "method": "PUT",
+      "path": "/voice/agents/{agent_id}",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "speak",
+      "method": "POST",
+      "path": "/voice/speak",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "stream",
+      "method": "WEBSOCKET",
+      "path": "/voice/stream",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "handler": "listen",
+      "method": "POST",
+      "path": "/voice/listen",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "handler": "scan_page",
+      "method": "POST",
+      "path": "/web/watch/scan",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "handler": "ack_page",
+      "method": "POST",
+      "path": "/web/watch/ack",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "handler": "list_watches",
+      "method": "GET",
+      "path": "/web/watch",
+      "status": "mounted_contract_unverified"
+    },
+    {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "handler": "reset_watch",
+      "method": "DELETE",
+      "path": "/web/watch/{watch_id}",
+      "status": "mounted_contract_unverified"
+    }
+  ],
+  "skills": [
+    {
+      "source": "packages/igor/app/skills/aircraft.py",
+      "class": "TrackAircraftSkill",
+      "name": "track_aircraft",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/atomix_reports.py",
+      "class": "GenerateDailyTrainingProgramSkill",
+      "name": "generate_daily_training_program",
+      "status": "verified_local_pdf_runtime",
+      "agents": [
+        "atomix"
+      ],
+      "evidence": [
+        "tests/test_atomix_reports.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/attendance.py",
+      "class": "AttendanceStatusSkill",
+      "name": "check_attendance",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/attendance.py",
+      "class": "RecordAttendanceSkill",
+      "name": "record_attendance",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/attendance.py",
+      "class": "AskAttendanceSkill",
+      "name": "ask_attendance",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/automations.py",
+      "class": "AutomationsSkill",
+      "name": "manage_automations",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_automations.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/browser.py",
+      "class": "BrowsePageSkill",
+      "name": "browse_page",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/browser.py",
+      "class": "BrowserActSkill",
+      "name": "browser_act",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/browser.py",
+      "class": "PortalLoginSkill",
+      "name": "portal_login",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/budget.py",
+      "class": "BudgetModeSkill",
+      "name": "set_budget_mode",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/course_memory.py",
+      "class": "CourseMemorySkill",
+      "name": "record_course_memory",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon course entities, linked evidence-backed episodes/documents and bounded memory_lookup. Course notes use the same writer authority, not a second course-memory database.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_client_memory.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/course_memory.py",
+      "class": "ReadCourseMemorySkill",
+      "name": "read_course_memory",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon course entities, linked evidence-backed episodes/documents and bounded memory_lookup. Course notes use the same writer authority, not a second course-memory database.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_client_memory.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/dispatch.py",
+      "class": "DispatchAgentSkill",
+      "name": "dispatch_agent",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/dispatch.py",
+      "class": "AgentChannelSkill",
+      "name": "read_agent_channel",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/dispatch.py",
+      "class": "DispatchStatusSkill",
+      "name": "dispatch_status",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/dispatch.py",
+      "class": "HousePartySkill",
+      "name": "house_party",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Coordinator rooms, attributed contributions and collaboration operations replace the old dispatch queue and remote agent engine.",
+      "evidence": [
+        "tests/test_coordination.py",
+        "tests/test_client_compat.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/documents.py",
+      "class": "DocumentsSkill",
+      "name": "generate_document",
+      "status": "verified_local_document_runtime",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_document_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/doormat.py",
+      "class": "DoormatProtocolSkill",
+      "name": "doormat_protocol",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/finance_record.py",
+      "class": "FinanceRecordSkill",
+      "name": "finance_record",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Solus exact ledger and immutable receipts replace model-written finance memory. Legacy records remain retained and are never silently merged or dual-written.",
+      "evidence": [
+        "tests/test_solus_core.py",
+        "tests/test_solus_capture.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/health_data.py",
+      "class": "HealthDataSkill",
+      "name": "health_data",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/hisar.py",
+      "class": "HisarSkill",
+      "name": "hisar",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_hisar_transit_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/legion.py",
+      "class": "LegionInspectSkill",
+      "name": "legion_inspect",
+      "status": "verified_local_mocked",
+      "agents": [],
+      "evidence": [
+        "tests/test_legion_integration.py",
+        "tests/test_legion_api.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/legion.py",
+      "class": "LegionControlSkill",
+      "name": "legion_control",
+      "status": "verified_local_mocked",
+      "agents": [],
+      "evidence": [
+        "tests/test_legion_integration.py",
+        "tests/test_legion_api.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/legion.py",
+      "class": "LegionStatusSkill",
+      "name": "legion_status",
+      "status": "verified_local_mocked",
+      "agents": [],
+      "evidence": [
+        "tests/test_legion_integration.py",
+        "tests/test_legion_api.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/library.py",
+      "class": "ListLibrarySkill",
+      "name": "list_library",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/library.py",
+      "class": "SearchLibrarySkill",
+      "name": "search_library",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/library.py",
+      "class": "ReadLibrarySkill",
+      "name": "read_library",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Single-batch memory_lookup hall_of_records list/search/read operations over the existing live-authorized LibraryService, preserving document/revision/citation IDs.",
+      "evidence": [
+        "tests/test_iacon_hisar.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/lifeboat.py",
+      "class": "LifeboatProtocolSkill",
+      "name": "lifeboat_protocol",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/lockdown.py",
+      "class": "LockdownProtocolSkill",
+      "name": "lockdown_protocol",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/memory.py",
+      "class": "MemorySkill",
+      "name": "memory",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon prepared context and single-batch memory_lookup with exact owner evidence, temporal qualifiers and source IDs.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_audit.py",
+      "class": "MemoryAuditSkill",
+      "name": "memory_audit",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Orion durable Iacon interpretation/review/publication and persistent maintenance budgets. Legacy file-rewrite audit jobs are retired.",
+      "evidence": [
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_edit.py",
+      "class": "MemoryEditSkill",
+      "name": "memory_edit",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_event.py",
+      "class": "MemoryEventSkill",
+      "name": "memory_event",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_graph.py",
+      "class": "ExploreMemorySkill",
+      "name": "explore_memory",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon stable entities, typed record links and evidence inspection replace the legacy observation graph. The old graph tool is intentionally retired; no claim of an identical graph browser.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_state.py",
+      "class": "MemoryStateSkill",
+      "name": "memory_state",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_write.py",
+      "class": "LedgerAppendSkill",
+      "name": "ledger_append",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_write.py",
+      "class": "RegistryUpsertSkill",
+      "name": "registry_upsert",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_write.py",
+      "class": "NarrativeReviseSkill",
+      "name": "narrative_revise",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon owner document/editor CAS writes and reviewed catalogue proposals. Ordinary models cannot revive direct file/ledger writers.",
+      "evidence": [
+        "tests/test_client_memory.py",
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/navigation.py",
+      "class": "GetRouteSkill",
+      "name": "get_route",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/navigation.py",
+      "class": "FindPlacesSkill",
+      "name": "find_places",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/news.py",
+      "class": "NewsHeadlinesSkill",
+      "name": "news_headlines",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/news.py",
+      "class": "NewsWatchSkill",
+      "name": "news_watch",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/news.py",
+      "class": "NewsDeepDiveSkill",
+      "name": "news_deep_dive",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/news.py",
+      "class": "ReadArticleSkill",
+      "name": "read_article",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/notifications.py",
+      "class": "NotificationsSkill",
+      "name": "send_push_notification",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_notification_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/observations.py",
+      "class": "RecordObservationSkill",
+      "name": "record_observation",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/observations.py",
+      "class": "SearchMemorySkill",
+      "name": "search_memory",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon prepared context and single-batch memory_lookup with exact owner evidence, temporal qualifiers and source IDs.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/observations.py",
+      "class": "ForgetObservationSkill",
+      "name": "forget_observation",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Iacon typed episodes/states/claims, source-bound reviewed commands, retractions and immutable revisions. No parallel observation writer.",
+      "evidence": [
+        "tests/test_iacon.py",
+        "tests/test_iacon_integration.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/octavius.py",
+      "class": "OctaviusProtocolSkill",
+      "name": "octavius_protocol",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/onyx.py",
+      "class": "OnyxSkill",
+      "name": "onyx",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus"
+      ],
+      "evidence": [
+        "tests/test_remote_tools.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "IPGeolocateSkill",
+      "name": "ip_geolocate",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "IPReputationSkill",
+      "name": "ip_reputation",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "URLhausLookupSkill",
+      "name": "urlhaus_lookup",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "ThreatFoxLookupSkill",
+      "name": "threatfox_lookup",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "MalwareBazaarLookupSkill",
+      "name": "malwarebazaar_lookup",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "PwnedPasswordSkill",
+      "name": "pwned_password_check",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "DarkWebSearchSkill",
+      "name": "darkweb_search",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "OTXLookupSkill",
+      "name": "otx_lookup",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "ShodanLookupSkill",
+      "name": "shodan_lookup",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "EmailDiscoverySkill",
+      "name": "email_discovery",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "CryptoTraceSkill",
+      "name": "crypto_trace",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "class": "IntelXSearchSkill",
+      "name": "intelx_search",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/patterns.py",
+      "class": "InspectPatternsSkill",
+      "name": "inspect_patterns",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Evidence-backed inferred claims and explicit correction/retraction in Iacon replace mutable repetition scores and pattern voting. No separate legacy pattern learner is restored.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/patterns.py",
+      "class": "PatternFeedbackSkill",
+      "name": "pattern_feedback",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Evidence-backed inferred claims and explicit correction/retraction in Iacon replace mutable repetition scores and pattern voting. No separate legacy pattern learner is restored.",
+      "evidence": [
+        "tests/test_iacon.py"
+      ],
+      "authority": "research/iacon/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/pharmacies.py",
+      "class": "OnDutyPharmacySkill",
+      "name": "on_duty_pharmacies",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/read_skill.py",
+      "class": "ReadSkillSkill",
+      "name": "read_skill",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/reminders.py",
+      "class": "RemindersSkill",
+      "name": "reminders",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_reminders.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/sandbox.py",
+      "class": "RunCommandSkill",
+      "name": "run_command",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_remote_tools.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/sandbox.py",
+      "class": "DeliverFileSkill",
+      "name": "deliver_file",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_remote_tools.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/save_file.py",
+      "class": "SaveFileSkill",
+      "name": "save_file",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/schedule.py",
+      "class": "ReadScheduleSkill",
+      "name": "read_schedule",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/schedule.py",
+      "class": "SaveScheduleSkill",
+      "name": "save_schedule",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/search_history.py",
+      "class": "SearchHistorySkill",
+      "name": "search_history",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_history_lookup.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/semantic_search.py",
+      "class": "SemanticSearchSkill",
+      "name": "recall_conversations",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Bounded local Iacon personal lookup plus literal conversation_history retrieval with original source/message IDs. This intentionally replaces the old paid embedding query path; it does not claim identical semantic ranking.",
+      "evidence": [
+        "tests/test_history_lookup.py",
+        "tests/test_history_lookup_postgres.py",
+        "tests/test_iacon_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/skyfall.py",
+      "class": "SkyfallProtocolSkill",
+      "name": "skyfall_protocol",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/solus.py",
+      "class": "SolusAccountingSkill",
+      "name": "solus_accounting",
+      "status": "verified_local_mocked",
+      "agents": [
+        "sentinel"
+      ],
+      "evidence": [
+        "tests/test_solus_capture.py",
+        "tests/test_solus_core.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/stt.py",
+      "class": "STTSkill",
+      "name": "speech_to_text",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_voice.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/system.py",
+      "class": "SystemSkill",
+      "name": "system_info",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "optimus",
+        "scourge",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/system_ops.py",
+      "class": "SystemOpsSkill",
+      "name": "system_ops",
+      "status": "pending",
+      "agents": []
+    },
+    {
+      "source": "packages/igor/app/skills/telegram.py",
+      "class": "SendTelegramMessageSkill",
+      "name": "send_telegram_message",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_delivery.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/telegram.py",
+      "class": "SendTelegramFileSkill",
+      "name": "send_telegram_file",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_delivery.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/tool_search.py",
+      "class": "ToolSearchSkill",
+      "name": "tool_search",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/toolsets.py",
+      "class": "UseToolsetSkill",
+      "name": "use_toolset",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Native tool_search and per-agent registry discovery expose exact authorized schemas. Toolset prose cannot grant capabilities or load retired engine tools.",
+      "evidence": [
+        "tests/test_worker_policy.py",
+        "tests/test_client_compat.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/transit.py",
+      "class": "BusArrivalsSkill",
+      "name": "bus_arrivals",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_hisar_transit_integration.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/tts.py",
+      "class": "TTSSkill",
+      "name": "text_to_speech",
+      "status": "verified_local_mocked",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ],
+      "evidence": [
+        "tests/test_voice.py"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/weather.py",
+      "class": "WeatherSkill",
+      "name": "weather",
+      "status": "registered_unverified",
+      "agents": [
+        "speda",
+        "ultron",
+        "optimus",
+        "friday",
+        "atomix",
+        "scourge",
+        "sentinel",
+        "orion"
+      ]
+    },
+    {
+      "source": "packages/igor/app/skills/workshop.py",
+      "class": "WorkshopStatusSkill",
+      "name": "workshop_status",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Native Projects/Workshop status, bindings and revisioned execution claims replace the old WorkspaceService authority.",
+      "evidence": [
+        "tests/test_projects.py",
+        "tests/test_project_teams.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    },
+    {
+      "source": "packages/igor/app/skills/workshop.py",
+      "class": "WorkshopUpdateSkill",
+      "name": "workshop_update",
+      "status": "superseded",
+      "agents": [],
+      "replacement": "Native Projects/Workshop status, bindings and revisioned execution claims replace the old WorkspaceService authority.",
+      "evidence": [
+        "tests/test_projects.py",
+        "tests/test_project_teams.py"
+      ],
+      "authority": "research/orchestration-20261023/ARCHITECTURE.md and renovated AGENTS.md"
+    }
+  ],
+  "modules": [
+    {
+      "source": "packages/igor/app/__init__.py",
+      "target": "app/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/adapters/__init__.py",
+      "target": "app/adapters/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/adapters/base.py",
+      "target": "app/adapters/base.py",
+      "sha256": "313733a8f4a1f4a9821d0d18fcc2e4eed146d5b77ad382adb3985c9052e47665"
+    },
+    {
+      "source": "packages/igor/app/adapters/gpt_researcher.py",
+      "target": "app/adapters/gpt_researcher.py",
+      "sha256": "5e4d8e5684408cd491313afe1cb9b3a1a9ac770dda2d40c8229eecf8f197a854"
+    },
+    {
+      "source": "packages/igor/app/adapters/shannon.py",
+      "target": "app/adapters/shannon.py",
+      "sha256": "c9ff8135c80afdf8982c2d6c1fb984c9591a15e5795d3030a29c54c30de80348"
+    },
+    {
+      "source": "packages/igor/app/automations/__init__.py",
+      "target": "app/automations/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/automations/composer.py",
+      "target": "app/automations/composer.py",
+      "sha256": "0f2b59141c0360e87848aebf375b8d0d18a5dea50e03c92de16e6637f8c361a5"
+    },
+    {
+      "source": "packages/igor/app/automations/manager.py",
+      "target": "app/automations/manager.py",
+      "sha256": "6de0b128e1a4445d8d1c7d3d2def8ade17fbbbab0b5670a288c9f8bc17bf21ba"
+    },
+    {
+      "source": "packages/igor/app/automations/schedule.py",
+      "target": "app/automations/schedule.py",
+      "sha256": "a160463cf2a18d7df3a9dc5c760a0b9f66b5e221dea7a3961843f76b514f5b97"
+    },
+    {
+      "source": "packages/igor/app/automations/templates.py",
+      "target": "app/automations/templates.py",
+      "sha256": "0d13829dbd5550d66efa9c0662c35e9c502c936171c77c1d00b660f8a846ebbc"
+    },
+    {
+      "source": "packages/igor/app/config.py",
+      "target": "app/config.py",
+      "sha256": "2c270023421307fac997859542e4d50d69850dfa2fb3148f520684990a60804f"
+    },
+    {
+      "source": "packages/igor/app/config_schema.py",
+      "target": "app/config_schema.py",
+      "sha256": "8df7a3c82519b97013f63b92a2e5343b3a0dd3d2b5d09a89eb775d2ea8ce7178"
+    },
+    {
+      "source": "packages/igor/app/core/__init__.py",
+      "target": "app/core/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/core/agent_registry.py",
+      "target": "app/core/agent_registry.py",
+      "sha256": "36b3d66faff9a660f38a28a577ba15bbcfb32f8a481ecabc7f47fd603f37ecf1"
+    },
+    {
+      "source": "packages/igor/app/core/clock.py",
+      "target": "app/core/clock.py",
+      "sha256": "0f47c73f715ca99f4e915ee0cc31b90996ade1bfb3034ebff68bb631ae154f60"
+    },
+    {
+      "source": "packages/igor/app/core/context.py",
+      "target": "app/core/context.py",
+      "sha256": "f1203e408adc736891d52754d93e9e98cc151fcee979c3544fbca676a02e5da8"
+    },
+    {
+      "source": "packages/igor/app/core/dispatch.py",
+      "target": "app/core/dispatch.py",
+      "sha256": "35933fb8e265b00cd517276f8118c65b94e96cca6c6bbbb1bf313368588f5da2"
+    },
+    {
+      "source": "packages/igor/app/core/external_proxy.py",
+      "target": "app/core/external_proxy.py",
+      "sha256": "73fe310778d434dbe30123113ca71b3f661b8275aced484a44193bba400becd2"
+    },
+    {
+      "source": "packages/igor/app/core/files.py",
+      "target": "app/core/files.py",
+      "sha256": "46eb903a400d0a78a23de11a6f8f3999e88285a8feebfedcd2e7f5d8553bb655"
+    },
+    {
+      "source": "packages/igor/app/core/orchestrator.py",
+      "target": "app/core/orchestrator.py",
+      "sha256": "cef947c0519bf0d655f9c69e789d919a810180fb32eab6bb8ec48aec0a7b22d4"
+    },
+    {
+      "source": "packages/igor/app/core/peer_routing.py",
+      "target": "app/core/peer_routing.py",
+      "sha256": "b2d8ed9037a7257ad706a67f51c526c2aff11ee6c776196cfc1e553b38aebf72"
+    },
+    {
+      "source": "packages/igor/app/core/registry.py",
+      "target": "app/core/registry.py",
+      "sha256": "498c0beb38dff8c8f666d4e63580a0238043bfe8cd19be2ba7926c8aa50c714b"
+    },
+    {
+      "source": "packages/igor/app/core/runtime_state.py",
+      "target": "app/core/runtime_state.py",
+      "sha256": "caac5cb59ea4fc47a13f7b9893d63d5d8b5650b7f2f9a0c9a43ccc0f27775b2e"
+    },
+    {
+      "source": "packages/igor/app/core/session_manager.py",
+      "target": "app/core/session_manager.py",
+      "sha256": "5433e16d3395b654b5666bb371a686bf82c7cbc7769351e325d5c6e4fc976ae5"
+    },
+    {
+      "source": "packages/igor/app/core/surface.py",
+      "target": "app/core/surface.py",
+      "sha256": "5f5fde7727db672cd5a8522ff565ba425fd0f1639fbe53f078ad52b1d0c0a50a"
+    },
+    {
+      "source": "packages/igor/app/core/trigger_runner.py",
+      "target": "app/core/trigger_runner.py",
+      "sha256": "5d5aa45a50a0058c8e5c37f1bdd004f9de22bdfac1bc10966f2f311615488131"
+    },
+    {
+      "source": "packages/igor/app/core/turn_runner.py",
+      "target": "app/core/turn_runner.py",
+      "sha256": "ebc59e5be90115fe431d3e2a38d0bfc7852fefaa30c2d7d13371cb2528e342c1"
+    },
+    {
+      "source": "packages/igor/app/database.py",
+      "target": "app/database.py",
+      "sha256": "6c5c7d396dd79941d5213c436db66e15c4bbe85c43c0a131df45cfc39d90a193"
+    },
+    {
+      "source": "packages/igor/app/execution/__init__.py",
+      "target": "app/execution/__init__.py",
+      "sha256": "2839401f8c8dd2b63cbb75b9936e017643e2f1b0a2dcabbf639dccba1cfb9aaa"
+    },
+    {
+      "source": "packages/igor/app/execution/forge.py",
+      "target": "app/execution/forge.py",
+      "sha256": "8140c16548693bab3632b1482723f09d19c0509d38ac1d12061c90d7b6c2761f"
+    },
+    {
+      "source": "packages/igor/app/legion/__init__.py",
+      "target": "app/legion/__init__.py",
+      "sha256": "c2a310fc08b57f71864deece5632df9994c38e63f839d75aec16e74dfab4e959"
+    },
+    {
+      "source": "packages/igor/app/legion/roster.py",
+      "target": "app/legion/roster.py",
+      "sha256": "a719fb0a39d2484325d1a9091a08a46ca736f8eb7b122df46d134c9463460163"
+    },
+    {
+      "source": "packages/igor/app/legion/run_registry.py",
+      "target": "app/legion/run_registry.py",
+      "sha256": "f49391ecdce38b9f11720871a7116ea6b7cfb22a0cde5e53f9c44c4feaf5501a"
+    },
+    {
+      "source": "packages/igor/app/legion/runner.py",
+      "target": "app/legion/runner.py",
+      "sha256": "08941d5194397ccac9488b296afb26e8e9a4ff9ca1c557e386f9d57a7e162c89"
+    },
+    {
+      "source": "packages/igor/app/main.py",
+      "target": "app/main.py",
+      "sha256": "3d1f87dac63c75ddc84547a00d881e8938a403143a9e6e64dc9bc00471edbd36"
+    },
+    {
+      "source": "packages/igor/app/mcp/__init__.py",
+      "target": "app/mcp/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/mcp/client.py",
+      "target": "app/mcp/client.py",
+      "sha256": "1bbb92ae58bd2e05118e0f210a8c7be21303f6ba242e9c271a71133c9097cf8e"
+    },
+    {
+      "source": "packages/igor/app/mcp/google_rest.py",
+      "target": "app/mcp/google_rest.py",
+      "sha256": "2aeb8ee7bd32fdabf931358131699480b833a5ec793ba8cacf981c11e7317dc3"
+    },
+    {
+      "source": "packages/igor/app/mcp/microsoft_rest.py",
+      "target": "app/mcp/microsoft_rest.py",
+      "sha256": "2e2ae872f594dc7e89a01b968fe7e59c5abb7382fe0819487e7bc97d24c00df9"
+    },
+    {
+      "source": "packages/igor/app/mcp/servers.py",
+      "target": "app/mcp/servers.py",
+      "sha256": "21d75bdeb7fe8460dea10ec80b673d316cea3a348e15aee6433111c7d6960d5e"
+    },
+    {
+      "source": "packages/igor/app/middleware/__init__.py",
+      "target": "app/middleware/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/middleware/auth.py",
+      "target": "app/middleware/auth.py",
+      "sha256": "b6d193cb7278bea7606cad819723f99e5f7a8174a4cc3b26198c3b57291006dd"
+    },
+    {
+      "source": "packages/igor/app/middleware/security.py",
+      "target": "app/middleware/security.py",
+      "sha256": "8f0b6500986853a42294bc9158199c8a19fa0ae903f703ae2f04da2896833ce8"
+    },
+    {
+      "source": "packages/igor/app/models/__init__.py",
+      "target": "app/models/__init__.py",
+      "sha256": "6bbfbff334a7ce3739a13ef614b4fb37dceb30ce3fd10fb297e9222135c5bd5f"
+    },
+    {
+      "source": "packages/igor/app/models/academic.py",
+      "target": "app/models/academic.py",
+      "sha256": "264b69584a38e97a7a3b458012b1081e6d34e6dbd042320c67da8689f8391a39"
+    },
+    {
+      "source": "packages/igor/app/models/agent.py",
+      "target": "app/models/agent.py",
+      "sha256": "a910fb96a62bef76e3073b988cd02b444bbccc7229123dfc9e90062c30faf7e7"
+    },
+    {
+      "source": "packages/igor/app/models/agent_message.py",
+      "target": "app/models/agent_message.py",
+      "sha256": "a2afb9c672f12cc5443f25dfa4e60f249633bd0208e0e2d83267118862a71339"
+    },
+    {
+      "source": "packages/igor/app/models/automation.py",
+      "target": "app/models/automation.py",
+      "sha256": "227cd345d656ba9716af6cc8d1116bb43feb339db28bffb21f6d3c61183864bf"
+    },
+    {
+      "source": "packages/igor/app/models/automation_run.py",
+      "target": "app/models/automation_run.py",
+      "sha256": "f35ab04c8eb580b73da21be3af5dbaa9eb75de33a6c104152808a363f92343cf"
+    },
+    {
+      "source": "packages/igor/app/models/background_job.py",
+      "target": "app/models/background_job.py",
+      "sha256": "35acb2368ece4559cc9457653bfa196250f6ad6f7475b695d03f8acc552f0f9e"
+    },
+    {
+      "source": "packages/igor/app/models/channel_session.py",
+      "target": "app/models/channel_session.py",
+      "sha256": "649c7414cdd5a12bad067eff057587c897fefe056a80ec544508eb4855191677"
+    },
+    {
+      "source": "packages/igor/app/models/engineering_input.py",
+      "target": "app/models/engineering_input.py",
+      "sha256": "220d618546edce519ed0335c8707456723bfcbe205215d259387b77e0b759982"
+    },
+    {
+      "source": "packages/igor/app/models/finance_identity.py",
+      "target": "app/models/finance_identity.py",
+      "sha256": "77484ed0badd2ccdd35d3fceec35f031be10467f803445ab87b15f32a36d6b7b"
+    },
+    {
+      "source": "packages/igor/app/models/health_sample.py",
+      "target": "app/models/health_sample.py",
+      "sha256": "c8a6ddb8849e828a9528831b58bb62bb653b734d289b8f26623cc695a32b4236"
+    },
+    {
+      "source": "packages/igor/app/models/library.py",
+      "target": "app/models/library.py",
+      "sha256": "854cab2c2f75e1f5808304301e86df8664be57c3b1821a5f24477da37758a007"
+    },
+    {
+      "source": "packages/igor/app/models/memory.py",
+      "target": "app/models/memory.py",
+      "sha256": "901443c86f0dabb36c47d7411d5d4d7b233eb2dc4ac707c37e47e74735d193be"
+    },
+    {
+      "source": "packages/igor/app/models/memory_capture_job.py",
+      "target": "app/models/memory_capture_job.py",
+      "sha256": "5410704c4c4d52d081c6d278e11df2aef5db0ba99b1fbd5da0104d30a442c708"
+    },
+    {
+      "source": "packages/igor/app/models/memory_capture_payload.py",
+      "target": "app/models/memory_capture_payload.py",
+      "sha256": "99362fbf0ee130e7d7230e8e5c0a964aa33f4f2d9724d5b4e592051e728685fa"
+    },
+    {
+      "source": "packages/igor/app/models/memory_entity.py",
+      "target": "app/models/memory_entity.py",
+      "sha256": "75a38ebfdbb6180634ebb16459ae9cea197f03a73e8a9f1144952140e180ff85"
+    },
+    {
+      "source": "packages/igor/app/models/memory_entity_head.py",
+      "target": "app/models/memory_entity_head.py",
+      "sha256": "c12394c8ac419f238b65b0c4f1a938b60fc969f297b4cda7577d3e1f7f21b1a5"
+    },
+    {
+      "source": "packages/igor/app/models/memory_file.py",
+      "target": "app/models/memory_file.py",
+      "sha256": "e46d3d12ca27599335d5bdce02bd1c80cd4ea18d87f4ec913338c4d9befc4cc3"
+    },
+    {
+      "source": "packages/igor/app/models/memory_graph_edge.py",
+      "target": "app/models/memory_graph_edge.py",
+      "sha256": "074efdf557df438c52165971bcf550e6d5ebb6d84f25c348203761db99531983"
+    },
+    {
+      "source": "packages/igor/app/models/memory_migration_run.py",
+      "target": "app/models/memory_migration_run.py",
+      "sha256": "a6e5e02366f82d15144154add5dabc9dcd8b6d0e4933ab70e9b2ecdb15ce5242"
+    },
+    {
+      "source": "packages/igor/app/models/memory_passage.py",
+      "target": "app/models/memory_passage.py",
+      "sha256": "e8d92f6eacf64b76fd4d64c21c5efec8d54729e459e938a0538def301c046c50"
+    },
+    {
+      "source": "packages/igor/app/models/memory_path_alias.py",
+      "target": "app/models/memory_path_alias.py",
+      "sha256": "91bb88d3ecd1d6285f16b017f9100eac51024cb2b73bb3cd625cce323c4b0b23"
+    },
+    {
+      "source": "packages/igor/app/models/memory_record_link.py",
+      "target": "app/models/memory_record_link.py",
+      "sha256": "e8d4b74fef971f1e1f49841180bcc901305136ecd3b61fa564b439a467c2509a"
+    },
+    {
+      "source": "packages/igor/app/models/memory_record_meta.py",
+      "target": "app/models/memory_record_meta.py",
+      "sha256": "4aa008fa0111ea75002fb415c9ab42b0b93b927ca127871db106ca441d68dad2"
+    },
+    {
+      "source": "packages/igor/app/models/memory_review.py",
+      "target": "app/models/memory_review.py",
+      "sha256": "551bf31537712b1962a8c5de6213e9b7445fb99d62d5aae0e6b5d5c117ec35b8"
+    },
+    {
+      "source": "packages/igor/app/models/memory_revision.py",
+      "target": "app/models/memory_revision.py",
+      "sha256": "47f10a2e7d14ebe51032ff0f97bedc77052dd49bbcf2a5c91634701ead9e8832"
+    },
+    {
+      "source": "packages/igor/app/models/memory_source.py",
+      "target": "app/models/memory_source.py",
+      "sha256": "15d03d28248813d228c7a53149ea7a669d2c61dfe93a2b1cf6069fb5b097d0b3"
+    },
+    {
+      "source": "packages/igor/app/models/memory_write_receipt.py",
+      "target": "app/models/memory_write_receipt.py",
+      "sha256": "b6cffe688172ed1cbd5b33f6e0edd8063b5517f297853622a01906a3bbee3f2a"
+    },
+    {
+      "source": "packages/igor/app/models/message.py",
+      "target": "app/models/message.py",
+      "sha256": "809a39b145b2e7608a616e0c588403d82d3127ebdcefc1812a279ea45c8c9203"
+    },
+    {
+      "source": "packages/igor/app/models/message_embedding.py",
+      "target": "app/models/message_embedding.py",
+      "sha256": "f1f4b5e8c10b1e48f13baa1631cd820dbef669259584d0732eac30f8fadc45e5"
+    },
+    {
+      "source": "packages/igor/app/models/news_item.py",
+      "target": "app/models/news_item.py",
+      "sha256": "77496620de76db564a4ebb8a6f19ae2b5cb9ac4e37bfc4d2600eb65a24305c57"
+    },
+    {
+      "source": "packages/igor/app/models/news_quota.py",
+      "target": "app/models/news_quota.py",
+      "sha256": "616dafc8b7a5d1c940e2653e34d479369215ca209932dc4c9b7e49009d898b4d"
+    },
+    {
+      "source": "packages/igor/app/models/news_watch.py",
+      "target": "app/models/news_watch.py",
+      "sha256": "ac6252e3e2c92fb1a4c3108d6d7da5224085df4830b50839f63107b3093a57d7"
+    },
+    {
+      "source": "packages/igor/app/models/notification.py",
+      "target": "app/models/notification.py",
+      "sha256": "70bd2b1c21357ddc307c5b00f8475c6864f1710c24ad46ede59efe14b43e3aaf"
+    },
+    {
+      "source": "packages/igor/app/models/observation.py",
+      "target": "app/models/observation.py",
+      "sha256": "02b85fbefa4e7034f1edd3c7f2def3647890f1e20a626839011c8256dabf3bbe"
+    },
+    {
+      "source": "packages/igor/app/models/pattern.py",
+      "target": "app/models/pattern.py",
+      "sha256": "1b8527cd3d856d78a25ca4d54e3e6968c94b3e4655de9fe6b3dce646a24ca97d"
+    },
+    {
+      "source": "packages/igor/app/models/place.py",
+      "target": "app/models/place.py",
+      "sha256": "b5340f3ed39fbf53fdfc4cf34ea03bad93a924a02e0741675c18cc292846dd5d"
+    },
+    {
+      "source": "packages/igor/app/models/project.py",
+      "target": "app/models/project.py",
+      "sha256": "4a9eaabc73bfb66aa7653a63b54d968dc0f0434d0628cf74faa82238cdab7fd8"
+    },
+    {
+      "source": "packages/igor/app/models/reminder.py",
+      "target": "app/models/reminder.py",
+      "sha256": "95070c0e97fa5717fa61b87fc4ea53326ca5d5a2c6d8c04511dc07b342dd39d8"
+    },
+    {
+      "source": "packages/igor/app/models/reminder_definition.py",
+      "target": "app/models/reminder_definition.py",
+      "sha256": "0c185bbef84b3b69be1c0012279904d7125534d8312aac060d46cc3fd63623ad"
+    },
+    {
+      "source": "packages/igor/app/models/route.py",
+      "target": "app/models/route.py",
+      "sha256": "03a5bfad6d45feb5204adad8d9f00a40f0b12596f1c5863292c3f1975bab3cc2"
+    },
+    {
+      "source": "packages/igor/app/models/session.py",
+      "target": "app/models/session.py",
+      "sha256": "facb45051822eb5d9fafe26206b8476dc426d1ffc0db6dec1fe597211edc2ba9"
+    },
+    {
+      "source": "packages/igor/app/models/solus.py",
+      "target": "app/models/solus.py",
+      "sha256": "cbca0f35dcf8dabf7b3c987aa1d81805e0c484a5fc9341435ce16ae49ed3d17a"
+    },
+    {
+      "source": "packages/igor/app/models/solus_ledger.py",
+      "target": "app/models/solus_ledger.py",
+      "sha256": "ff0f27f50a4ee770f8299b264f520d84cf08854dc03b782e9a1326d497ab4b3a"
+    },
+    {
+      "source": "packages/igor/app/models/tool_call.py",
+      "target": "app/models/tool_call.py",
+      "sha256": "940e5301bc14736f943e7448d3c4775a33cebb81a58cc01d5506917cb98573f9"
+    },
+    {
+      "source": "packages/igor/app/models/user.py",
+      "target": "app/models/user.py",
+      "sha256": "17fbd0133b7c23eef55e56656c0ae4f586a3b874c7647e8089a7993b5655f814"
+    },
+    {
+      "source": "packages/igor/app/models/worker_execution.py",
+      "target": "app/models/worker_execution.py",
+      "sha256": "a6569a42dd5c5b5630989d9c7e486c06ed566a2ae594d0f3bfad3798bd03946f"
+    },
+    {
+      "source": "packages/igor/app/news/__init__.py",
+      "target": "app/news/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/news/collector.py",
+      "target": "app/news/collector.py",
+      "sha256": "be70b24bbcc6453c422c2335a6900863a96b0ad831a7f2b0c99a10eb2b414e8f"
+    },
+    {
+      "source": "packages/igor/app/news/dedup.py",
+      "target": "app/news/dedup.py",
+      "sha256": "3e96642425882f4a8d63bfd0682e0c655fe5b805804010a2630cfe159e48f44d"
+    },
+    {
+      "source": "packages/igor/app/news/escalate.py",
+      "target": "app/news/escalate.py",
+      "sha256": "d67f7ecf9cf671cdbd8f913358b0d82ba9449743b156f453368e25a5f65310e6"
+    },
+    {
+      "source": "packages/igor/app/news/feeds.py",
+      "target": "app/news/feeds.py",
+      "sha256": "1d9abf9cfc973d85a4d069159fda927109040b1fac20d330f406d25f56e88abf"
+    },
+    {
+      "source": "packages/igor/app/profiles/__init__.py",
+      "target": "app/profiles/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/profiles/atomix.py",
+      "target": "app/profiles/atomix.py",
+      "sha256": "664f2cafd5082ef699216cfc4c361a75dfe95067dc829a748fb988a228d856c3"
+    },
+    {
+      "source": "packages/igor/app/profiles/base.py",
+      "target": "app/profiles/base.py",
+      "sha256": "8e3ae56ddaeef3229ecce4140df7f128579ad3cfff58f9cb880d3b0080ea9ef0"
+    },
+    {
+      "source": "packages/igor/app/profiles/nightcrawler.py",
+      "target": "app/profiles/nightcrawler.py",
+      "sha256": "7c89b1c414d5e676738352428b3b918830d0bf758e7bef6febf1f70b9e5a761c"
+    },
+    {
+      "source": "packages/igor/app/profiles/optimus.py",
+      "target": "app/profiles/optimus.py",
+      "sha256": "fd7c63e3a9745070f34244f7c590da8aa97b5176f2af70e10d895cbac6f04094"
+    },
+    {
+      "source": "packages/igor/app/profiles/orion.py",
+      "target": "app/profiles/orion.py",
+      "sha256": "dca7ed379d76d0987502705b2b50bfe9bfe5d3f7f175adaf72fb20cf7f7f5d8d"
+    },
+    {
+      "source": "packages/igor/app/profiles/registry.py",
+      "target": "app/profiles/registry.py",
+      "sha256": "d46b5332ded1670551af7478bffbc3a9f45f5b5daedba3e595a6b6655ba47b25"
+    },
+    {
+      "source": "packages/igor/app/profiles/scourge.py",
+      "target": "app/profiles/scourge.py",
+      "sha256": "d50b7c0f3c7e4bd453960cc1d74db3359151ec661ae086cd8a9af86ee5b0e741"
+    },
+    {
+      "source": "packages/igor/app/profiles/sentinel.py",
+      "target": "app/profiles/sentinel.py",
+      "sha256": "308270647f254ccb7c9c417c79f62cb916e6693093f21bca84d5c7bb690d4fa0"
+    },
+    {
+      "source": "packages/igor/app/profiles/speda.py",
+      "target": "app/profiles/speda.py",
+      "sha256": "c6b56837408dca0120f9b1be02262a70eb9bb2484bd938c1d4bed41a98eafb66"
+    },
+    {
+      "source": "packages/igor/app/profiles/ultron.py",
+      "target": "app/profiles/ultron.py",
+      "sha256": "c4f0784c1e480a94716bda7bc37d2e1ec2309e73df442925f538c8b6cbec09db"
+    },
+    {
+      "source": "packages/igor/app/profiles/warroom.py",
+      "target": "app/profiles/warroom.py",
+      "sha256": "6b26e2474a8ad5889ae432fe1fc9ef97ce6e2f1090f5c6f3c0982b6a48552203"
+    },
+    {
+      "source": "packages/igor/app/prompts/__init__.py",
+      "target": "app/prompts/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/prompts/loader.py",
+      "target": "app/prompts/loader.py",
+      "sha256": "5c950804edf1b4ff3e21be890c45eabb77a9bb734124f83a51eda9b152c3ec89"
+    },
+    {
+      "source": "packages/igor/app/routers/__init__.py",
+      "target": "app/routers/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/routers/academic.py",
+      "target": "app/routers/academic.py",
+      "sha256": "306352a7b24e036930aea054e530c220bf14553316b31cd96d1559913fe99114"
+    },
+    {
+      "source": "packages/igor/app/routers/admin.py",
+      "target": "app/routers/admin.py",
+      "sha256": "c19f3e72342d7058701acdaf44a7af8b0b69620a80e451d9cf970336f47f966f"
+    },
+    {
+      "source": "packages/igor/app/routers/agents.py",
+      "target": "app/routers/agents.py",
+      "sha256": "9a6b12ecfd130bc600a22ee94babbc7db18c84ac59f40e189c26342a15c7fb76"
+    },
+    {
+      "source": "packages/igor/app/routers/aircraft.py",
+      "target": "app/routers/aircraft.py",
+      "sha256": "c487dbd6d7c8e295b5e77c4181ad72af5bc44514d53a3fb5685020e9e89de621"
+    },
+    {
+      "source": "packages/igor/app/routers/automations.py",
+      "target": "app/routers/automations.py",
+      "sha256": "165c25f16dc0d31dcebd3d4d76d04faf1a6308745c30a81d5d44aead813279dc"
+    },
+    {
+      "source": "packages/igor/app/routers/browser.py",
+      "target": "app/routers/browser.py",
+      "sha256": "7370a8620b0f92781ae1eba75a548c27ea7b9fb1baeba5672b231bc65ac1da42"
+    },
+    {
+      "source": "packages/igor/app/routers/chat.py",
+      "target": "app/routers/chat.py",
+      "sha256": "d1e6fd22af4df80edee362f70375cba82793eadc7ee825db0af033627691a8b1"
+    },
+    {
+      "source": "packages/igor/app/routers/config.py",
+      "target": "app/routers/config.py",
+      "sha256": "bcef9cb71543671e3c68dd2828c46668f6ad289afe308e405f4f161232ed64a0"
+    },
+    {
+      "source": "packages/igor/app/routers/connections.py",
+      "target": "app/routers/connections.py",
+      "sha256": "865198469deb9939261c1a7333f588117dc8a73c03ac6547e96dcf10a4226ff4"
+    },
+    {
+      "source": "packages/igor/app/routers/doormat.py",
+      "target": "app/routers/doormat.py",
+      "sha256": "a6a266df7bbf734b70dc2d775425d21923018cb5d37b2b969665d5adfca86368"
+    },
+    {
+      "source": "packages/igor/app/routers/files.py",
+      "target": "app/routers/files.py",
+      "sha256": "4b0ed052986f1aeb833944b869aa8546e916e47cc6026a3f692b608687a4e7fc"
+    },
+    {
+      "source": "packages/igor/app/routers/health.py",
+      "target": "app/routers/health.py",
+      "sha256": "8d21ec0187bcfa39a08b2bb3fd1d03d27069ab22c7648ba20f2f155ef144743c"
+    },
+    {
+      "source": "packages/igor/app/routers/hisar.py",
+      "target": "app/routers/hisar.py",
+      "sha256": "b9c2459ccffc116d1f8f568831fa0b6dcf520d6041223aa7ed5097e0acdeb894"
+    },
+    {
+      "source": "packages/igor/app/routers/import_chats.py",
+      "target": "app/routers/import_chats.py",
+      "sha256": "040659103dbc95477174e53a406a8d9c6cbf81c52280d9aa5f2f090d7f238720"
+    },
+    {
+      "source": "packages/igor/app/routers/legion.py",
+      "target": "app/routers/legion.py",
+      "sha256": "72882eed2a21b0ae392f2b26af967691b27b0f6c48dd5102613b9f109286aeee"
+    },
+    {
+      "source": "packages/igor/app/routers/library.py",
+      "target": "app/routers/library.py",
+      "sha256": "a3c38cea15bffa273da14c83ea11d0209c1b0039d290eabd245ef51a21cb8af1"
+    },
+    {
+      "source": "packages/igor/app/routers/lifeboat.py",
+      "target": "app/routers/lifeboat.py",
+      "sha256": "1e993b8bcd40d1ac59f036e9f809202f9b435d1fa33dcddc236850f44f6f71c9"
+    },
+    {
+      "source": "packages/igor/app/routers/mail.py",
+      "target": "app/routers/mail.py",
+      "sha256": "c582e111f08e4ca3be43feee94af0463044823d2f891c9b6c1c09403cbf9a6b8"
+    },
+    {
+      "source": "packages/igor/app/routers/media.py",
+      "target": "app/routers/media.py",
+      "sha256": "798bc662e437ed9ccebdd128efa9deeda5eac89ea667cedfd195c3b213034fa5"
+    },
+    {
+      "source": "packages/igor/app/routers/memory.py",
+      "target": "app/routers/memory.py",
+      "sha256": "a50cb17fc53ccaa22b35c352f5c38cba002e93fa6d243a3959670bccd00c08e5"
+    },
+    {
+      "source": "packages/igor/app/routers/navigation.py",
+      "target": "app/routers/navigation.py",
+      "sha256": "e196b8962c7dbbc6575c93285dd09ece73047e61ec25c5d38faacb9ca8b20ac2"
+    },
+    {
+      "source": "packages/igor/app/routers/news.py",
+      "target": "app/routers/news.py",
+      "sha256": "55ad7a85073fd2fe1f2340786cc3a6c0a94456034343484661033efa5fd5f826"
+    },
+    {
+      "source": "packages/igor/app/routers/octavius.py",
+      "target": "app/routers/octavius.py",
+      "sha256": "aaeaf68b5745bd4fa915402a210652f5d35e9632a14af407239fad6508074ca2"
+    },
+    {
+      "source": "packages/igor/app/routers/outlook.py",
+      "target": "app/routers/outlook.py",
+      "sha256": "a45d16c9c987a99ae178ae8853be0031557d9327f61c18837a8de3c29359eb5d"
+    },
+    {
+      "source": "packages/igor/app/routers/projects.py",
+      "target": "app/routers/projects.py",
+      "sha256": "babf3f7735f331a0ba04cdaaac935d8892a25011b7ed42090af2fd1941dead2c"
+    },
+    {
+      "source": "packages/igor/app/routers/reminders.py",
+      "target": "app/routers/reminders.py",
+      "sha256": "1362446b267749a5523cfc735fe9da7adce5aae55e04be20a07ea7cad0b53f13"
+    },
+    {
+      "source": "packages/igor/app/routers/skyfall.py",
+      "target": "app/routers/skyfall.py",
+      "sha256": "ff853515cf5ad6ab5dfdb6a736eab11979798cac24bc2a93fad57787d4f49992"
+    },
+    {
+      "source": "packages/igor/app/routers/solus.py",
+      "target": "app/routers/solus.py",
+      "sha256": "a8c0342a75d4f0f57303c94b00bea4f0455ae192617440c6d73671cc368a218c"
+    },
+    {
+      "source": "packages/igor/app/routers/telegram.py",
+      "target": "app/routers/telegram.py",
+      "sha256": "faf2d1b3c1efcb079a25c3d88af3e5a4b02a93127939d438159e0eb975b7a7ff"
+    },
+    {
+      "source": "packages/igor/app/routers/trigger.py",
+      "target": "app/routers/trigger.py",
+      "sha256": "a85f1f5037f86e89cec9be505d86ca9d332378bc3d036ebec53070982bfdad8a"
+    },
+    {
+      "source": "packages/igor/app/routers/voice.py",
+      "target": "app/routers/voice.py",
+      "sha256": "4037bd0f7effe9b003d35ac28248d55c2ff2145d5caf018059f49319577cffe4"
+    },
+    {
+      "source": "packages/igor/app/routers/web_watch.py",
+      "target": "app/routers/web_watch.py",
+      "sha256": "75639ed20e80b7f064eb368b3c0f43093edc37c8e5f83dbe0a8d575d7971fef4"
+    },
+    {
+      "source": "packages/igor/app/schemas/__init__.py",
+      "target": "app/schemas/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/schemas/academic.py",
+      "target": "app/schemas/academic.py",
+      "sha256": "3c1a55ecb8e7b2eaa9d6fa10dccd5d73d65119df5d3a0996b1c7c96babdabbdf"
+    },
+    {
+      "source": "packages/igor/app/schemas/agent.py",
+      "target": "app/schemas/agent.py",
+      "sha256": "907cb72984e1e0694b0d4bc8617d5849c079dc63d5f10b33451182465b22dc54"
+    },
+    {
+      "source": "packages/igor/app/schemas/chat.py",
+      "target": "app/schemas/chat.py",
+      "sha256": "d7d48933373a98e8baa323868d015d729160259be97ffaea726e545e63039999"
+    },
+    {
+      "source": "packages/igor/app/schemas/doormat.py",
+      "target": "app/schemas/doormat.py",
+      "sha256": "93e089677db7d6536a470387f4d1230a066dea56080697882c36543328cf99d5"
+    },
+    {
+      "source": "packages/igor/app/schemas/health.py",
+      "target": "app/schemas/health.py",
+      "sha256": "84660f3ee785a9b0299fe2bf95f44feb701905dd1939187ce650e80348b746dd"
+    },
+    {
+      "source": "packages/igor/app/schemas/library.py",
+      "target": "app/schemas/library.py",
+      "sha256": "89256185bcff5dccb87bf8b397b11c1f8350aca9e8f895da7214e5448cd80dcd"
+    },
+    {
+      "source": "packages/igor/app/schemas/lifeboat.py",
+      "target": "app/schemas/lifeboat.py",
+      "sha256": "8cb7a08a119e4efca4aeee655375685a7180248a47226902f77995d669d3509c"
+    },
+    {
+      "source": "packages/igor/app/schemas/mail.py",
+      "target": "app/schemas/mail.py",
+      "sha256": "e41ceccf246e3c26af856e346a0a1efbd53492fddc1bd273061065be09d39f8f"
+    },
+    {
+      "source": "packages/igor/app/schemas/octavius.py",
+      "target": "app/schemas/octavius.py",
+      "sha256": "40d743110e3a4ec548235b2f9178d01c76e4c5a02c7e68f5ad99009c9d17ab3b"
+    },
+    {
+      "source": "packages/igor/app/schemas/outlook.py",
+      "target": "app/schemas/outlook.py",
+      "sha256": "fc666b1d3e610409828e59e28c3f8292c5fd49ad8b57551b1209d036b6095510"
+    },
+    {
+      "source": "packages/igor/app/schemas/project.py",
+      "target": "app/schemas/project.py",
+      "sha256": "3afaccd3d7df7353c97c6561630c2913b85fe0eb1af5778fa720bb16749fb671"
+    },
+    {
+      "source": "packages/igor/app/schemas/reminder.py",
+      "target": "app/schemas/reminder.py",
+      "sha256": "d67fb20b668485cc4cb5c808603ec0113d457d75e5b8c61b58bccb25650d5da1"
+    },
+    {
+      "source": "packages/igor/app/schemas/skyfall.py",
+      "target": "app/schemas/skyfall.py",
+      "sha256": "47fa393ae48a31f1129c651299c5708d599d3349359fe01b2eb9906c60725626"
+    },
+    {
+      "source": "packages/igor/app/schemas/solus.py",
+      "target": "app/schemas/solus.py",
+      "sha256": "3c318ace85796610a6588cb308765f5fbade6d71728c133503f4810b089373c0"
+    },
+    {
+      "source": "packages/igor/app/schemas/sse.py",
+      "target": "app/schemas/sse.py",
+      "sha256": "4b39bd6c3fa3cc56ce3fd53cdb2803b9135f7473013a9b86186ee20db4e32873"
+    },
+    {
+      "source": "packages/igor/app/schemas/trigger.py",
+      "target": "app/schemas/trigger.py",
+      "sha256": "e6f4f989a7facb4c000c6d825a946dd64cd2ae2c44c6e9a23b7e869449bde55c"
+    },
+    {
+      "source": "packages/igor/app/schemas/voice.py",
+      "target": "app/schemas/voice.py",
+      "sha256": "581c504ffb1d9b623b8a06e9c7e11c7a8cbf0135fe9b4fb21b7da584b1c18cca"
+    },
+    {
+      "source": "packages/igor/app/schemas/web.py",
+      "target": "app/schemas/web.py",
+      "sha256": "c232a674a6d63165d804f1aa02af119f6ddc8a7b680ecac1d1387a56456b53f8"
+    },
+    {
+      "source": "packages/igor/app/services/__init__.py",
+      "target": "app/services/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/services/academic.py",
+      "target": "app/services/academic.py",
+      "sha256": "feac194b4c2c622ac2bd6d4dde96e5e37f522f003be675fa935fd3de38d68c64"
+    },
+    {
+      "source": "packages/igor/app/services/aircraft.py",
+      "target": "app/services/aircraft.py",
+      "sha256": "0b607ec7971f883f982784b3205f3e17fa43751a08773358f1cebbf39f2bb998"
+    },
+    {
+      "source": "packages/igor/app/services/anthropic_client.py",
+      "target": "app/services/anthropic_client.py",
+      "sha256": "e156b4ab989a7344ca0d6f97a38ce05bc6525e1305bcb5690f348ca74d2e0305"
+    },
+    {
+      "source": "packages/igor/app/services/attachments.py",
+      "target": "app/services/attachments.py",
+      "sha256": "4979f7163f3843c4a8b859629c503b3e0c1a534c24ecd11f2618f07f4bc2b6f6"
+    },
+    {
+      "source": "packages/igor/app/services/automation_intent.py",
+      "target": "app/services/automation_intent.py",
+      "sha256": "a72325ca49941d774f8edd870aef2d61d98c115fd7776678bfc0c5663911fa6b"
+    },
+    {
+      "source": "packages/igor/app/services/behavior_config.py",
+      "target": "app/services/behavior_config.py",
+      "sha256": "7d3145f879f01dc2bb49831aea98c42efe29f625be104dc0276b6239a37a0386"
+    },
+    {
+      "source": "packages/igor/app/services/browser.py",
+      "target": "app/services/browser.py",
+      "sha256": "6ead3f280a8d6ab6720e6ced5517ad03c4331613db5380af14bcc4fe9ac41501"
+    },
+    {
+      "source": "packages/igor/app/services/chat_history.py",
+      "target": "app/services/chat_history.py",
+      "sha256": "ace66a96ebbe6afb491612db67fb569ab8eb07493ff31c3b591db2b75c1b5c39"
+    },
+    {
+      "source": "packages/igor/app/services/claim_audit.py",
+      "target": "app/services/claim_audit.py",
+      "sha256": "3dec61e640df66d2ab4c848ca7c0df165dfec7102b5968b3db91a6a06d7c76c7"
+    },
+    {
+      "source": "packages/igor/app/services/compaction.py",
+      "target": "app/services/compaction.py",
+      "sha256": "f96a659589c9bbb988353a28569224d89ca7b36cd2258fce781ecfe1d204f894"
+    },
+    {
+      "source": "packages/igor/app/services/completion_recovery.py",
+      "target": "app/services/completion_recovery.py",
+      "sha256": "6f21d7097b3baa3d2b5fa4f5d504846b3d76984e40892024284bce87243fee4c"
+    },
+    {
+      "source": "packages/igor/app/services/countermeasures.py",
+      "target": "app/services/countermeasures.py",
+      "sha256": "abf8b1e7bbdbec2dd4ef1667f5452ff7f728dfbbca11801967d0d6f740f342ca"
+    },
+    {
+      "source": "packages/igor/app/services/course_identity.py",
+      "target": "app/services/course_identity.py",
+      "sha256": "d973a89e2cf209a80e7f3908a368236a6c027c3bd76a832aadef83a636c334dc"
+    },
+    {
+      "source": "packages/igor/app/services/doormat.py",
+      "target": "app/services/doormat.py",
+      "sha256": "da268328cbd1fe6ec6df2653a5e9a2569c7a845974fa2fd1ce520e13873c1f85"
+    },
+    {
+      "source": "packages/igor/app/services/embedding_indexer.py",
+      "target": "app/services/embedding_indexer.py",
+      "sha256": "3abd8907eca6b0aeeef4e0ec2a43f385b02e200125fa3610130bfeccce82d8bb"
+    },
+    {
+      "source": "packages/igor/app/services/embeddings.py",
+      "target": "app/services/embeddings.py",
+      "sha256": "35455d6b5e4c5b2f03c3970994e4bbf783c217f1e177898692a7086a7efb4004"
+    },
+    {
+      "source": "packages/igor/app/services/engineering_inputs.py",
+      "target": "app/services/engineering_inputs.py",
+      "sha256": "a924095cc8e4c559bb9d5e8b9cd12a2d77d37ab1f3a73564494e9f81ec8ddbb7"
+    },
+    {
+      "source": "packages/igor/app/services/errors.py",
+      "target": "app/services/errors.py",
+      "sha256": "fb10d011a85d42df2f7418fea9faa536ad939989cf2e7aa9b268b78e5da1beef"
+    },
+    {
+      "source": "packages/igor/app/services/fact_extraction.py",
+      "target": "app/services/fact_extraction.py",
+      "sha256": "55b4bbcb6a02449ef9c4ac143f05c9d4e3631ce18c17010f9dd58ad4297e23fc"
+    },
+    {
+      "source": "packages/igor/app/services/fcm.py",
+      "target": "app/services/fcm.py",
+      "sha256": "7a8e3b6adfb0e7625e1403d504b89980e9a0dc86d34d16276effa79958d6cec0"
+    },
+    {
+      "source": "packages/igor/app/services/finance_records.py",
+      "target": "app/services/finance_records.py",
+      "sha256": "740884aee0d448abe74faa4ba7eee5f16d13a4d3347de4b77c039d9b8a7950bd"
+    },
+    {
+      "source": "packages/igor/app/services/google_auth.py",
+      "target": "app/services/google_auth.py",
+      "sha256": "2900869794a52f706183a883f91e4046ce06d597adeb5ae70d27aab5d563029e"
+    },
+    {
+      "source": "packages/igor/app/services/health.py",
+      "target": "app/services/health.py",
+      "sha256": "7beaebd4ee30bcebd57effd3d5db314ea5de82d78f18935b7da268f705e10264"
+    },
+    {
+      "source": "packages/igor/app/services/hisar_library_client.py",
+      "target": "app/services/hisar_library_client.py",
+      "sha256": "fc53418481c7c73ed7f8b448aad793051752144afff05830f1b30494822357ba"
+    },
+    {
+      "source": "packages/igor/app/services/hisar_workspaces.py",
+      "target": "app/services/hisar_workspaces.py",
+      "sha256": "3995f2090ec2c2bad72df81579037cd08f1a7d07cff1cd320119e302346cc2b1"
+    },
+    {
+      "source": "packages/igor/app/services/history_indexer.py",
+      "target": "app/services/history_indexer.py",
+      "sha256": "af93b0da7a617b7f4f9fa40675509abd61c554a4a00f385197d4c6b71ac056f0"
+    },
+    {
+      "source": "packages/igor/app/services/host_bridge.py",
+      "target": "app/services/host_bridge.py",
+      "sha256": "a6560d3ef4303f2468b465aadf23faba157609b664ec56c63d518beaa4452d9a"
+    },
+    {
+      "source": "packages/igor/app/services/language.py",
+      "target": "app/services/language.py",
+      "sha256": "aa35a5a2afe09b7c095ffbc806ed27f2a527d0904475017cc8cba2138970e16b"
+    },
+    {
+      "source": "packages/igor/app/services/lexical.py",
+      "target": "app/services/lexical.py",
+      "sha256": "4ecd69eadea25ab3e8c30091b01234cca8c07511bada327ddf04c688fe9b25cf"
+    },
+    {
+      "source": "packages/igor/app/services/library.py",
+      "target": "app/services/library.py",
+      "sha256": "89bf1a9f87104b29ca2c8f463321b166ec39bef279a9143892f2575cce26cc28"
+    },
+    {
+      "source": "packages/igor/app/services/library_controls.py",
+      "target": "app/services/library_controls.py",
+      "sha256": "ce619a8227ca3fba2b1ccab7525edecc53bc453aa60aa597d4ac25b3fae71895"
+    },
+    {
+      "source": "packages/igor/app/services/library_embeddings.py",
+      "target": "app/services/library_embeddings.py",
+      "sha256": "a8918207eed4e361cff96840b50156cf2f53569e78e01c658018aaafe1bbf2ab"
+    },
+    {
+      "source": "packages/igor/app/services/library_extract.py",
+      "target": "app/services/library_extract.py",
+      "sha256": "8bfa3efc3da1316bbe9d3c07d59eb51c4bc2593c7b4c20f34a7c1b607000a811"
+    },
+    {
+      "source": "packages/igor/app/services/library_indexer.py",
+      "target": "app/services/library_indexer.py",
+      "sha256": "cc8401adbc7ea32aef8ef8e5edab8f5675348857700c5b2c3e322036d9e23e71"
+    },
+    {
+      "source": "packages/igor/app/services/library_ocr.py",
+      "target": "app/services/library_ocr.py",
+      "sha256": "5f3771a25d318c10a48d6f46bd3d90eee53f6ed1b7139fbee23b2f0f8f17b055"
+    },
+    {
+      "source": "packages/igor/app/services/lifeboat.py",
+      "target": "app/services/lifeboat.py",
+      "sha256": "1cabbdb0b80e5835274faaf20386947f019d90ff643cf7dea71262c3244da49c"
+    },
+    {
+      "source": "packages/igor/app/services/llm_client.py",
+      "target": "app/services/llm_client.py",
+      "sha256": "85155958c9d008734d3574e5ff23cd4d0ab0d34ef4149821d78622f1fec4b4e7"
+    },
+    {
+      "source": "packages/igor/app/services/lockdown.py",
+      "target": "app/services/lockdown.py",
+      "sha256": "f56c5979ae69d0740fb005c7efb5ea039f70d59c48c21e48a439cb7874cfef41"
+    },
+    {
+      "source": "packages/igor/app/services/loop_monitor.py",
+      "target": "app/services/loop_monitor.py",
+      "sha256": "b427204e65e2d265737b07f012e498c98a805fa4429f76a6c67bbba9cbfc6662"
+    },
+    {
+      "source": "packages/igor/app/services/mail_watch.py",
+      "target": "app/services/mail_watch.py",
+      "sha256": "7899820d691f718c937b1d5a4122fe524bdb2b7de3f2e604979e856ee6f2f70d"
+    },
+    {
+      "source": "packages/igor/app/services/memory.py",
+      "target": "app/services/memory.py",
+      "sha256": "eb5ef6e8fc993b45c172f58715bed4c462ff4af34289c335686f78a73ff4d5d5"
+    },
+    {
+      "source": "packages/igor/app/services/memory_admission.py",
+      "target": "app/services/memory_admission.py",
+      "sha256": "d3941aad15b57e7ee7ad510ba3c7381950f7b8e84f1a508cba23f5e9b6712363"
+    },
+    {
+      "source": "packages/igor/app/services/memory_audit.py",
+      "target": "app/services/memory_audit.py",
+      "sha256": "fb427c78c9e2c759ca49460f610f957d7c7e6f8597e724af9a9ce3f47d73393f"
+    },
+    {
+      "source": "packages/igor/app/services/memory_calendar.py",
+      "target": "app/services/memory_calendar.py",
+      "sha256": "224d86e895f70a4570c9a798a99dde5ed09e170fed6db9bb76136187a1ed853b"
+    },
+    {
+      "source": "packages/igor/app/services/memory_capture.py",
+      "target": "app/services/memory_capture.py",
+      "sha256": "1ea7402cbc98eb4bc59bf15b9a3ec52f6b377289136308b7b13097784f6f02ad"
+    },
+    {
+      "source": "packages/igor/app/services/memory_catalog.py",
+      "target": "app/services/memory_catalog.py",
+      "sha256": "4597d3f9b1a88a3e63f6e598473761fca43e36f760474f61eb4f2ce5a0cf3bce"
+    },
+    {
+      "source": "packages/igor/app/services/memory_cleanup.py",
+      "target": "app/services/memory_cleanup.py",
+      "sha256": "7efe27143d5c47cd6c739ad9fe26605899c073c12ed1548161767f83a8d4edc4"
+    },
+    {
+      "source": "packages/igor/app/services/memory_compose.py",
+      "target": "app/services/memory_compose.py",
+      "sha256": "b7f0d53859cb396d7b47b5ae797e05fe47774d3ebd277120c5fc1858b495e838"
+    },
+    {
+      "source": "packages/igor/app/services/memory_graph.py",
+      "target": "app/services/memory_graph.py",
+      "sha256": "2dafd287e374263aa37bbe806ebc8aeab921c5ac691be18300553dc7d34e09ba"
+    },
+    {
+      "source": "packages/igor/app/services/memory_identity.py",
+      "target": "app/services/memory_identity.py",
+      "sha256": "59210c9c41c0021bd9ce1d05bc3945cf865b5005287696e39188a6a997761f5e"
+    },
+    {
+      "source": "packages/igor/app/services/memory_owner_review.py",
+      "target": "app/services/memory_owner_review.py",
+      "sha256": "f73a850a596f89afc2ac0266c0e35b50dbca30e36692e66e020b407ae3f64a84"
+    },
+    {
+      "source": "packages/igor/app/services/memory_passages.py",
+      "target": "app/services/memory_passages.py",
+      "sha256": "cdc9ce4e23b060184d1d57224f35db3f812d3379ba1bb8a28491fcb767ab6f63"
+    },
+    {
+      "source": "packages/igor/app/services/memory_paths.py",
+      "target": "app/services/memory_paths.py",
+      "sha256": "ef85eb7585906693abc00529b5238dd13f3426b2dee48597206e46338526a987"
+    },
+    {
+      "source": "packages/igor/app/services/memory_policy.py",
+      "target": "app/services/memory_policy.py",
+      "sha256": "49215461d9f3ae2acb78b1ebdc216625654a4438c64f3963d3f5c4cad970733f"
+    },
+    {
+      "source": "packages/igor/app/services/memory_reindex.py",
+      "target": "app/services/memory_reindex.py",
+      "sha256": "b15e44943d7e287f1621b01ae1aa44c1c4790611bbe9beaf8ba2b337a795b63f"
+    },
+    {
+      "source": "packages/igor/app/services/memory_render.py",
+      "target": "app/services/memory_render.py",
+      "sha256": "f1ceb325ea425be712373307d10c87f7589b4e9b173b3b5136e99214d4f59fd0"
+    },
+    {
+      "source": "packages/igor/app/services/memory_schema.py",
+      "target": "app/services/memory_schema.py",
+      "sha256": "c5131f774ff984f58d00f5d468edfb07d7d79b61bc0eabc73bf8570711bda0a1"
+    },
+    {
+      "source": "packages/igor/app/services/memory_spec.py",
+      "target": "app/services/memory_spec.py",
+      "sha256": "dafb70a55c2a116e5ffa7634956736f868380364b87e01dbc3b944be0f71a58f"
+    },
+    {
+      "source": "packages/igor/app/services/memory_split.py",
+      "target": "app/services/memory_split.py",
+      "sha256": "29a9fa8b9fc3d401263278a4369aed6c261a91b85c41bad417ed4dbaabb84961"
+    },
+    {
+      "source": "packages/igor/app/services/memory_states.py",
+      "target": "app/services/memory_states.py",
+      "sha256": "b373901463aeea7db2f9ef10b3a0121b3acc0d2c667382f777fc35160f5e2487"
+    },
+    {
+      "source": "packages/igor/app/services/memory_store.py",
+      "target": "app/services/memory_store.py",
+      "sha256": "3a07ae0f156d705bc8761926de04360cb203eec1d63de5b04bb3a8494b2d61ea"
+    },
+    {
+      "source": "packages/igor/app/services/memory_verify.py",
+      "target": "app/services/memory_verify.py",
+      "sha256": "31e11be2080518ea8a5dbe0b87a02c5a13960c562ce772857becd59c89c85f25"
+    },
+    {
+      "source": "packages/igor/app/services/memory_write.py",
+      "target": "app/services/memory_write.py",
+      "sha256": "fac2770774da09b36baa2032b5637cc0a2fa75fbbaf99d9127077634a0af613d"
+    },
+    {
+      "source": "packages/igor/app/services/n8n.py",
+      "target": "app/services/n8n.py",
+      "sha256": "de74aeda6eaaa409c33a472d2fb9b2b55a8683a2ffb4a782d18a4042f7f379dc"
+    },
+    {
+      "source": "packages/igor/app/services/n8n_api.py",
+      "target": "app/services/n8n_api.py",
+      "sha256": "cab2baa491018c9a88b820b84b0f9506b131e4a3ec994964e5ad58864da3f0e6"
+    },
+    {
+      "source": "packages/igor/app/services/n8n_drift.py",
+      "target": "app/services/n8n_drift.py",
+      "sha256": "fa35dd624a4d8b7c3a5cb68abb1931f74f39e6a82a615b3100e9310512e755bf"
+    },
+    {
+      "source": "packages/igor/app/services/observations.py",
+      "target": "app/services/observations.py",
+      "sha256": "0756028d6b63ebca1713265d0a1e289cd204ece207015d04fb873331e85ab163"
+    },
+    {
+      "source": "packages/igor/app/services/octavius.py",
+      "target": "app/services/octavius.py",
+      "sha256": "d2bd1296a20208ae403789b9f281bcb3b37445a3e5062752a670877a49d170a3"
+    },
+    {
+      "source": "packages/igor/app/services/octavius_restore.py",
+      "target": "app/services/octavius_restore.py",
+      "sha256": "7d52dc1b17b2f07c4019655fe04f42687d36291e9c55d42d69feed9ff3493463"
+    },
+    {
+      "source": "packages/igor/app/services/octavius_restore_host.py",
+      "target": "app/services/octavius_restore_host.py",
+      "sha256": "3f7f306ce57800446a004c8f5f26c7ed8cbc0f3006efea5c7b535f66612feb6a"
+    },
+    {
+      "source": "packages/igor/app/services/outcome_learning.py",
+      "target": "app/services/outcome_learning.py",
+      "sha256": "eb287916144c4f7e8b01b568bc75b5eb1f0739ff88855e0ca4a6ad2a658f3ed8"
+    },
+    {
+      "source": "packages/igor/app/services/outlook_watch.py",
+      "target": "app/services/outlook_watch.py",
+      "sha256": "5fcf9ae9c2c589ec2951750ced36e4d2bf647b063b2af04f25a43fab747e7806"
+    },
+    {
+      "source": "packages/igor/app/services/pattern_analysis.py",
+      "target": "app/services/pattern_analysis.py",
+      "sha256": "5c6a97f412c7aff6985cdf8c118c674b8a3734cc73aa4313a1aeb653fbe2cee3"
+    },
+    {
+      "source": "packages/igor/app/services/pattern_evidence.py",
+      "target": "app/services/pattern_evidence.py",
+      "sha256": "1bf09cea3b03a5ffe6bd49443ecac2745761f2ae9ec2de331d357c19fd4aa8ce"
+    },
+    {
+      "source": "packages/igor/app/services/pattern_scoring.py",
+      "target": "app/services/pattern_scoring.py",
+      "sha256": "879fffca3a339e88a4a81ec2204098b58bb85fb1ec27b04dd9c50ff650a07869"
+    },
+    {
+      "source": "packages/igor/app/services/peer_memory.py",
+      "target": "app/services/peer_memory.py",
+      "sha256": "f2608d3bc2a5feda76cd70ebdfadd94e5007f29c90ff0bd593ba3fd7edb7f101"
+    },
+    {
+      "source": "packages/igor/app/services/pending_asks.py",
+      "target": "app/services/pending_asks.py",
+      "sha256": "984ec034e71973ed9aa4752c65a4525d129dcadec5371928bc91eafad7939e63"
+    },
+    {
+      "source": "packages/igor/app/services/personality.py",
+      "target": "app/services/personality.py",
+      "sha256": "40b9437e1f33a1407e2a4a0bcf5a77ac59063cc3cac39d620208c7e76622c43c"
+    },
+    {
+      "source": "packages/igor/app/services/places.py",
+      "target": "app/services/places.py",
+      "sha256": "263d24aa27807f774184a2817d169235494c41711d2f82efb304a0059ceaa700"
+    },
+    {
+      "source": "packages/igor/app/services/projects.py",
+      "target": "app/services/projects.py",
+      "sha256": "0ee45e07db8913733a6dd6d1d19f2c9fc00eef910efb5bf93896a8e21dfcbe4e"
+    },
+    {
+      "source": "packages/igor/app/services/query_translation.py",
+      "target": "app/services/query_translation.py",
+      "sha256": "a80c2ea7f60b1548f8de92a44abd26eb5ba078c14cea13354db27f9b8273cc7c"
+    },
+    {
+      "source": "packages/igor/app/services/relevant_recall.py",
+      "target": "app/services/relevant_recall.py",
+      "sha256": "1f305f934b8e2ba767cf7b6c5f097e69c72b77ef27035f88ff52c56803197415"
+    },
+    {
+      "source": "packages/igor/app/services/reminders.py",
+      "target": "app/services/reminders.py",
+      "sha256": "b76ea87fe11d1949fb88fae97676794c0df22a9a76a6250136b6149f33d91b5f"
+    },
+    {
+      "source": "packages/igor/app/services/routes.py",
+      "target": "app/services/routes.py",
+      "sha256": "6e98cfa9623cd09798e9437c387976c921872df2b428435be130e431b22d297a"
+    },
+    {
+      "source": "packages/igor/app/services/sandbox_launcher.py",
+      "target": "app/services/sandbox_launcher.py",
+      "sha256": "4bd95684d42e6f8cd21ba0ee91a3a93c9d55ce9e8e4fb0b0016d1c4d5323516f"
+    },
+    {
+      "source": "packages/igor/app/services/skyfall.py",
+      "target": "app/services/skyfall.py",
+      "sha256": "1eeeb75e409d8b3022459024fc767fe9e5e591b42a1883d7e48bdd400d0b645b"
+    },
+    {
+      "source": "packages/igor/app/services/solus/__init__.py",
+      "target": "app/services/solus/__init__.py",
+      "sha256": "dcd5cf312e25345ef32e858ac4e3fda08bda469ef88a1c4a4107cc2b400f3287"
+    },
+    {
+      "source": "packages/igor/app/services/solus/calendars.py",
+      "target": "app/services/solus/calendars.py",
+      "sha256": "654be0ecdbf79ef40ad6b50dfc3c9475f027ba95928f1008b90618842a63607a"
+    },
+    {
+      "source": "packages/igor/app/services/solus/commands.py",
+      "target": "app/services/solus/commands.py",
+      "sha256": "bd8db88f2c8fc5bb6bb285843b58d2238e8bc20c123866cd12b3932f856b3bbc"
+    },
+    {
+      "source": "packages/igor/app/services/solus/guards.py",
+      "target": "app/services/solus/guards.py",
+      "sha256": "77c51de95215ba5edb9451ecb8c8361c7cf9cf82809aae80d9255152896f6cda"
+    },
+    {
+      "source": "packages/igor/app/services/solus/http.py",
+      "target": "app/services/solus/http.py",
+      "sha256": "356b99e4c664108ffeadc2f0bfc67a991d74012f7dd824d69cbc677c3d86e1ce"
+    },
+    {
+      "source": "packages/igor/app/services/solus/imports.py",
+      "target": "app/services/solus/imports.py",
+      "sha256": "e188c7f1112485b411d782f87a32169c97a79c4f77a72ffafdb0c60a15e0b8a3"
+    },
+    {
+      "source": "packages/igor/app/services/solus/investments.py",
+      "target": "app/services/solus/investments.py",
+      "sha256": "8089ffe90a4e76fa22ccec53b6caaeef85fe07c7644f44b8f7b4f901f722ecd0"
+    },
+    {
+      "source": "packages/igor/app/services/solus/migration.py",
+      "target": "app/services/solus/migration.py",
+      "sha256": "dbbeff24931b86a27189e24896f2450c9cf10af31570e2201a1a711b95ce3f93"
+    },
+    {
+      "source": "packages/igor/app/services/solus/money.py",
+      "target": "app/services/solus/money.py",
+      "sha256": "b4707f9771eb97ac687c6fe4dcb7ec733ae3c4bf999887bfb9a529c95bd51d2b"
+    },
+    {
+      "source": "packages/igor/app/services/solus/projections.py",
+      "target": "app/services/solus/projections.py",
+      "sha256": "3daecfb0bc6291ac31f18141bb396ed89af357297dc86aa8856d4da180c88a3c"
+    },
+    {
+      "source": "packages/igor/app/services/solus/reconciliation.py",
+      "target": "app/services/solus/reconciliation.py",
+      "sha256": "b478636016afd09bd07e14a42577ce7c87be7d68c1d4c1b8cd69483438d69808"
+    },
+    {
+      "source": "packages/igor/app/services/solus/reports.py",
+      "target": "app/services/solus/reports.py",
+      "sha256": "58750d7a03084f276bdc80bed766dbfd51b6f339fef45c61799264309cf26a13"
+    },
+    {
+      "source": "packages/igor/app/services/solus/security.py",
+      "target": "app/services/solus/security.py",
+      "sha256": "7cdee22b34ff80a0e2159d2bcdab313bbb74f37e76cb525091dfa4febddbd93f"
+    },
+    {
+      "source": "packages/igor/app/services/solus/transport.py",
+      "target": "app/services/solus/transport.py",
+      "sha256": "b7d7f592de04c55b16a104fa4c44ac6cd7a9f465e8d192248d764177ab41a9a9"
+    },
+    {
+      "source": "packages/igor/app/services/solus_accounting.py",
+      "target": "app/services/solus_accounting.py",
+      "sha256": "8b0539e422dbce2f2147adc3ba5eaf074172932c538888457ebded15227d6167"
+    },
+    {
+      "source": "packages/igor/app/services/stt.py",
+      "target": "app/services/stt.py",
+      "sha256": "beb333d73eda98bfa25f82d819f0ae77d64134fbd07976479d5d12d6249e5ba4"
+    },
+    {
+      "source": "packages/igor/app/services/surprisal.py",
+      "target": "app/services/surprisal.py",
+      "sha256": "9da242e87630ec38e3ecefe146fd5310de78b3235c5298ee5903d28f39a7615e"
+    },
+    {
+      "source": "packages/igor/app/services/tactical_context.py",
+      "target": "app/services/tactical_context.py",
+      "sha256": "83500ec4e6ed5e4619737fa0300b51e54f1c4463aa71bb88db27de0f1dc27406"
+    },
+    {
+      "source": "packages/igor/app/services/task_queue.py",
+      "target": "app/services/task_queue.py",
+      "sha256": "0cb789ab8be41bdf90301c10c6b8ecea391180e4e8cc2c43a1fca279c3386863"
+    },
+    {
+      "source": "packages/igor/app/services/transit.py",
+      "target": "app/services/transit.py",
+      "sha256": "f3862aaafaf335c543daf42d00cbfc8271a795fe0e212ae91dd08a3a541f45a8"
+    },
+    {
+      "source": "packages/igor/app/services/tts.py",
+      "target": "app/services/tts.py",
+      "sha256": "1b285e39ea9f7118af1df5df8f723b42b77a9831b767763876e836437764a020"
+    },
+    {
+      "source": "packages/igor/app/services/tts_stream.py",
+      "target": "app/services/tts_stream.py",
+      "sha256": "f20ad859ad0791263317339fb105485ce93f59a44dd80e434ba7a94531258272"
+    },
+    {
+      "source": "packages/igor/app/services/voice_preferences.py",
+      "target": "app/services/voice_preferences.py",
+      "sha256": "dbd08a028e828a6fb7e7ca26df7dd67170e690fe8fe0b2c52e462765eb8509bc"
+    },
+    {
+      "source": "packages/igor/app/services/web_watch.py",
+      "target": "app/services/web_watch.py",
+      "sha256": "915c0bd4fa42adf4f47fc1cffae105a6710d9b5104c2c5e9db6e662067c56a89"
+    },
+    {
+      "source": "packages/igor/app/services/welcome.py",
+      "target": "app/services/welcome.py",
+      "sha256": "5bc87511be7cec9fee853ab6fc5635729aa01e6386870f662f78ed113cc171f4"
+    },
+    {
+      "source": "packages/igor/app/services/worker_control.py",
+      "target": "app/services/worker_control.py",
+      "sha256": "9ea85490012383b45d8a379608e3b510463fe97c25fbbaffa78274c13a95ec33"
+    },
+    {
+      "source": "packages/igor/app/services/workspaces.py",
+      "target": "app/services/workspaces.py",
+      "sha256": "6a097cb7c39b6e7b5d71f9cf9e9301787f5320d7a78e21556fe94fe1488e7b95"
+    },
+    {
+      "source": "packages/igor/app/skills/__init__.py",
+      "target": "app/skills/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/skills/aircraft.py",
+      "target": "app/skills/aircraft.py",
+      "sha256": "b5a838e182c372af93222f3dd8c380ca6ff9527527961bd03ad9ebd2d426a6af"
+    },
+    {
+      "source": "packages/igor/app/skills/atomix_reports.py",
+      "target": "app/skills/atomix_reports.py",
+      "sha256": "9c195be7d1715daf9d89115613811b8779c8ec577b1ebf7ffb070954427d24a7"
+    },
+    {
+      "source": "packages/igor/app/skills/attendance.py",
+      "target": "app/skills/attendance.py",
+      "sha256": "60e0fc1579979342b8124a80262a899b4d8703172b2090ccabf2c47e38924c97"
+    },
+    {
+      "source": "packages/igor/app/skills/automations.py",
+      "target": "app/skills/automations.py",
+      "sha256": "96384caf14c0c48e1c684e20d95d60cae26a877cd11e26660d67eae7fd96f4f4"
+    },
+    {
+      "source": "packages/igor/app/skills/base.py",
+      "target": "app/skills/base.py",
+      "sha256": "7a02e710bf7f859244cb66d7fca1b1c85bec487a159da0c6a14397fe8a8b0bb8"
+    },
+    {
+      "source": "packages/igor/app/skills/browser.py",
+      "target": "app/skills/browser.py",
+      "sha256": "1545157108dbac944eb75f1fb0ce47fdc91db3c23dce31d20f1684c3625c006d"
+    },
+    {
+      "source": "packages/igor/app/skills/budget.py",
+      "target": "app/skills/budget.py",
+      "sha256": "6a5539201e1fdded3a8d77c7ca32edeb545d35b32440649bd28f6c285b49d001"
+    },
+    {
+      "source": "packages/igor/app/skills/course_memory.py",
+      "target": "app/skills/course_memory.py",
+      "sha256": "7cb82dd0f26a694ef5215540b928643994a7385f9b6785acbf16057a3cd3621c"
+    },
+    {
+      "source": "packages/igor/app/skills/dispatch.py",
+      "target": "app/skills/dispatch.py",
+      "sha256": "49d2e56652f15f18653a886bb2daf8daba4da4e80b3b21f53394b16a00965a0a"
+    },
+    {
+      "source": "packages/igor/app/skills/documents.py",
+      "target": "app/skills/documents.py",
+      "sha256": "ec0ca71e6d4187afc039ac4db39996d3577234fa166462dced9b32da2adfa320"
+    },
+    {
+      "source": "packages/igor/app/skills/doormat.py",
+      "target": "app/skills/doormat.py",
+      "sha256": "349f68b90fa9d2c20e2013ee03337cdf75f92c2ea157f8f44d6c5903c189e464"
+    },
+    {
+      "source": "packages/igor/app/skills/finance_record.py",
+      "target": "app/skills/finance_record.py",
+      "sha256": "1a8e377dbdcfa4dd02a88755980e1771d1cc6c182b794d0fdfbe73543b39b04e"
+    },
+    {
+      "source": "packages/igor/app/skills/health_data.py",
+      "target": "app/skills/health_data.py",
+      "sha256": "cbf7db1d3327fc2bf47eba0e7d1e82caac18b386366831e5d4bccf65c51f608a"
+    },
+    {
+      "source": "packages/igor/app/skills/hisar.py",
+      "target": "app/skills/hisar.py",
+      "sha256": "ee6062f02813ea77b6c9e100a777e2922e5cbd56c62cd9b162cabbe7b3b07348"
+    },
+    {
+      "source": "packages/igor/app/skills/legion.py",
+      "target": "app/skills/legion.py",
+      "sha256": "1a9c33df3ed546301ce223db48874e220f203666887f9bce1d863a5c5c9ff80f"
+    },
+    {
+      "source": "packages/igor/app/skills/library.py",
+      "target": "app/skills/library.py",
+      "sha256": "ad9bdf148f4799de20f8d834609a70e354d757fae2258862f54e5a4129fd5e7a"
+    },
+    {
+      "source": "packages/igor/app/skills/lifeboat.py",
+      "target": "app/skills/lifeboat.py",
+      "sha256": "30b4e255fb85c2104caface0918b820708102d466329429e67c0ac73cb78bf3f"
+    },
+    {
+      "source": "packages/igor/app/skills/lockdown.py",
+      "target": "app/skills/lockdown.py",
+      "sha256": "81c91e495c6678b90589cbf4a57cafe69f0afbacedd47a2914bd29053ab0c6ce"
+    },
+    {
+      "source": "packages/igor/app/skills/memory.py",
+      "target": "app/skills/memory.py",
+      "sha256": "1da83fb3e5511fac6ef68aff5c3bb764a3481718f2576611c70bcb7fbf99fdbb"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_audit.py",
+      "target": "app/skills/memory_audit.py",
+      "sha256": "f350b039e415405d1528564967fedcf688a9a2d13a6f3b9422c6b2289b09a935"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_edit.py",
+      "target": "app/skills/memory_edit.py",
+      "sha256": "96aff7df26551b69ec9d46df7dc57c4d953f2868b8f855f69ddb27eb6910ddda"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_event.py",
+      "target": "app/skills/memory_event.py",
+      "sha256": "689f65724bd246fc115bd8a9e3fa7725c56ceb8207e3cccfc6af665d8bb6dea6"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_graph.py",
+      "target": "app/skills/memory_graph.py",
+      "sha256": "a2a053554464caf1f8f897431277edd076e3ec1a8098d8d64822b0b8e0a26bbd"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_state.py",
+      "target": "app/skills/memory_state.py",
+      "sha256": "2458027a592ddb2fd915df6d13df0b5865bb377079c25ef0eba7f28effe80db5"
+    },
+    {
+      "source": "packages/igor/app/skills/memory_write.py",
+      "target": "app/skills/memory_write.py",
+      "sha256": "e87cf56481c2e04646ec1bd903b437b556a3b983f984407c7f424ce709f15333"
+    },
+    {
+      "source": "packages/igor/app/skills/navigation.py",
+      "target": "app/skills/navigation.py",
+      "sha256": "f89bea411c59f4cab4b103dd574e6d8ede95d9dbbb4934960908d2b8c48e41c5"
+    },
+    {
+      "source": "packages/igor/app/skills/news.py",
+      "target": "app/skills/news.py",
+      "sha256": "923d6585b5b5a2a4ba3c7f927b8c9f6b28e461aa861b4a40a88fc9dd2550f96b"
+    },
+    {
+      "source": "packages/igor/app/skills/notifications.py",
+      "target": "app/skills/notifications.py",
+      "sha256": "524a103e5eb3489d7e2d5ba038c6c2ae26c5b774ddc4914fe4f66beae28ba145"
+    },
+    {
+      "source": "packages/igor/app/skills/observations.py",
+      "target": "app/skills/observations.py",
+      "sha256": "a7a7dda5b99a4b4dc2b04f6cf6d33dfb705fd32c6e2bb1dacccd4fdc96617397"
+    },
+    {
+      "source": "packages/igor/app/skills/octavius.py",
+      "target": "app/skills/octavius.py",
+      "sha256": "bfd63ee60ccc102c77f8168223e2d95e1222d048f9d9fdaff96e41778238c254"
+    },
+    {
+      "source": "packages/igor/app/skills/onyx.py",
+      "target": "app/skills/onyx.py",
+      "sha256": "5dea61a46cdfe78f6643dbcd8488b9d87ff4758bf5406e718eb37c63ed6e600f"
+    },
+    {
+      "source": "packages/igor/app/skills/osint.py",
+      "target": "app/skills/osint.py",
+      "sha256": "a6c4a66e4329a285412eaa8578fa20c38a1a408eb071ddb74765164e185ad9d8"
+    },
+    {
+      "source": "packages/igor/app/skills/patterns.py",
+      "target": "app/skills/patterns.py",
+      "sha256": "1827e16e6444f53f1740629dab9fa3dde2b487966a71f8704aa97802d5af98e9"
+    },
+    {
+      "source": "packages/igor/app/skills/pharmacies.py",
+      "target": "app/skills/pharmacies.py",
+      "sha256": "046ed7330802681dd92caf77c37b1b876c9cb654d1ff3890848f869f7c8942eb"
+    },
+    {
+      "source": "packages/igor/app/skills/read_skill.py",
+      "target": "app/skills/read_skill.py",
+      "sha256": "ab58b6ec04b83b65c6672070b40f74bdb9739043b82aefb4023499c1701855b7"
+    },
+    {
+      "source": "packages/igor/app/skills/reminders.py",
+      "target": "app/skills/reminders.py",
+      "sha256": "ebfc1bcae9942e7589ed47d7504a8f1c6a3734c2a42c58f3cfede4054d1202b5"
+    },
+    {
+      "source": "packages/igor/app/skills/sandbox.py",
+      "target": "app/skills/sandbox.py",
+      "sha256": "c7bfa6a8719f2f6e258c36d9c3a33d6b54420bc25a5bf08f5019cd35193270aa"
+    },
+    {
+      "source": "packages/igor/app/skills/save_file.py",
+      "target": "app/skills/save_file.py",
+      "sha256": "98ab3a63f9bce399aab51efe8167fc72e1e2da46c8c934cb904e7dd53d7cbc08"
+    },
+    {
+      "source": "packages/igor/app/skills/schedule.py",
+      "target": "app/skills/schedule.py",
+      "sha256": "156ba539c6c5b1688c9b7ebd01578e14ca75e7e53acf8cb3486933364400b3bc"
+    },
+    {
+      "source": "packages/igor/app/skills/search_history.py",
+      "target": "app/skills/search_history.py",
+      "sha256": "9a9c2d06a03c8cde5b099a651445c1f8f25575c5d98843a19a78e8f783c39e2b"
+    },
+    {
+      "source": "packages/igor/app/skills/semantic_search.py",
+      "target": "app/skills/semantic_search.py",
+      "sha256": "ebf08e3b4f06c5c106c9efdc68d06e30cef3b4c6fa7036c474ad821b9b2b931e"
+    },
+    {
+      "source": "packages/igor/app/skills/skyfall.py",
+      "target": "app/skills/skyfall.py",
+      "sha256": "f12d7476224c6885c71d2d03b57de0000c323ede1e7f57376a75055267898ecc"
+    },
+    {
+      "source": "packages/igor/app/skills/solus.py",
+      "target": "app/skills/solus.py",
+      "sha256": "13febd6e031afe2a49fc4f6aa60578ef1498b85d27603537c4a67b8a0d57eb04"
+    },
+    {
+      "source": "packages/igor/app/skills/stt.py",
+      "target": "app/skills/stt.py",
+      "sha256": "f85258b7471f4436f40ae48dc1905ea2ad34658cd936f0c2abf5fc09b6441c5d"
+    },
+    {
+      "source": "packages/igor/app/skills/system.py",
+      "target": "app/skills/system.py",
+      "sha256": "2ea787b287733d459b4cbf4b864e7259b6d91da7b934740beb3f641d64786a6a"
+    },
+    {
+      "source": "packages/igor/app/skills/system_ops.py",
+      "target": "app/skills/system_ops.py",
+      "sha256": "340598ff8771ab4829cf81275ce23882609dbe431793104057e2a2012b96806e"
+    },
+    {
+      "source": "packages/igor/app/skills/telegram.py",
+      "target": "app/skills/telegram.py",
+      "sha256": "a7f9267751003d63e868fbe1e77da6331bafee20ea073421284d6fb18e0a41ec"
+    },
+    {
+      "source": "packages/igor/app/skills/tool_search.py",
+      "target": "app/skills/tool_search.py",
+      "sha256": "df5793130c2ed8bae9cdf0ea370e722af3fe8742aa6a8b4af927dfe60340a8ba"
+    },
+    {
+      "source": "packages/igor/app/skills/toolsets.py",
+      "target": "app/skills/toolsets.py",
+      "sha256": "a5d71a3c78de0dcc7a954fcb280b4a22e9703c062e98e80d065b57403b16f387"
+    },
+    {
+      "source": "packages/igor/app/skills/transit.py",
+      "target": "app/skills/transit.py",
+      "sha256": "90f413901716de011e90b56f03a7d58b2c6df46d78a5005ee0e5b11e8dd3fe42"
+    },
+    {
+      "source": "packages/igor/app/skills/tts.py",
+      "target": "app/skills/tts.py",
+      "sha256": "f39d72677a664fec043897286c4b1628768ecd11d9031b65e104d0a403cfec06"
+    },
+    {
+      "source": "packages/igor/app/skills/weather.py",
+      "target": "app/skills/weather.py",
+      "sha256": "60a3450702f0e491924d3e87b40147b8b206817062169e2f4e7ae94df508ddf8"
+    },
+    {
+      "source": "packages/igor/app/skills/workshop.py",
+      "target": "app/skills/workshop.py",
+      "sha256": "238d19188b8cb40f8bb0b2c41419e5aa7a025f666eb66afe79b130dbd4d08fa8"
+    },
+    {
+      "source": "packages/igor/app/telegram/__init__.py",
+      "target": "app/telegram/__init__.py",
+      "sha256": "0dfc3852f3bae3efe2c769ec740955358ee1f5f67c18a0be5f7cbd08cd900bac"
+    },
+    {
+      "source": "packages/igor/app/telegram/client.py",
+      "target": "app/telegram/client.py",
+      "sha256": "7c01a8b2665d6cb1c831bf4258fdb14ffc3a867db2f940e3572c37121b85a496"
+    },
+    {
+      "source": "packages/igor/app/telegram/gateway.py",
+      "target": "app/telegram/gateway.py",
+      "sha256": "37a3921f59a08753b73149b821efba153de2fb3204daee1191fb1c291d5f0e39"
+    },
+    {
+      "source": "packages/igor/app/telegram/linking.py",
+      "target": "app/telegram/linking.py",
+      "sha256": "6ada0586a7e30dff01b28933a8e7b5547fd47d9210b8d011a63a9fbfda95a3f2"
+    },
+    {
+      "source": "packages/igor/app/telegram/registry.py",
+      "target": "app/telegram/registry.py",
+      "sha256": "0bb3c80e6524fe9b66bc1881cd614d02343ea4aec6663c3d4a4f717b3c6a04f1"
+    },
+    {
+      "source": "packages/igor/app/telegram/renderer.py",
+      "target": "app/telegram/renderer.py",
+      "sha256": "c8d51e868f335e666e59ff913077a86a0d4466707a0ffdae788dd35ba85e15cc"
+    },
+    {
+      "source": "packages/igor/app/websocket/__init__.py",
+      "target": "app/websocket/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "packages/igor/app/websocket/manager.py",
+      "target": "app/websocket/manager.py",
+      "sha256": "71ac50f8279cce39afbc3db8079f217303d3950eb6c8ed44e4049bec6c421ac7"
+    },
+    {
+      "source": "packages/igor/app/websocket/protocol.py",
+      "target": "app/websocket/protocol.py",
+      "sha256": "53a997023bf8227c9b34a990e6cf1bf370b4b91106a9e12cb70ad48e48d24eed"
+    }
+  ],
+  "native_routes": 210,
+  "registered_skill_count": 61,
+  "audit_scope": "Offline registration plus named local contract tests; no blanket parity, live-provider or deployment claim",
+  "route_status_counts": {
+    "mounted_contract_unverified": 112,
+    "verified_local_mocked": 39,
+    "superseded": 16,
+    "pending": 42
+  },
+  "skill_status_counts": {
+    "registered_unverified": 35,
+    "verified_local_pdf_runtime": 1,
+    "verified_local_mocked": 17,
+    "superseded": 28,
+    "verified_local_document_runtime": 1,
+    "pending": 6
+  },
+  "product_acceptance": {
+    "target": "Superior Mark VI",
+    "complete": false,
+    "baseline_matches": true,
+    "native_tree_sha256": "029a6b9d8e459f3524c5aba54bb1a6a390d28dce4e26fb3481536cfd02c41bdd",
+    "coverage_points": 296,
+    "accepted_coverage_points": 0,
+    "unaccepted_originals": [
+      "route:DELETE /admin/outputs",
+      "route:DELETE /automations/{automation_id}",
+      "route:DELETE /connections/mcp/{name}",
+      "route:DELETE /connections/portals/{name}",
+      "route:DELETE /health/data",
+      "route:DELETE /host/doormat",
+      "route:DELETE /host/lifeboat",
+      "route:DELETE /memory/files",
+      "route:DELETE /memory/observations/{observation_id}",
+      "route:DELETE /projects/{project_id}",
+      "route:DELETE /projects/{project_id}/files/{file_id}",
+      "route:DELETE /protocols/skyfall/projects/{project_id}",
+      "route:DELETE /reminders/definitions/{reminder_id}",
+      "route:DELETE /sessions/{session_id}",
+      "route:DELETE /solus/api/v1/session",
+      "route:DELETE /web/watch/{watch_id}",
+      "route:GET /academic/attendance/summary",
+      "route:GET /academic/schedule",
+      "route:GET /admin/evals/behavior-config",
+      "route:GET /admin/memory/status",
+      "route:GET /admin/memory/verify",
+      "route:GET /admin/octavius",
+      "route:GET /admin/octavius/backups",
+      "route:GET /admin/octavius/restore",
+      "route:GET /agents",
+      "route:GET /agents/asks",
+      "route:GET /agents/comms",
+      "route:GET /agents/house-party",
+      "route:GET /agents/legion-models",
+      "route:GET /agents/lockdown",
+      "route:GET /agents/models",
+      "route:GET /agents/personalities",
+      "route:GET /aircraft/track/{tail_number}",
+      "route:GET /automations",
+      "route:GET /automations/agents",
+      "route:GET /automations/drift",
+      "route:GET /automations/status",
+      "route:GET /automations/telegram/status",
+      "route:GET /automations/{automation_id}/runs",
+      "route:GET /budget-mode",
+      "route:GET /chat/active",
+      "route:GET /chat/attach/{request_id}",
+      "route:GET /config",
+      "route:GET /connections",
+      "route:GET /connections/google/login",
+      "route:GET /connections/google/status",
+      "route:GET /connections/mcp",
+      "route:GET /connections/microsoft/login",
+      "route:GET /connections/microsoft/status",
+      "route:GET /connections/notion/login",
+      "route:GET /connections/notion/status",
+      "route:GET /connections/portals",
+      "route:GET /files/{name}",
+      "route:GET /files/{name}/meta",
+      "route:GET /health",
+      "route:GET /health/freshness",
+      "route:GET /health/live",
+      "route:GET /health/ready",
+      "route:GET /health/status",
+      "route:GET /health/sync-demand",
+      "route:GET /hisar/dirs",
+      "route:GET /host/doormat",
+      "route:GET /host/lifeboat",
+      "route:GET /legion/active",
+      "route:GET /legion/attach/{ticket}",
+      "route:GET /legion/executions",
+      "route:GET /legion/executions/{execution_id}",
+      "route:GET /legion/executions/{execution_id}/attach",
+      "route:GET /legion/executions/{execution_id}/event-artifacts/{digest}",
+      "route:GET /legion/executions/{execution_id}/events",
+      "route:GET /library/settings",
+      "route:GET /library/sources/{citation_id}",
+      "route:GET /media/proxy",
+      "route:GET /memory/files",
+      "route:GET /memory/files/revisions",
+      "route:GET /memory/folders",
+      "route:GET /memory/observations",
+      "route:GET /memory/sources",
+      "route:GET /models",
+      "route:GET /navigation/places/{set_id}",
+      "route:GET /navigation/route/{route_id}",
+      "route:GET /news/items",
+      "route:GET /news/watch",
+      "route:GET /oauth/google/callback",
+      "route:GET /oauth/microsoft/callback",
+      "route:GET /oauth/notion/callback",
+      "route:GET /projects",
+      "route:GET /projects/{project_id}",
+      "route:GET /projects/{project_id}/files",
+      "route:GET /projects/{project_id}/sessions",
+      "route:GET /protocols/skyfall/projects",
+      "route:GET /reminders/definitions",
+      "route:GET /reminders/history",
+      "route:GET /reminders/open",
+      "route:GET /sessions",
+      "route:GET /sessions/{session_id}/export",
+      "route:GET /sessions/{session_id}/messages",
+      "route:GET /solus/",
+      "route:GET /solus/api/v1/auth-status",
+      "route:GET /solus/api/v1/books",
+      "route:GET /solus/api/v1/books/{book_id}/{resource}",
+      "route:GET /solus/api/v1/legacy",
+      "route:GET /solus/api/v1/receipts/{key}",
+      "route:GET /solus/api/v1/session",
+      "route:GET /telegram/link/{agent_id}",
+      "route:GET /telegram/status",
+      "route:GET /voice/agents",
+      "route:GET /voice/status",
+      "route:GET /voice/voices",
+      "route:GET /web/watch",
+      "route:GET /welcome/{agent_id}",
+      "route:PATCH /projects/{project_id}",
+      "route:PATCH /sessions/{session_id}",
+      "route:POST /academic/ask-pending",
+      "route:POST /academic/attendance",
+      "route:POST /admin/import-chats",
+      "route:POST /admin/index-embeddings",
+      "route:POST /admin/index-history",
+      "route:POST /admin/memory/compose",
+      "route:POST /admin/memory/reindex",
+      "route:POST /admin/memory/render",
+      "route:POST /admin/memory/shadow",
+      "route:POST /admin/memory/shard",
+      "route:POST /admin/memory/split",
+      "route:POST /admin/octavius/backup",
+      "route:POST /admin/octavius/fetch",
+      "route:POST /admin/octavius/restore",
+      "route:POST /admin/tasks/drain",
+      "route:POST /agents/asks/{ask_id}",
+      "route:POST /agents/house-party",
+      "route:POST /agents/legion-models",
+      "route:POST /agents/lockdown",
+      "route:POST /agents/models",
+      "route:POST /agents/personalities",
+      "route:POST /agents/telegram-models",
+      "route:POST /automations",
+      "route:POST /automations/telegram/connect",
+      "route:POST /automations/{automation_id}/test",
+      "route:POST /automations/{automation_id}/toggle",
+      "route:POST /budget-mode",
+      "route:POST /chat",
+      "route:POST /chat/cancel/{request_id}",
+      "route:POST /chat/steer/{request_id}",
+      "route:POST /chat/{agent_id}",
+      "route:POST /connections",
+      "route:POST /connections/google/disconnect",
+      "route:POST /connections/mcp",
+      "route:POST /connections/microsoft/disconnect",
+      "route:POST /connections/notion/disconnect",
+      "route:POST /connections/portals",
+      "route:POST /connections/portals/{name}/forget",
+      "route:POST /connections/portals/{name}/login",
+      "route:POST /devices/register",
+      "route:POST /health/ingest",
+      "route:POST /hisar/dirs",
+      "route:POST /host/doormat/cutover",
+      "route:POST /host/doormat/retire",
+      "route:POST /host/doormat/stage",
+      "route:POST /host/lifeboat/ack",
+      "route:POST /host/lifeboat/scan",
+      "route:POST /legion/executions/{execution_id}/interrupt",
+      "route:POST /legion/executions/{execution_id}/messages",
+      "route:POST /library/progress",
+      "route:POST /library/reconcile",
+      "route:POST /mail/watch/scan",
+      "route:POST /mail/watch/seen",
+      "route:POST /memory/files/rename",
+      "route:POST /memory/files/restore",
+      "route:POST /memory/observations",
+      "route:POST /memory/observations/{observation_id}/end",
+      "route:POST /models/thinking",
+      "route:POST /news/poll",
+      "route:POST /news/watch",
+      "route:POST /outlook/watch/scan",
+      "route:POST /outlook/watch/seen",
+      "route:POST /projects",
+      "route:POST /projects/{project_id}/files",
+      "route:POST /protocols/skyfall/abort",
+      "route:POST /protocols/skyfall/arm/{project_id}",
+      "route:POST /protocols/skyfall/fire",
+      "route:POST /reminders/answer",
+      "route:POST /reminders/tick",
+      "route:POST /solus/api/v1/books/{book_id}/import-preview",
+      "route:POST /solus/api/v1/books/{book_id}/reconciliation-preview",
+      "route:POST /solus/api/v1/commands",
+      "route:POST /solus/api/v1/login",
+      "route:POST /solus/api/v1/password",
+      "route:POST /solus/api/v1/receipts/{key}/resolve",
+      "route:POST /solus/api/v1/session",
+      "route:POST /solus/api/v1/setup",
+      "route:POST /telegram/webhook/{agent_id}",
+      "route:POST /trigger/{agent_id}",
+      "route:POST /voice/listen",
+      "route:POST /voice/speak",
+      "route:POST /web/watch/ack",
+      "route:POST /web/watch/scan",
+      "route:PUT /academic/schedule",
+      "route:PUT /automations/{automation_id}",
+      "route:PUT /config",
+      "route:PUT /library/settings",
+      "route:PUT /memory/files",
+      "route:PUT /memory/sources",
+      "route:PUT /protocols/skyfall/projects",
+      "route:PUT /reminders/definitions/{reminder_id}",
+      "route:PUT /voice/agents/{agent_id}",
+      "route:WEBSOCKET /agents/ws/{agent_id}",
+      "route:WEBSOCKET /voice/stream",
+      "route:WEBSOCKET /ws",
+      "skill:ask_attendance",
+      "skill:browse_page",
+      "skill:browser_act",
+      "skill:bus_arrivals",
+      "skill:check_attendance",
+      "skill:crypto_trace",
+      "skill:darkweb_search",
+      "skill:deliver_file",
+      "skill:dispatch_agent",
+      "skill:dispatch_status",
+      "skill:doormat_protocol",
+      "skill:email_discovery",
+      "skill:explore_memory",
+      "skill:finance_record",
+      "skill:find_places",
+      "skill:forget_observation",
+      "skill:generate_daily_training_program",
+      "skill:generate_document",
+      "skill:get_route",
+      "skill:health_data",
+      "skill:hisar",
+      "skill:house_party",
+      "skill:inspect_patterns",
+      "skill:intelx_search",
+      "skill:ip_geolocate",
+      "skill:ip_reputation",
+      "skill:ledger_append",
+      "skill:legion_control",
+      "skill:legion_inspect",
+      "skill:legion_status",
+      "skill:lifeboat_protocol",
+      "skill:list_library",
+      "skill:lockdown_protocol",
+      "skill:malwarebazaar_lookup",
+      "skill:manage_automations",
+      "skill:memory",
+      "skill:memory_audit",
+      "skill:memory_edit",
+      "skill:memory_event",
+      "skill:memory_state",
+      "skill:narrative_revise",
+      "skill:news_deep_dive",
+      "skill:news_headlines",
+      "skill:news_watch",
+      "skill:octavius_protocol",
+      "skill:on_duty_pharmacies",
+      "skill:onyx",
+      "skill:otx_lookup",
+      "skill:pattern_feedback",
+      "skill:portal_login",
+      "skill:pwned_password_check",
+      "skill:read_agent_channel",
+      "skill:read_article",
+      "skill:read_course_memory",
+      "skill:read_library",
+      "skill:read_schedule",
+      "skill:read_skill",
+      "skill:recall_conversations",
+      "skill:record_attendance",
+      "skill:record_course_memory",
+      "skill:record_observation",
+      "skill:registry_upsert",
+      "skill:reminders",
+      "skill:run_command",
+      "skill:save_file",
+      "skill:save_schedule",
+      "skill:search_history",
+      "skill:search_library",
+      "skill:search_memory",
+      "skill:send_push_notification",
+      "skill:send_telegram_file",
+      "skill:send_telegram_message",
+      "skill:set_budget_mode",
+      "skill:shodan_lookup",
+      "skill:skyfall_protocol",
+      "skill:solus_accounting",
+      "skill:speech_to_text",
+      "skill:system_info",
+      "skill:system_ops",
+      "skill:text_to_speech",
+      "skill:threatfox_lookup",
+      "skill:tool_search",
+      "skill:track_aircraft",
+      "skill:urlhaus_lookup",
+      "skill:use_toolset",
+      "skill:weather",
+      "skill:workshop_status",
+      "skill:workshop_update"
+    ],
+    "invalid_workflows": [],
+    "release_checks_pending": [
+      "projects_and_canvas_accepted",
+      "migration_and_rollback_verified",
+      "live_end_to_end_verified"
+    ],
+    "interpretation": "Coverage points are original interfaces, not a count of missing product features. Workflow proof establishes acceptance."
+  }
+}

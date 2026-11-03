@@ -65,6 +65,17 @@ data class SubagentRun(
     val report: String? = null,
     val steps: PersistentList<SubagentStep> = persistentListOf(),
     val source: String? = null,
+    val executionId: String? = null,
+    val ownerAgent: String? = null,
+    val workerRole: String? = null,
+    val executionType: String? = null,
+    val status: String? = null,
+    val model: String? = null,
+    val canInterrupt: Boolean? = null,
+    val canMessage: Boolean? = null,
+    val lastSequence: Long? = null,
+    val seenEventIds: PersistentList<String> = persistentListOf(),
+    val activityPartial: Boolean = false,
 )
 
 @Immutable
@@ -114,6 +125,14 @@ data class ChatMessage(
     /** Wall-clock ms spent thinking, stamped the moment thinkingDone flips —
      *  what the collapsed "Thought for Ns" pill reads off. */
     val thinkingMs: Long? = null,
+    val speaker: String? = null,
+    val coordinationStepId: String? = null,
+    val serverMessageId: Int? = null,
+    val roomSequence: Long? = null,
+    val roomOrder: Long? = null,
+    val roomNotice: JsonElement? = null,
+    val roomEventSequence: Long = 0,
+    val isWorkerAnchor: Boolean = false,
 )
 
 @Immutable

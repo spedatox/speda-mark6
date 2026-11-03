@@ -50,7 +50,7 @@ export default function Header({
     let alive = true
     fetchProjects(config).then(list => {
       if (alive) setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
-    })
+    }).catch(() => { if (alive) setProjectNames({}) })
     return () => { alive = false }
   }, [config, state.activeProjectId])
   const projectName =

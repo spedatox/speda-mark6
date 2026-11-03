@@ -33,7 +33,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { looksIncomplete } from '../lib/partialJson'
 import { useChatContext } from '../store/chat'
@@ -717,8 +717,13 @@ function MapCanvas({ spec, places, selectedRoute, openPlace, onPlaceClick, expan
           'border:1.6px solid rgba(255,255,255,0.85);box-shadow:0 0 8px ' + color
         const marker = new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat])
         if (m.label || m.subtitle) {
+          const popup = document.createElement('div')
+          const title = document.createElement('strong')
+          title.textContent = m.label ?? ''
+          popup.appendChild(title)
+          if (m.subtitle) { popup.appendChild(document.createElement('br')); popup.appendChild(document.createTextNode(m.subtitle)) }
           marker.setPopup(new maplibregl.Popup({ offset: 12, closeButton: false })
-            .setHTML(`<strong>${m.label ?? ''}</strong>${m.subtitle ? '<br>' + m.subtitle : ''}`))
+            .setDOMContent(popup))
         }
         marker.addTo(map)
         bounds.extend([m.lng, m.lat]); hasBounds = true

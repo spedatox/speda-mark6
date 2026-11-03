@@ -1,0 +1,124 @@
+{
+  "date": "2026-11-03",
+  "scope": "Local Heartbreaker and SPEDA Go contract parity",
+  "android": {
+    "app_tests": 85,
+    "design_system_tests": 8,
+    "failures": 0,
+    "skipped": 0,
+    "debug_assemble": "passed"
+  },
+  "heartbreaker": {
+    "tests": 49,
+    "failures": 0,
+    "skipped": 0
+  },
+  "backend": {
+    "tests": 26,
+    "failures": 0,
+    "skipped": 0,
+    "providers": "fixtures"
+  },
+  "source": {
+    "staging_matches_checkout": true,
+    "compiled_file_count": 170,
+    "combined_path_and_sha256": "DB15141895E27CF7C571E4ED3758ADB21F8C88485903EB62160163EBE9764560"
+  },
+  "apk": {
+    "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/speda-go-renovated-parity-debug.apk",
+    "application_id": "com.speda.heartbreaker.debug",
+    "version": "0.3.0",
+    "signature_verification": "passed",
+    "sha256": "1DE40C094E5A00E883643C103C0772ADDB4D0399EDB8039BF8D237242556B7BE"
+  },
+  "reports": [
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.ClientTransportTest.xml",
+      "sha256": "8CC39659E3DC451AEF184CDFA7AABD30AD52DEB76BAC63BDF0F906E855106A5C"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.CommTranscriptTest.xml",
+      "sha256": "B9146D56D62E048CEF6E1B48C74EFD93DAD6E39A5ED2D81861EF75C3B7B86C32"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.ConnectionContractTest.xml",
+      "sha256": "12DE7251F80FF3AA8F886A6BE268DBA1B2F22C22DD4C0C3535A49E114B29595D"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.LiveSteeringTest.xml",
+      "sha256": "FD731B1CFE329D64370ABE01DCCFF0427E443DCB4B78A0A54CA6344F6AAA93B9"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.MapSpecTest.xml",
+      "sha256": "EFBF5A3F4EC94FB268A2434A7330A24D7E67A13583F78B4FF58E81A5B44A24C8"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.MarkdownPrepTest.xml",
+      "sha256": "65596611D2E1F85ACF8418FC979D62584CBD7705BDF5A6A88F865049CDC2FD15"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.MathExtractTest.xml",
+      "sha256": "743CA55C7484D78E8D5689C9ACC6669AB426338A88CB4407B3A8FBE6F1C17E2B"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.MemoryTreeTest.xml",
+      "sha256": "274C1870427D61AA5F904177BD57A75242F606A43BCF4054763D063DE5516259"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.ReducerTest.xml",
+      "sha256": "662C7116D7593092EB4D5271AD814AF07F7BE6F68754E72AB5BD4318F943CFFE"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.RoomParityTest.xml",
+      "sha256": "59D716BA9A0B88B4B06D22B007CBA69501DF1F6BE2A3A37111962E5657FF7381"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.RoomVoiceQueueTest.xml",
+      "sha256": "142A81DA23B960C97A6C8C6524D110E6FBB36267983160D831868C524E4E6B49"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.SegmenterTest.xml",
+      "sha256": "A4753E35F1CC89EC1D51F23BCB4E2BA4AC8E8148BDA22AF994F315CAA28AA851"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.SessionRecoveryTest.xml",
+      "sha256": "7745DAE63666D5AD431608D2507F7160741599C372F15AC32796941FF1AD3EAB"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.SubagentEventsTest.xml",
+      "sha256": "F24095D8F6F84F0C7FC5104587F181B60DB8FFD093D8E61D595DA939A68CC173"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/app/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.domain.TableColumnsTest.xml",
+      "sha256": "63CA9615CC139D376FADF45B4BE2130A0FD1469445AEE690A115885ED720AC71"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/designsystem/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.designsystem.AgentMarksTest.xml",
+      "sha256": "8EFC5C4EB7376C86F60EDEE34B9286CDC0CD50801A09BD447B3CF2F7105CC47B"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/designsystem/build/test-results/testDebugUnitTest/TEST-com.speda.heartbreaker.designsystem.ThemeEngineTest.xml",
+      "sha256": "75B742A0F372889D2140A6C42AEA41DA97096870B259476B0D9E734F6D663DB8"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/backend-results.xml",
+      "sha256": "BC1AF97BDA141F3AF54AB12E3F366E476401DC9069AA22EC8D8C1C855FC6561A"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/desktop-tests.log",
+      "sha256": "1A357C525EC69EE03F880C17FE9883018D400355A5BBED722B5E9C6A7BF294F8"
+    },
+    {
+      "path": "C:/Users/ahmet/.codex/tmp/speda-go-parity-20261103/verification.log",
+      "sha256": "FDD23D04CB8C462872CE6AD90857942F21E12E0104F20504B1936763D60E9F2A"
+    }
+  ],
+  "on_device_tested": false,
+  "production_deployed": false,
+  "paid_provider_calls": 0,
+  "remaining_release_checks": [
+    "Android visual and installation acceptance",
+    "Signed release installation",
+    "Live cross-device acceptance"
+  ]
+}

@@ -5,8 +5,12 @@ import { useEffect, useRef, useCallback, memo } from 'react'
 import { useChatContext } from '../store/chat'
 import Message from './Message'
 import type { ChatMessage } from '../lib/types'
+import AgentMark from './AgentMark'
+import { roomName } from './RoomConversation'
+import { useT } from '../lib/i18n'
 
 interface Props {
+  onReply?: (message: ChatMessage) => void
   onDelete: (id: string) => void
   onRegenerate: (assistantId: string) => void
   onEditAndResend: (userId: string, newContent: string) => void
@@ -27,13 +31,16 @@ interface Props {
  * closures each render) would silently defeat the memo.
  */
 const MemoMessage = memo(function MemoMessage({
-  message, onDelete, onRegenerate, onEditAndResend,
+  message, showAttribution, onDelete, onRegenerate, onEditAndResend, onReply,
 }: {
   message: ChatMessage
+  showAttribution: boolean
   onDelete: (id: string) => void
   onRegenerate: (id: string) => void
   onEditAndResend: (id: string, newContent: string) => void
+  onReply?: (message: ChatMessage) => void
 }) {
+  const t = useT().room
   const handleDelete = useCallback(() => onDelete(message.id), [onDelete, message.id])
   const handleRegenerate = useCallback(
     () => onRegenerate(message.id),
@@ -43,18 +50,34 @@ const MemoMessage = memo(function MemoMessage({
     (newContent: string) => onEditAndResend(message.id, newContent),
     [onEditAndResend, message.id],
   )
+  if (message.roomNotice) {
+    const notice = message.roomNotice
+    const name = roomName(notice.agent_id)
+    return <div className="hb-room-notice" role="status"><AgentMark agentId={notice.agent_id} size={19} finish="flat" />
+      <span>{notice.action === 'invite' ? t.joined(name) : notice.action === 'dismiss' ? t.left(name) : t.newLead(name)}</span>
+    </div>
+  }
   return (
     <div data-reply-message={message.id}><Message
       message={message}
-      onDelete={handleDelete}
-      onRegenerate={message.role === 'assistant' ? handleRegenerate : undefined}
-      onEditAndResend={message.role === 'user' ? handleEdit : undefined}
-    /></div>
+      showAttribution={showAttribution}
+      onDelete={message.isWorkerAnchor ? undefined : handleDelete}
+      onRegenerate={!message.isWorkerAnchor && message.role === 'assistant' ? handleRegenerate : undefined}
+      onEditAndResend={!message.isWorkerAnchor && message.role === 'user' ? handleEdit : undefined}
+    />{showAttribution && onReply && message.speaker && message.roomSequence && !message.isStreaming && !message.isWorkerAnchor &&
+      <button className="hb-room-reply" onClick={() => onReply(message)}>{t.reply(roomName(message.speaker))}</button>}
+    </div>
   )
 })
 
-export default function MessageList({ onDelete, onRegenerate, onEditAndResend }: Props) {
+export default function MessageList({ onDelete, onRegenerate, onEditAndResend, onReply }: Props) {
   const { state } = useChatContext()
+  // A room ID alone does not make a private chat a shared conversation.
+  // Keep past speakers identifiable even after a summoned participant leaves.
+  const speakers = new Set(state.messages
+    .filter(message => message.role === 'assistant' && !message.isWorkerAnchor)
+    .map(message => message.speaker).filter(Boolean))
+  const showAttribution = (state.room?.members.length ?? 0) > 1 || speakers.size > 1
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRaf = useRef<number>(0)
@@ -85,9 +108,11 @@ export default function MessageList({ onDelete, onRegenerate, onEditAndResend }:
           <MemoMessage
             key={msg.id}
             message={msg}
+            showAttribution={showAttribution}
             onDelete={onDelete}
             onRegenerate={onRegenerate}
             onEditAndResend={onEditAndResend}
+            onReply={onReply}
           />
         ))}
         <div ref={bottomRef} style={{ height: '1rem' }} />

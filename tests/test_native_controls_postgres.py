@@ -1,0 +1,10 @@
+from tests.test_coordination_postgres import memory
+from tests.test_client_surface import test_client_surface_is_live_wire_data_and_never_saved_as_history_or_evidence
+from tests.test_comms import test_legacy_comms_cursor_preserves_native_attribution_and_owner_room_scope
+from tests.test_native_rest_migration import test_additive_upgrade_retains_rows_and_second_apply_is_empty
+from tests.test_delivery import test_telegram_model_pin_survives_policy_edit_on_exact_update_retry
+from tests.test_voice import (
+    test_speech_reservation_cache_language_and_pins,
+    test_unknown_speech_not_replayed_even_with_new_request_id,
+    test_transcription_silence_and_real_duration_validation,
+)

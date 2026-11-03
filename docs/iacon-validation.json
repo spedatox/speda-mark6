@@ -1,0 +1,48 @@
+{
+  "scope": "Offline retrieval only; no answering-model accuracy claim",
+  "cases": [
+    {
+      "case": "named_person",
+      "prepare_p50_ms": 47.0,
+      "prepare_p95_ms": 62.0,
+      "lookup_p95_ms": 47.0,
+      "failures": 0,
+      "last_packet_evidence_count": 10
+    },
+    {
+      "case": "past_event",
+      "prepare_p50_ms": 16.0,
+      "prepare_p95_ms": 31.0,
+      "lookup_p95_ms": 16.0,
+      "failures": 0,
+      "last_packet_evidence_count": 7
+    },
+    {
+      "case": "current_states",
+      "prepare_p50_ms": 32.0,
+      "prepare_p95_ms": 47.0,
+      "lookup_p95_ms": 32.0,
+      "failures": 0,
+      "last_packet_evidence_count": 6
+    },
+    {
+      "case": "preferences",
+      "prepare_p50_ms": 31.0,
+      "prepare_p95_ms": 47.0,
+      "lookup_p95_ms": 31.0,
+      "failures": 0,
+      "last_packet_evidence_count": 6
+    }
+  ],
+  "counts": {
+    "sources": 14292,
+    "records": 452,
+    "followups": 18
+  },
+  "migration": {
+    "documents": 424,
+    "entities": 7,
+    "states": 21,
+    "review_required": []
+  }
+}

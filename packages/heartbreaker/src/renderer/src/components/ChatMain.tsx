@@ -3,12 +3,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
+import { useWorkerStreams } from '../lib/useWorkerStreams'
+import { useLiveSteering } from '../lib/useLiveSteering'
 import { useSettings } from '../store/settings'
 import type { SSEEvent } from '../lib/types'
-import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, steerRun, fetchWelcome, answerAsk, newRequestId, AttachGone, type ActiveRun } from '../lib/api'
+import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk, newRequestId, AttachGone, type ActiveRun } from '../lib/api'
 import { useProfile } from './Sidebar'
 import MessageList from './MessageList'
-import PartyStream from './PartyStream'
+import RoomConversation from './RoomConversation'
+import { addressedAgent } from '../lib/rooms'
+import { roomMessageId, historyMessageCount } from '../lib/roomFold'
+import type { RoomEvent, RoomInfo, ChatMessage } from '../lib/types'
 import InputBar from './InputBar'
 import VoiceMode from './VoiceMode'
 import { PermissionPrompt } from './InteractionPrompt'
@@ -24,6 +29,12 @@ import type { AppConfig, ImageBlock, DocBlock, UploadedFile, PendingAsk } from '
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10)
+}
+
+function errorText(data: unknown): string {
+  if (typeof data === 'string') return data
+  if (data && typeof data === 'object' && 'message' in data) return String(data.message)
+  return 'The reply could not be completed.'
 }
 
 /** How often an open session asks the backend whether a turn has started in it
@@ -351,11 +362,16 @@ interface Props {
 }
 
 export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged, historyLoading, onSelectSession }: Props) {
+  const workerFeed = useWorkerStreams(config)
   const t = useT()
   const { state, dispatch } = useChatContext()
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage(config)
   const profile = useProfile()
+  const [reply, setReply] = useState<ChatMessage | null>(null)
+  const [sendError, setSendError] = useState('')
+  useEffect(() => { setReply(null); setSendError('') }, [state.activeSessionId, config.agentId])
+  const replyTo = useCallback((message: ChatMessage) => { setReply(message) }, [])
   // One card at a time: the peer parks the ask inside a single tool dispatch,
   // so a second gated action cannot be raised until this one is answered.
   const [pendingAsk, setPendingAsk] = useState<PendingAsk | null>(null)
@@ -419,6 +435,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   voiceModelRef.current = settings.voiceModel
   const voiceOpenRef = useRef(!!voiceOpen)
   voiceOpenRef.current = !!voiceOpen
+  const canvasRef = useRef(canvas)
+  canvasRef.current = canvas
 
   // Ask once per mode entry whether the backend can actually speak, so an
   // unconfigured key surfaces as a message instead of permanent silence.
@@ -522,12 +540,19 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // memoized message rows from re-rendering during streaming.
   const stateRef = useRef(state)
   stateRef.current = state
+  const configRef = useRef(config)
+  configRef.current = config
   const userCancelledRef = useRef(false)
   const sendRef = useRef<((text: string, opts?: SendOpts) => Promise<void>) | null>(null)
 
   const send = useCallback(async (text: string, opts: SendOpts = {}) => {
     if (state.isStreaming) return
+    let target: string | undefined
+    try { target = addressedAgent(text, state.room?.members) }
+    catch (cause) { setSendError(cause instanceof Error ? cause.message : String(cause)); return }
+    setSendError('')
     userCancelledRef.current = false
+    const sendEpoch = state.viewEpoch
 
     // Regenerate re-runs the existing last user turn — no new user bubble.
     if (!opts.regenerate) {
@@ -543,7 +568,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       })
     }
 
-    const assistantId = makeId()
+    const placeholderId = makeId()
+    let assistantId = placeholderId
     dispatch({
       type: 'ADD_ASSISTANT_MESSAGE',
       payload: { id: assistantId, role: 'assistant', content: '', tools: [], isStreaming: true, isError: false, status: t.chatMain.statusConnecting },
@@ -671,6 +697,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     // that could have changed while the socket was down.
     const sendSessionId = state.activeSessionId
     const streamOpts = {
+      addressedAgentId: target,
+      replyTo: !opts.regenerate && opts.keepMessages == null ? reply?.roomSequence : undefined,
       model: settings.model,
       systemPrompt: settings.systemPrompt || undefined,
       images: opts.images,
@@ -678,11 +706,13 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       keepMessages: opts.keepMessages,
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
-      cwd: settings.forgeCwd || undefined,
+      cwd: state.activeSessionId || state.activeProjectId ? undefined : settings.forgeCwd || undefined,
       // Voice mode is a property of the TURN, not the session: the backend
       // asks for a spoken answer with its visuals fenced off, instead of a
       // document that then gets read aloud at the owner.
       voice: voiceOpenRef.current,
+      canvas: voiceOpenRef.current && canvasRef.current.enabled,
+      canvasMaxPanels: canvasRef.current.maxPanels,
       // The workspace this chat belongs to. Only read by the backend on the
       // turn that CREATES the session — a chat's project is fixed at birth —
       // so sending it on every turn is harmless and means a brand-new chat
@@ -690,6 +720,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       projectId: state.activeProjectId,
       requestId,
     }
+    setReply(null)
 
     // ── Resilient source ────────────────────────────────────────────────────
     // A detached turn OUTLIVES its socket (app/core/turn_runner.py) — that is the
@@ -744,8 +775,14 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
     try {
       for await (const event of resilientTurn()) {
+        if (ctrl.signal.aborted || stateRef.current.viewEpoch !== sendEpoch ||
+          configRef.current.apiBase !== config.apiBase || configRef.current.apiKey !== config.apiKey ||
+          configRef.current.agentId !== config.agentId) {
+          ctrl.abort(); throw new DOMException('View changed', 'AbortError')
+        }
         lastActivity = Date.now()
         if (event.type === 'start') {
+          assistantId = placeholderId
           gotStart = true
           // The backend USUALLY honours the id we minted, but it mints its own
           // if ours collided with a live turn — so the start event is the
@@ -765,9 +802,25 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           // the in-flight stream is ours and SELECT_SESSION can preserve it.
           if (typeof event.session_id === 'number') {
             turnSessionRef.current = event.session_id
-            dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id } })
+            dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id,
+              stepId: (event.data as { step_id?: string } | null)?.step_id, viewEpoch: sendEpoch } })
           }
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: t.chatMain.statusThinking } })
+          const start = event.data as { room?: RoomInfo; run_id?: string }
+          if (start.room && start.run_id) dispatch({ type: 'ROOM_STREAM_START', payload: {
+            room: start.room, runId: start.run_id, placeholderId, sessionId: event.session_id,
+          } })
+        } else if (event.type === 'room_event') {
+          const frame = event.data as RoomEvent
+          if (frame.kind === 'speaker_started' && frame.step_id) {
+            finalizeFlush(); markThinkingDone()
+            assistantId = roomMessageId(frame.step_id)
+            charsSoFar = 0; gotContent = false; gotTool = false
+            if (voiceRef.current) spokenIdRef.current = assistantId
+          }
+          if (frame.kind === 'delta') { gotContent = true; voiceRef.current?.feed(String(frame.payload.text ?? '')) }
+          if (frame.kind === 'tool') { gotTool = true; voiceRef.current?.pause() }
+          dispatch({ type: 'ROOM_EVENT', payload: { event: frame, sessionId: event.session_id } })
         } else if (event.type === 'thinking') {
           const d = event.data as { text?: string; redacted?: boolean }
           if (d.redacted) {
@@ -871,7 +924,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           spokenIdRef.current = null
           setOrbState('idle')
           settled = true
-          dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
+          dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: errorText(event.data) } })
         }
       }
       // Stream ended. If the backend closed it without a terminal event (e.g. it
@@ -949,7 +1002,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     }
   }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
       settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
-      dispatch, t, rememberVoice])
+      dispatch, t, rememberVoice, reply, state.room?.members, state.viewEpoch])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
@@ -968,14 +1021,15 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
   // Steer: inject text into the run CURRENTLY streaming, rather than starting
   // a second one. False (never throws) when there is no run to steer — nothing
-  // in flight, or the in-flight one is in-process (the inbox that claims a
-  // steer lives in the Forge engine, not the orchestrator) — the composer then
+  // in flight, or its supervisor has finished accepting input — the composer then
   // keeps the text instead of losing it or silently going nowhere.
-  const steer = useCallback(async (text: string): Promise<boolean> => {
+  const steer = useLiveSteering(config, () => {
     const rid = runIdRef.current
-    if (!rid) return false
-    return steerRun(config, rid, text).catch(() => false)
-  }, [config])
+    if (!rid) return null
+    const originSession = turnSessionRef.current ?? stateRef.current.activeSessionId
+    const expectedStep = stateRef.current.messages.find(message => message.isStreaming && message.sessionId === originSession)?.coordinationStepId
+    return { requestId: rid, sessionId: originSession, stepId: expectedStep }
+  })
 
   // ── Barge-in ──────────────────────────────────────────────────────────────
   // The owner started talking over the agent. Interrupting has to cut BOTH the
@@ -1055,7 +1109,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     const tail = async (run: { request_id: string }, status: string) => {
       attachedRef.current.add(run.request_id)
 
-      const assistantId = makeId()
+      const placeholderId = makeId()
+      let assistantId = placeholderId
       dispatch({ type: 'ADD_ASSISTANT_MESSAGE', payload: {
         id: assistantId, role: 'assistant', content: '', tools: [],
         isStreaming: true, isError: false, status, sessionId: sid,
@@ -1086,12 +1141,28 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
+          if (cancelled || ctrl.signal.aborted) break
           if (event.type === 'start') {
+            if (typeof event.session_id === 'number') dispatch({ type: 'TAG_MESSAGE_SESSION', payload: {
+              id: assistantId, sessionId: event.session_id, stepId: (event.data as { step_id?: string } | null)?.step_id,
+            } })
             // Who started this turn, since it wasn't us. A background job
             // reporting back carries its receipt here; the card it renders is
             // the one a reload rebuilds from the persisted seed.
             const trig = (event.data as { trigger?: import('../lib/types').TriggerMeta } | null)?.trigger
             if (trig) dispatch({ type: 'SET_MESSAGE_TRIGGER', payload: { id: assistantId, trigger: trig } })
+            const start = event.data as { room?: RoomInfo; run_id?: string }
+            if (start.room && start.run_id) dispatch({ type: 'ROOM_STREAM_START', payload: {
+              room: start.room, runId: start.run_id, placeholderId, sessionId: event.session_id,
+            } })
+          } else if (event.type === 'room_event') {
+            const frame = event.data as RoomEvent
+            if (frame.kind === 'speaker_started' && frame.step_id) {
+              if (handle != null) { cancelAnimationFrame(handle); handle = null }
+              flush(); markThinkingDone(); charsSoFar = 0
+              assistantId = roomMessageId(frame.step_id)
+            }
+            dispatch({ type: 'ROOM_EVENT', payload: { event: frame, sessionId: event.session_id } })
           } else if (event.type === 'thinking') {
             const d = event.data as { text?: string; redacted?: boolean }
             if (d.redacted) {
@@ -1141,7 +1212,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
             if (handle != null) cancelAnimationFrame(handle)
             flush()
             settled = true
-            dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: event.data as string } })
+            dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: errorText(event.data) } })
           }
         }
         // Stream closed without a terminal (run evicted after the grace window,
@@ -1213,7 +1284,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     if (st.isStreaming) return
     const idx = st.messages.findIndex(m => m.id === assistantId)
     if (idx <= 0) return
-    const userMsg = st.messages[idx - 1]
+    const userMsg = [...st.messages.slice(0, idx)].reverse().find(message => !message.roomNotice && !message.isWorkerAnchor)
     if (!userMsg || userMsg.role !== 'user') return
 
     // A turn that died before the backend acknowledged it left NOTHING stored —
@@ -1223,14 +1294,14 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     if (st.messages[idx].unsent) {
       dispatch({ type: 'TRUNCATE_FROM', payload: { id: userMsg.id } })
       sendRef.current?.(userMsg.content, {
-        keepMessages: idx - 1,
+        keepMessages: historyMessageCount(st.messages.slice(0, st.messages.indexOf(userMsg))),
         images: imageBlocksFrom(userMsg.images),
       })
       return
     }
 
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: assistantId } })
-    sendRef.current?.('', { keepMessages: idx, regenerate: true })
+    sendRef.current?.('', { keepMessages: historyMessageCount(st.messages.slice(0, idx)), regenerate: true })
   }, [dispatch])
 
   // Edit & resend: drop the old user turn + its answer (keepMessages = the
@@ -1241,7 +1312,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     const idx = st.messages.findIndex(m => m.id === userId)
     if (idx < 0) return
     dispatch({ type: 'TRUNCATE_FROM', payload: { id: userId } })
-    sendRef.current?.(newContent, { keepMessages: idx })
+    sendRef.current?.(newContent, { keepMessages: historyMessageCount(st.messages.slice(0, idx)) })
   }, [dispatch])
 
   const isEmpty = state.messages.length === 0
@@ -1255,7 +1326,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
    * every transition the transcript already handles — switch, reattach,
    * regenerate, delete — for free. */
   const voiceAnswers = useMemo(
-    () => state.messages.filter(m => m.role === 'assistant'),
+    () => state.messages.filter(m => m.role === 'assistant' && !m.roomNotice),
     [state.messages],
   )
   /* Which answer voice mode is showing.
@@ -1326,6 +1397,8 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <RoomConversation config={config} party={profile?.agentId === 'warroom'} engaged={partyEngaged}
+        reply={reply} onClearReply={() => setReply(null)}>
       {voiceOpen ? (
         <VoiceMode
           state={orbState}
@@ -1359,24 +1432,29 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           dock={settings.voiceOrbDock}
           onDock={d => update({ voiceOrbDock: d })}
         />
-      ) : partyEngaged
-        // House Party takes over the transcript, not just its colours: while
-        // the protocol is live this is a room with the whole roster in it, so
-        // the 1:1 list is replaced by the group stream. Everything else — the
-        // composer, sending, streaming, re-attach — is unchanged underneath.
-        ? <PartyStream config={config} />
-        : isEmpty
+      ) : isEmpty
         ? (historyLoading ? <HistorySkeleton /> : <WelcomeView key={config.agentId} onSend={send} config={config} activeRun={activeAgentRun} onSelectSession={onSelectSession} />)
         : (
           <MessageList
             onDelete={handleDelete}
             onRegenerate={handleRegenerate}
             onEditAndResend={handleEditAndResend}
+            onReply={replyTo}
           />
         )
       }
+      </RoomConversation>
+      {sendError && <div className="hb-room-error" role="alert">{sendError}</div>}
       {pendingAsk && <PermissionPrompt ask={pendingAsk} onResolve={resolveAsk} />}
+      {state.messages.some(message => message.subagents?.length) && (workerFeed.status !== 'connected' || workerFeed.error) &&
+        <div role="status" aria-live="polite" style={{ padding: '4px 16px', color: 'var(--hb-text-dim)', fontSize: '0.78rem' }}>
+          {workerFeed.error || 'Connecting to recorded worker activity…'}
+        </div>}
       <InputBar
+        onValidateMessage={text => {
+          try { addressedAgent(text, state.room?.members); return null }
+          catch (cause) { return cause instanceof Error ? cause.message : String(cause) }
+        }}
         onSend={send}
         onStop={stop}
         onSteer={steer}

@@ -48,6 +48,7 @@ function harness(props = {}, api = {}) {
     '../store/settings': { useSettings: () => ({ settings: { locale: 'tr', voiceModel: 'openai:tts-1:echo' }, update: patch => updates.push(patch) }) },
     './settingsUI': Object.fromEntries(['PillBtn', 'SettingsField', 'SettingsSection', 'SliderField', 'Switch'].map(name => [name, name])),
     './Skeleton': { SkeletonList: 'SkeletonList' },
+    './FormSelect': { default: 'FormSelect' },
   }
   const component = compile('components/VoicesTab.tsx', name => modules[name])
   const editorProps = { agent, language: 'tr', voiceOptions: [], onSave: async () => {}, onClearAll: async () => {}, onCancel() {}, ...props }
@@ -77,7 +78,7 @@ test('Turkish and English editors use separate saved pins and tuning', () => {
   for (const language of ['tr', 'en']) {
     const tree = harness({ language }).render()
     const saved = agent.languages[language]
-    assert.equal(find(tree, 'select').value, saved.voice_id)
+    assert.equal(find(tree, 'FormSelect').value, saved.voice_id)
     assert.equal(find(tree, 'option', p => p.value === saved.voice_id).children, saved.voice_id)
     assert.equal(find(tree, 'input').value, `custom-${language}`)
     assert.equal(find(tree, 'SliderField', p => p.label === dictionary.settingsVoices.stability).value, saved.voice_settings.stability)
@@ -96,9 +97,9 @@ test('pinning a custom voice sends only its language and leaves untouched tuning
 test('selecting the fallback clears a custom pin, including its manual ID', async () => {
   let saved
   const h = harness({ onSave: async patch => { saved = patch } })
-  find(h.render(), 'select').onChange({ target: { value: '' } })
+  find(h.render(), 'FormSelect').onValueChange('')
   const tree = h.render()
-  assert.equal(find(tree, 'select').value, '')
+  assert.equal(find(tree, 'FormSelect').value, '')
   assert.equal(find(tree, 'input').value, '')
   find(tree, 'PillBtn', p => p.tone === 'accent').onClick()
   await tick()
@@ -135,7 +136,7 @@ test('language switch shows matching effective voices and can clear the chat ove
   await tick()
   let tree = h.render(false)
   assert.ok(nodes(tree).some(n => [].concat(n.props?.children).includes('elevenlabs:eleven_v4:custom-tr')))
-  find(tree, 'select').onChange({ target: { value: 'en' } })
+  find(tree, 'FormSelect').onValueChange('en')
   tree = h.render(false)
   assert.ok(nodes(tree).some(n => [].concat(n.props?.children).includes('elevenlabs:eleven_v4:custom-en')))
   find(tree, 'PillBtn', p => p.children === dictionary.settingsVoices.useAgentVoices).onClick()

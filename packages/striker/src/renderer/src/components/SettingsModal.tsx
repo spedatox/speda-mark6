@@ -1,15 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import FormSelect from './FormSelect'
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
-import { Switch } from './settingsUI'
+import { Switch, PillBtn } from './settingsUI'
 import { useChatContext } from '../store/chat'
-import { importChats, fetchSessions, indexHistory, getConnections, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationRuns, telegramConnect, telegramStatus } from '../lib/api'
+import { importChats, fetchSessions, indexHistory, getConnections, reconnectConnection, setConnection, googleLoginUrl, googleStatus, googleDisconnect, notionLoginUrl, notionStatus, notionDisconnect, getAutomations, toggleAutomation, deleteAutomation, getAutomationsStatus, getAutomationRuns, telegramConnect, telegramStatus } from '../lib/api'
 import type { ConnectionInfo, AutomationInfo, AutomationsStatus, AutomationRun } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import ConfigTab from './ConfigTab'
+import PersonalityTab from './PersonalityTab'
+import VoicesTab from './VoicesTab'
+import RemindersTab from './RemindersTab'
 import ScreenLockSettings from './ScreenLockSettings'
 import { useT } from '../lib/i18n'
 
@@ -18,7 +22,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'config' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
+type Tab = 'personalities' | 'voices' | 'reminders' | 'general' | 'config' | 'connections' | 'automations' | 'interface' | 'data' | 'account'
 
 export default function SettingsModal({ config, onClose }: Props) {
   const { settings, update } = useSettings()
@@ -45,11 +49,11 @@ export default function SettingsModal({ config, onClose }: Props) {
 
   // ── Connections ───────────────────────────────────────────────────────────
   const [conns, setConns] = useState<ConnectionInfo[]>([])
-  const [connBudget, setConnBudget] = useState({ used: 0, limit: 30000 })
+  const [connBudget, setConnBudget] = useState({ used: 0, limit: 0 })
   const loadConns = async () => {
     const r = await getConnections(config)
     setConns(r.servers)
-    setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit })
+    setConnBudget({ used: r.active_tool_tokens, limit: r.itpm_limit ?? 0 })
   }
   useEffect(() => { if (tab === 'connections') loadConns() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleConn = async (server: string, active: boolean) => {
@@ -229,6 +233,9 @@ export default function SettingsModal({ config, onClose }: Props) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
     { id: 'config', label: 'Configuration' },
+    { id: 'personalities', label: t.settingsPersonality.title },
+    { id: 'voices', label: t.settingsVoices.title },
+    { id: 'reminders', label: 'Reminders' },
     { id: 'connections', label: 'Connections' },
     { id: 'automations', label: 'Automations' },
     { id: 'interface', label: 'Interface' },
@@ -399,7 +406,10 @@ export default function SettingsModal({ config, onClose }: Props) {
             )}
 
             {/* Configuration tab — every backend setting, API keys included */}
-            {tab === 'config' && <ConfigTab config={config} />}
+            {tab === 'config' && <ConfigTab key={config.apiBase} config={config} onNavigate={setTab} />}
+            {tab === 'personalities' && <PersonalityTab config={config} />}
+            {tab === 'voices' && <VoicesTab config={config} />}
+            {tab === 'reminders' && <RemindersTab config={config} />}
 
             {/* Connections tab — toggle MCP servers live */}
             {tab === 'connections' && (
@@ -523,7 +533,8 @@ export default function SettingsModal({ config, onClose }: Props) {
 
                 {/* Prefix budget bar */}
                 {(() => {
-                  const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
+                  if (!connBudget.limit) return <p style={{ color: 'var(--hb-text-faint)' }}>Tools load on demand. Provider limits are configured separately.</p>
+                    const pct = Math.min(100, Math.round((connBudget.used / connBudget.limit) * 100))
                   const over = connBudget.used > connBudget.limit
                   const col = over ? 'var(--hb-red)' : pct > 80 ? 'var(--hb-amber)' : 'var(--hb-green)'
                   return (
@@ -572,13 +583,14 @@ export default function SettingsModal({ config, onClose }: Props) {
                         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '1px' }}>
                           {c.connected
                             ? `${c.tools} tools · ${c.always_on ? 'always on' : 'loaded on demand'}`
-                            : (c.needs ? `needs ${c.needs}` : 'offline')}
+                            : (c.error || (c.needs ? `needs ${c.needs}` : 'offline'))}
                         </div>
                       </div>
+                      {!c.connected && c.active && <PillBtn onClick={() => { void reconnectConnection(config, c.server).catch(() => {}).finally(loadConns) }}>Reconnect</PillBtn>}
                       {/* toggle */}
                       <button
                         onClick={() => toggleConn(c.server, !c.active)}
-                        disabled={!c.connected}
+
                         title={c.active ? 'Active — click to disable' : 'Disabled — click to enable'}
                         style={{
                           width: 42, height: 24, flexShrink: 0, borderRadius: 999,
@@ -905,7 +917,8 @@ export default function SettingsModal({ config, onClose }: Props) {
                       being captured and shared with every surface, Telegram included.
                     </p>
                   </div>
-                  <Switch on={settings.showThinking} onChange={v => update({ showThinking: v })} />
+
+                        <Switch on={settings.showThinking} onChange={v => update({ showThinking: v })} />
                 </div>
 
                 <div>
@@ -917,16 +930,16 @@ export default function SettingsModal({ config, onClose }: Props) {
                     chats, sleeping the machine, losing the network. This is how many times a dropped
                     answer silently re-attaches to the turn still producing it instead of failing.
                   </p>
-                  <select
+                  <FormSelect aria-label="Reconnect dropped answers"
                     className="hb-btn"
                     value={String(settings.streamReconnectAttempts)}
-                    onChange={e => update({ streamReconnectAttempts: Number(e.target.value) })}
+                    onValueChange={value => update({ streamReconnectAttempts: Number(value) })}
                     style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
                   >
                     {[0, 3, 5, 10, 20].map(n => (
                       <option key={n} value={n}>{n === 0 ? 'Never' : n}</option>
                     ))}
-                  </select>
+                  </FormSelect>
                 </div>
 
                 <div>
@@ -938,16 +951,16 @@ export default function SettingsModal({ config, onClose }: Props) {
                     when the backend also reports no running turn — an answer still listed as running
                     is waited on however long it takes.
                   </p>
-                  <select
+                  <FormSelect aria-label="Give up after"
                     className="hb-btn"
                     value={String(settings.streamDeadSeconds)}
-                    onChange={e => update({ streamDeadSeconds: Number(e.target.value) })}
+                    onValueChange={value => update({ streamDeadSeconds: Number(value) })}
                     style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
                   >
                     {[120, 300, 600, 1800, 3600].map(n => (
                       <option key={n} value={n}>{Math.round(n / 60)} min</option>
                     ))}
-                  </select>
+                  </FormSelect>
                 </div>
 
                 <ScreenLockSettings />
@@ -1120,13 +1133,13 @@ export default function SettingsModal({ config, onClose }: Props) {
                 </div>
 
                 {/* Suggested prompts (read-only) */}
-                {profile.suggestedPrompts.length > 0 && (
+                {!!profile.suggestedPrompts?.length && (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                       Suggested prompts
                     </label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                      {profile.suggestedPrompts.map((p, i) => (
+                      {profile.suggestedPrompts?.map((p, i) => (
                         <p key={i} style={{ fontSize: '0.84rem', color: 'var(--text-muted)', padding: '0.375rem 0.625rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.375rem', border: '1px solid var(--border)' }}>
                           {p}
                         </p>

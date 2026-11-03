@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { orbBufferSize } from '../lib/orbInteraction'
 
 /**
  * The orb — a real 3D assembly, rebuilt from the reference.
@@ -27,7 +28,8 @@ import * as THREE from 'three'
  * (400×400 at dpr 1), while its stroke half-widths were ~0.0011 in a space where
  * one unit spanned 200px — sub-pixel lines, which alias no matter how good the
  * antialiasing is. Nothing here is authored in normalized units; the buffer is
- * supersampled to at least 2× the CSS size, and MSAA runs on top. Both matter:
+ * normally supersampled to at least 2× the CSS size, and MSAA runs on top. The
+ * longest buffer edge is capped at 2048px for oversized docks. Both matter:
  * MSAA alone does not help geometry finer than the sample grid.
  *
  * ── On glow ────────────────────────────────────────────────────────────────
@@ -172,6 +174,8 @@ export default function VoiceOrb({
   // whole scene to move the camera would drop the WebGL context on every dock.
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
+  const audioRef = useRef({ amplitude, spectrum, inputLevel })
+  audioRef.current = { amplitude, spectrum, inputLevel }
 
   useEffect(() => {
     const mount = mountRef.current
@@ -415,7 +419,6 @@ export default function VoiceOrb({
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5,
     }))
     const teeth = new THREE.InstancedMesh(teethGeo, teethMat, TEETH)
-    teeth.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(TEETH * 3), 3)
     for (let i = 0; i < TEETH; i++) {
       const a = (i / TEETH) * Math.PI * 2
       dummy.position.set(Math.cos(a) * 0.855, Math.sin(a) * 0.855, 0)
@@ -578,17 +581,16 @@ export default function VoiceOrb({
      * and a backing store pinned to the value captured at mount is half of why
      * the old orb went blocky. The other half is the 2× floor — at dpr 1 a
      * 400px canvas gives the wireframe nothing to land on. */
+    let width = mount.clientWidth, height = mount.clientHeight
+    let bufferWidth = 0, bufferHeight = 0, bufferRatio = 0
     const applySize = () => {
-      // Measured from the DOM, never from the `size` prop — that is deliberate.
-      // The box is CSS-animated when a reply starts, so its real size changes
-      // every frame during the transition, and reading the prop would rebuild
-      // the whole scene (it is an effect dependency) instead of just resizing.
-      const w = mount.clientWidth
-      const h = mount.clientHeight
-      if (!w || !h) return
-      const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3)
-      renderer.setPixelRatio(dpr)
-      renderer.setSize(w, h, false)
+      // ResizeObserver caches layout changes. Compositor-only drag/zoom previews
+      // never resize this buffer; the settled CSS size sharpens it once.
+      if (!width || !height) return
+      const { width: w, height: h, ratio: dpr } = orbBufferSize(width, height, window.devicePixelRatio)
+      if (w === bufferWidth && h === bufferHeight && dpr === bufferRatio) return
+      bufferWidth = w; bufferHeight = h; bufferRatio = dpr
+      renderer.setDrawingBufferSize(w, h, dpr)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       // World-units → device-pixels for gl_PointSize. Two terms, both required:
@@ -601,7 +603,10 @@ export default function VoiceOrb({
       ;(partMat.uniforms.uScale as THREE.IUniform).value = scale
     }
     applySize()
-    const ro = new ResizeObserver(applySize)
+    const ro = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect
+      if (rect) { width = rect.width; height = rect.height }
+    })
     ro.observe(mount)
 
     /* ── Loop ─────────────────────────────────────────────────────────────── */
@@ -642,8 +647,9 @@ export default function VoiceOrb({
 
       // Attack fast, release slow — consonants have to register, but nothing
       // may flicker in the gaps between words.
-      const agentAmp = st === 'speaking' ? amplitude() : 0
-      const ownAmp = inputLevel ? inputLevel() : 0
+      const audio = audioRef.current
+      const agentAmp = st === 'speaking' ? audio.amplitude() : 0
+      const ownAmp = audio.inputLevel ? audio.inputLevel() : 0
       const target = Math.max(agentAmp, ownAmp)
       amp += (target - amp) * (target > amp ? 0.4 : 0.07)
 
@@ -653,7 +659,7 @@ export default function VoiceOrb({
       think += ((st === 'thinking' ? 1 : 0) - think) * 0.05
       listen += ((st === 'listening' ? 1 : 0) - listen) * 0.07
 
-      if (spectrum && st === 'speaking') spectrum(bands)
+      if (audio.spectrum && st === 'speaking') audio.spectrum(bands)
       else bands.fill(0)
       for (let i = 0; i < BANDS; i++) {
         smooth[i] += (bands[i] - smooth[i]) * (bands[i] > smooth[i] ? 0.5 : 0.1)
@@ -709,8 +715,7 @@ export default function VoiceOrb({
       }
 
       col.copy(accent).multiplyScalar(0.34 + amp * 0.26)
-      for (let i = 0; i < TEETH; i++) teeth.setColorAt(i, col)
-      if (teeth.instanceColor) teeth.instanceColor.needsUpdate = true
+      teethMat.color.copy(col)
 
       haloMat.color.copy(accent)
       haloMat.opacity = 0.16 + amp * 0.26 + listen * 0.10
@@ -746,7 +751,6 @@ export default function VoiceOrb({
       ro.disconnect()
       renderer.domElement.removeEventListener('webglcontextlost', onLost)
       for (const d of disposables) d.dispose()
-      teethGeo.dispose(); teethMat.dispose()
       // forceContextLoss before dispose: WebGL contexts are a small, capped
       // pool, and leaving and re-entering voice mode repeatedly would exhaust
       // it and silently stop rendering.
@@ -757,14 +761,14 @@ export default function VoiceOrb({
     // `size` is NOT a dependency: it only feeds the wrapper's CSS box, and the
     // renderer follows that box on its own. Listing it would rebuild every
     // geometry, shader and texture each time the orb grows or shrinks.
-  }, [amplitude, spectrum, inputLevel])
+  }, [])
 
   // Fills whatever box the caller gives it, and NOTHING here animates. The
   // caller owns the orb's geometry — position and size together, as one
   // animation — because the dock is a single gesture: it flies to the corner
   // and shrinks on the way. Two independent transitions (a size one here, a
   // position one there) cannot stay in step, and the mismatch is visible as the
-  // orb arriving before it has finished shrinking. applySize() re-measures every
-  // frame, so the render follows the CSS box wherever it goes.
+  // orb arriving before it has finished shrinking. ResizeObserver supplies size
+  // changes; unchanged animation frames never reset the drawing buffer.
   return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'relative' }} />
 }

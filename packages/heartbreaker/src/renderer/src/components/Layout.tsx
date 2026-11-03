@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
@@ -23,6 +23,7 @@ import HousePartyModal from './HousePartyModal'
 import LockdownModal from './LockdownModal'
 import SkyfallCountdown from './SkyfallCountdown'
 import ProjectsView from './ProjectsView'
+import { useProjectNavigation } from '../lib/useProjectNavigation'
 import type { SkyfallArm } from '../lib/api'
 
 interface LayoutProps {
@@ -42,7 +43,9 @@ interface LayoutProps {
 export default function Layout({
   profile, config, switchAgent, partyEngaged, inWarRoom, onEnterWarRoom, onExitWarRoom,
 }: LayoutProps) {
-  const { dispatch } = useChatContext()
+  const { state, dispatch } = useChatContext()
+  const viewRef = useRef(state)
+  viewRef.current = state
   const { settings, update } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
@@ -135,6 +138,7 @@ export default function Layout({
   const [projectsAt, setProjectsAt] = useState<{ projectId: number | null } | null>(null)
 
   const handleSelectSession = useCallback(async (sessionId: number, projectId?: number | null, agentIdOverride?: string) => {
+    const expectedViewEpoch = viewRef.current.viewEpoch + (viewRef.current.activeSessionId === sessionId ? 0 : 1)
     setDrawerOpen(false)
     setProjectsAt(null)
     const effectiveAgentId = agentIdOverride || config.agentId
@@ -150,12 +154,14 @@ export default function Layout({
       // back empty but we have a cached copy (e.g. an answer lost to a mid-turn
       // restart), keep showing the cache rather than blanking the view.
       if (messages.length || !cached) {
-        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId } })
+        dispatch({ type: 'SELECT_SESSION', payload: { sessionId, messages, projectId, expectedViewEpoch } })
         if (messages.length) saveMessages(effectiveAgentId, sessionId, messages)
       }
     } catch { /* offline — keep the cached transcript already shown */ }
     finally { setHistoryLoading(false) }
   }, [config, dispatch])
+
+  useProjectNavigation(config, handleSelectSession)
 
   useEffect(() => {
     const onOpenChat = async (e: Event) => {
@@ -190,7 +196,7 @@ export default function Layout({
   }, [dispatch])
 
   return (
-    <div style={{ position: 'relative', display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+    <div style={{ position: 'relative', display: 'flex', height: '100%', overflow: 'hidden', background: 'transparent' }}>
       {/* Mobile drawer backdrop — full glassmorphic blur sheet; tap to dismiss */}
       {isMobile && drawerOpen && (
         <div

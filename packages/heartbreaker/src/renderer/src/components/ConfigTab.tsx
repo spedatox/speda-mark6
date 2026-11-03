@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from 'react'
-import { getConfig, saveConfig, getMemorySources, setMemorySource } from '../lib/api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getConfigSnapshot, saveConfig, restartBackend, waitForBackend, getMemorySources, setMemorySource } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import type { ConfigFieldInfo, ConfigGroupInfo, ConfigSaveResult, MemorySources } from '../lib/api'
 import GlassSelect from './GlassSelect'
 import { Switch } from './settingsUI'
 import { Skeleton, SkeletonText, SkeletonList } from './Skeleton'
 import { useT } from '../lib/i18n'
+import { useSettings } from '../store/settings'
+import ConfigPolicies from './ConfigPolicies'
 
 /**
  * ConfigTab — the full backend configuration surface: every API key, token,
@@ -19,15 +21,17 @@ import { useT } from '../lib/i18n'
  */
 
 const MONO = 'var(--font-mono)'
-type EditVal = string | number | boolean
+type EditVal = string | number | boolean | null
 
 // Both numeric field types render as a number input and coerce on change; they
 // differ only in step, so the branches that care about "is this a number" ask
 // this rather than repeating the pair and drifting when a third type appears.
 const isNumeric = (type: string): boolean => type === 'int' || type === 'float'
 
-export default function ConfigTab({ config }: { config: AppConfig }) {
+export default function ConfigTab({ config, onNavigate }: { config: AppConfig; onNavigate?: (tab: 'general' | 'connections' | 'personalities' | 'automations' | 'voices' | 'reminders') => void }) {
   const t = useT()
+  const { settings } = useSettings()
+  const tr = settings.locale === 'tr'
   const [groups, setGroups] = useState<ConfigGroupInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -36,25 +40,39 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<ConfigSaveResult | null>(null)
   const [query, setQuery] = useState('')
+  const [revision, setRevision] = useState<number | null>(null)
+  const [instance, setInstance] = useState('')
+  const [pendingRestart, setPendingRestart] = useState<string[]>([])
+  const [resets, setResets] = useState<string[]>([])
+  const [canRestart, setCanRestart] = useState(false)
+  const [restarting, setRestarting] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const restartId = useRef<string | null>(null)
+  const saveId = useRef<string | null>(null)
 
   const load = async () => {
     setLoading(true)
     try {
-      const g = await getConfig(config)
+      const snapshot = await getConfigSnapshot(config)
+      const g = snapshot.groups
       setGroups(g)
+      setRevision(snapshot.revision); setInstance(snapshot.instance_id)
+      setPendingRestart(snapshot.restart_required); setCanRestart(snapshot.restart.available)
+      setError('')
       // Open the first group by default so the panel isn't a wall of collapsed rows.
       setOpen(o => (Object.keys(o).length ? o : g.length ? { [g[0].id]: true } : {}))
-    } finally {
+    } catch (e) { setError(String(e)) } finally {
       // Always clear — an unreachable backend must not skeleton this pane forever.
       setLoading(false)
     }
   }
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [config.apiBase, config.apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirtyKeys = useMemo(() => Object.keys(edits), [edits])
-  const setEdit = (key: string, v: EditVal) => setEdits(e => ({ ...e, [key]: v }))
+  const dirtyKeys = useMemo(() => [...new Set([...Object.keys(edits), ...resets])], [edits, resets])
+  const setEdit = (key: string, v: EditVal) => { setResult(null); saveId.current = null; setResets(r => r.filter(k => k !== key)); setEdits(e => ({ ...e, [key]: v })) }
   const clearEdit = (key: string) =>
-    setEdits(e => { const n = { ...e }; delete n[key]; return n })
+    { setResult(null); saveId.current = null; setResets(r => r.filter(k => k !== key)); setEdits(e => { const n = { ...e }; delete n[key]; return n }) }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -70,22 +88,37 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
   }, [groups, query])
 
   const save = async () => {
-    if (!dirtyKeys.length || saving) return
+    if (!dirtyKeys.length || saving || revision === null) return
     setSaving(true)
     setResult(null)
     try {
-      const r = await saveConfig(config, edits)
+      saveId.current ??= crypto.randomUUID()
+      const r = await saveConfig(config, edits, revision, saveId.current, resets)
       setResult(r)
-      setEdits({})
+      setEdits({}); setResets([]); saveId.current = null; restartId.current = null
       await load()
     } catch (e) {
-      setResult({ applied_live: [], restart_required: [], rejected: [String(e)] })
+      setError(String(e))
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
+  const restart = async () => {
+    if (revision === null || dirtyKeys.length || restarting) return
+    setRestarting(true); setNotice(tr ? 'Arka uç yeniden başlatılıyor…' : 'Restarting backend…'); setError('')
+    restartId.current ??= crypto.randomUUID()
+    try {
+      await restartBackend(config, revision, restartId.current)
+      await waitForBackend(config, instance)
+      setNotice(tr ? 'Arka uç yeniden başladı. Adres veya API anahtarı değiştiyse bağlantı ayarlarını güncelleyin.' : 'Backend restarted. If the address or API key changed, update connection settings.')
+      setResult(null); restartId.current = null
+      await load()
+    } catch (e) { setError(String(e)); setNotice('') }
+    finally { setRestarting(false) }
+  }
+
+  if (loading && groups.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
         <SkeletonText lines={2} lastWidth="55%" />
@@ -106,12 +139,18 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '4.5rem' }}>
-      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
-        {t.configTab.introPre} <code style={{ fontFamily: MONO }}>.env</code>{t.configTab.introMid}{' '}
-        <span style={{ color: 'var(--hb-amber)' }}>{t.configTab.restartRequiredLabel}</span> {t.configTab.introPost}
-      </p>
-
+      {error && <p role="alert" style={{ color: 'var(--hb-red)' }}>{error}</p>}
+      {notice && <p role="status">{notice}</p>}
+      <button className="hb-btn" disabled={saving || restarting} onClick={() => void load()}>{tr ? 'Kaydedilen ayarları yeniden yükle (taslak korunur)' : 'Reload saved settings (keep draft)'}</button>
+      <p style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>{tr ? 'Kaydedilen sunucu ayarları yeniden başlatmada birlikte etkinleşir. Gizli değerler geri gönderilmez. Boş değer anahtarı kapatır; kayıtlı geçersiz kılmayı sıfırlamak dağıtım değerine döner.' : 'Saved server settings apply together on restart. Stored secrets are never returned. An empty credential disables it; resetting an override uses the deployment value.'}</p>
+      {onNavigate && <nav style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {(['general', 'connections', 'personalities', 'automations', 'voices', 'reminders'] as const).map(tab => <button key={tab} className="hb-btn" onClick={() => onNavigate(tab)}>{(tr
+          ? { general: 'Genel', connections: 'Bağlantılar', personalities: 'Kişilikler', automations: 'Otomasyonlar', voices: 'Sesler', reminders: 'Hatırlatıcılar' }
+          : { general: 'General', connections: 'Connections', personalities: 'Personalities', automations: 'Automations', voices: 'Voices', reminders: 'Reminders' })[tab]}</button>)}
+      </nav>}
       <SourceOfTruthPanel config={config} />
+      <ConfigPolicies config={config} />
+      {!canRestart && <p style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>{tr ? 'Yeniden başlatma düğmesi için sunucuyu python -m app.supervisor ile başlatın.' : 'Start the server with python -m app.supervisor to enable the restart button.'}</p>}
 
       {/* Search */}
       <input
@@ -127,9 +166,10 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         }}
       />
 
+      <fieldset disabled={saving || restarting} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
       {filtered.map(g => {
         const isOpen = !!open[g.id] || !!query
-        const groupDirty = g.fields.filter(f => f.key in edits).length
+        const groupDirty = g.fields.filter(f => dirtyKeys.includes(f.key)).length
         return (
           <div key={g.id} style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
             <button
@@ -166,6 +206,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             {isOpen && (
               <div style={{ padding: '0.25rem 0.85rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
                 {g.fields.map(f => (
+                  <div key={f.key}>
                   <Field
                     key={f.key}
                     f={f}
@@ -176,12 +217,15 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
                     onChange={v => setEdit(f.key, v)}
                     onReset={() => clearEdit(f.key)}
                   />
+                  {f.overridden && <button className="hb-btn" onClick={() => { clearEdit(f.key); setResets(r => [...new Set([...r, f.key])]) }}>{resets.includes(f.key) ? (tr ? 'Kaydetmede sıfırlanacak' : 'Will reset on save') : (tr ? 'Kayıtlı geçersiz kılmayı sıfırla' : 'Reset saved override')}</button>}
+                  </div>
                 ))}
               </div>
             )}
           </div>
         )
       })}
+      </fieldset>
 
       {/* Sticky save bar — sticks to the bottom of the scroll column, bleeding
           to its padding edges. */}
@@ -190,7 +234,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         margin: '0 -1.25rem -1.5rem', padding: '0.7rem 1.25rem',
         borderTop: '1px solid var(--hb-line)',
         background: 'linear-gradient(180deg, transparent, rgba(6,14,20,0.92) 45%)',
-        display: 'flex', alignItems: 'center', gap: '0.85rem',
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.85rem',
         backdropFilter: 'blur(4px)',
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -202,13 +246,14 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
             </span>
           ) : (
             <span style={{ fontSize: '0.72rem', fontFamily: MONO, color: 'var(--text-muted)' }}>
-              {dirtyKeys.length ? t.configTab.unsavedChanges(dirtyKeys.length) : t.configTab.noChanges}
+              {dirtyKeys.length ? t.configTab.unsavedChanges(dirtyKeys.length) : pendingRestart.length ? t.configTab.needsRestart(pendingRestart.length) : t.configTab.noChanges}
             </span>
           )}
         </div>
         {dirtyKeys.length > 0 && (
           <button
-            onClick={() => { setEdits({}); setResult(null) }}
+            onClick={() => { setEdits({}); setResets([]); saveId.current = null; setResult(null) }}
+            disabled={saving || restarting}
             className="hb-btn"
             style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}
           >
@@ -217,7 +262,7 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         )}
         <button
           onClick={save}
-          disabled={!dirtyKeys.length || saving}
+          disabled={!dirtyKeys.length || saving || restarting || revision === null}
           className="hb-btn hb-btn-tint"
           style={{
             padding: '0.5rem 1.2rem', color: 'var(--hb-cyan-bright)',
@@ -228,6 +273,11 @@ export default function ConfigTab({ config }: { config: AppConfig }) {
         >
           {saving ? t.configTab.saving : t.configTab.saveChanges}
         </button>
+        {(result || pendingRestart.length > 0) && <button className="hb-btn hb-btn-tint" onClick={() => void restart()}
+          disabled={!canRestart || dirtyKeys.length > 0 || saving || restarting}
+          title={!canRestart ? (tr ? 'Yönetilen arka uç başlatıcısı gerekli.' : 'The managed backend launcher is required.') : ''}>
+          {restarting ? (tr ? 'Yeniden başlatılıyor…' : 'Restarting…') : (tr ? 'Arka ucu yeniden başlat' : 'Restart backend')}
+        </button>}
       </div>
     </div>
   )
@@ -325,13 +375,13 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
       </div>
     )
   } else {
-    const current = String(dirty ? edit : (f.value ?? ''))
+    const current = String(dirty ? (edit ?? '') : (f.value ?? ''))
     control = (
       <input
         type={isNumeric(f.type) ? 'number' : 'text'}
-        step={f.type === 'float' ? '0.01' : undefined}
+        step={f.type === 'float' ? 'any' : undefined}
         value={current}
-        onChange={e => onChange(isNumeric(f.type) ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+        onChange={e => onChange(isNumeric(f.type) ? (e.target.value === '' ? (f.nullable ? null : '') : Number(e.target.value)) : e.target.value)}
         placeholder={f.placeholder}
         style={inputStyle}
         spellCheck={false}
@@ -346,13 +396,13 @@ function Field({ f, edit, dirty, revealed, onReveal, onChange, onReset }: {
       {f.help && (
         <p style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)', margin: '6px 0 0', lineHeight: 1.5 }}>
           {f.help}
-          {f.secret && f.is_set && !dirty && (
-            <button onClick={() => onChange('')} title={t.configTab.clearSecretTitle}
-              style={{ marginLeft: 8, border: 'none', background: 'transparent', color: '#e5897c', cursor: 'pointer', fontSize: '0.8125rem' }}>
-              {t.configTab.clearStored}
-            </button>
-          )}
         </p>
+      )}
+      {f.secret && f.is_set && !dirty && (
+        <button onClick={() => onChange('')} title={t.configTab.clearSecretTitle}
+          style={{ marginTop: 6, border: 'none', background: 'transparent', color: '#e5897c', cursor: 'pointer', fontSize: '0.8125rem' }}>
+          {t.configTab.clearStored}
+        </button>
       )}
     </div>
   )
@@ -401,11 +451,12 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
     <div style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
       <div style={{ padding: '0.7rem 0.85rem 0.2rem' }}>
         <span style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
-          Agent Source of Truth
+          {data.assignable === false ? 'Iacon Catalogue' : 'Agent Source of Truth'}
         </span>
         <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
-          The one <code style={{ fontFamily: MONO }}>/memories</code> file each agent reads its domain data from and writes every update back to.
-          Sentinel → finance, Atomix → sessions. Pick any existing memory file.
+          {data.assignable === false
+            ? 'All agents use the shared Iacon catalogue. Orion maintains records; changes are evidence-backed and versioned.'
+            : <>The one <code style={{ fontFamily: MONO }}>/memories</code> file each agent reads its domain data from and writes every update back to. Sentinel → finance, Atomix → sessions. Pick any existing memory file.</>}
         </span>
       </div>
       <div style={{ padding: '0.4rem 0.85rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
@@ -421,18 +472,18 @@ function SourceOfTruthPanel({ config }: { config: AppConfig }) {
               <div style={{ width: 130, flexShrink: 0 }}>
                 <div style={{ fontSize: '0.9375rem', color: 'var(--hb-text)' }}>{a.name}</div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--hb-text-faint)' }}>
-                  {a.source ? fileName(a.source) : '—'}
+                  {data.assignable === false ? 'Iacon' : a.source ? fileName(a.source) : '—'}
                 </div>
               </div>
               <div style={{ flex: 1, maxWidth: 260, opacity: busy === a.agent_id ? 0.5 : 1 }}>
-                <GlassSelect
+                {data.assignable === false ? <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Shared governed memory</span> : <GlassSelect
                   value={current}
                   options={options}
                   onChange={v => assign(a.agent_id, v)}
                   tint="var(--hb-cyan-bright)"
                   active={!!a.source}
                   large
-                />
+                />}
               </div>
             </div>
           )

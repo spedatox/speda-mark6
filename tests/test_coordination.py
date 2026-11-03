@@ -1,0 +1,342 @@
+import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from types import SimpleNamespace
+import time
+import pytest
+from sqlalchemy import select, update
+from app.config import Settings
+from app.core.orchestrator import AgentOrchestrator
+from app.core.registry import CapabilityRegistry
+from app.models.coordination import CoordinationRun, AgentStep, ModelCallReceipt, Room
+from app.profiles.speda import SPEDAProfile
+from app.profiles.registry import ProfileRegistry
+from app.schemas.coordination import CreateRoom, RoomInput, SpendingPolicy, Membership
+from app.schemas.llm import LLMMessage, Block, PolicyDocument, ThinkingRequest, ProviderError
+from app.services.coordination import Coordinator
+from app.services.coordination_budget import CoordinationBudget, CoordinationError, ReplayStream
+from app.services.model_policy import ModelPolicy
+from app.services.task_runner import TaskRunner
+from app.skills.collaboration import CollaborationSkill
+
+
+def reply(text):
+    return LLMMessage([Block(type="text", text=text)], "end_turn", {"input_tokens": 10, "output_tokens": 10})
+
+
+def tool(*calls):
+    return LLMMessage([Block(type="tool_use", id=f"call{i}", name="collaborate", input=c)
+                       for i, c in enumerate(calls)], "tool_use")
+
+
+class ScriptedClient:
+    def __init__(self, script):
+        self.script, self.calls = list(script), []
+
+    @asynccontextmanager
+    async def stream_message(self, **args):
+        self.calls.append(args)
+        result = self.script.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        result.policy = args["policy"]
+        payload = {"content": [b.model_dump() for b in result.content], "stop_reason": result.stop_reason,
+                   "usage": result.usage, "continuation": result.continuation}
+        yield ReplayStream(payload, result.policy)
+
+
+async def setup(memory, script, *, contributions=6, calls=16):
+    config = Settings(_env_file=None, chat_max_output_tokens=1024)
+    base, profiles = SPEDAProfile(), ProfileRegistry()
+    policy = ModelPolicy(memory.sessions, base, config)
+    await policy.save(1, 0, PolicyDocument(main_model="kimi:kimi-k2.6",
+        models={"kimi:kimi-k2.6": ThinkingRequest(mode="off")}))
+    client = ScriptedClient(script)
+    registry = CapabilityRegistry(memory.sessions)
+    registry.register_task_tool()
+    await registry.register_skill(CollaborationSkill())
+    engine = AgentOrchestrator(registry, client, base, model_policy=policy, profiles=profiles)
+    registry._task_runner = TaskRunner(engine, policy)
+    budget = CoordinationBudget(memory.sessions, client)
+    spending = SpendingPolicy(paused=False, daily_calls=100, daily_tokens=10000000,
+        daily_microdollars=10000000, run={"calls": calls, "tokens": 2000000,
+        "microdollars": 2000000, "seconds": 300, "contributions": contributions},
+        prices={"kimi:kimi-k2.6": {"microdollars_per_token": 1}})
+    await budget.save(1, 0, spending)
+    coordinator = Coordinator(memory.sessions, profiles, engine, policy, budget)
+    return SimpleNamespace(coordinator=coordinator, client=client, budget=budget, policy=policy,
+        engine=engine, spending=spending, profiles=profiles)
+
+
+async def send(bits, room, message="Discuss the architecture", input_id="one"):
+    result = await bits.coordinator.start(1, room["id"], RoomInput(input_id=input_id, message=message))
+    task = bits.coordinator.live.get(result["run_id"])
+    if task:
+        await task
+    return await bits.coordinator.inspect_run(1, result["run_id"])
+
+
+async def test_real_separate_personas_challenge_revise_and_reconnect(memory):
+    bits = await setup(memory, [
+        tool({"action": "address", "agent_id": "optimus", "message": "Propose an architecture"},
+             {"action": "address", "agent_id": "scourge", "message": "Challenge the proposed architecture"}),
+        reply("Optimus, what architecture do you propose? Scourge, challenge its assumptions."), reply("Use a single shared writable checkout."),
+        tool({"action": "address", "agent_id": "optimus", "message": "Two writers race. Isolate their checkouts."}),
+        reply("A shared writable checkout permits conflicting writes."),
+        reply("Scourge is right. Isolate worker checkouts and appoint one integration owner."),
+        reply("That resolves the concurrent writer objection."),
+        reply("The decision is isolated checkouts with one integration owner.")])
+    room = await bits.coordinator.create(1, CreateRoom(members=["optimus", "scourge"]))
+    result = await send(bits, room)
+    assert result["status"] == "succeeded", await bits.coordinator.events(1, room["id"])
+    assert result["contributions"] == 6
+    assert len(bits.client.calls) == 8
+    assert "You are Scourge" in bits.client.calls[3]["system"]
+    assert "shared writable checkout permits" in str(bits.client.calls[5]["messages"])
+    events = await bits.coordinator.events(1, room["id"])
+    spoken = [e for e in events["events"] if e["kind"] == "message"]
+    assert [e["speaker"] for e in spoken] == ["speda", "optimus", "scourge", "optimus", "scourge", "speda"]
+    assert (await bits.coordinator.events(1, room["id"], events["next_cursor"]))["events"] == []
+    duplicate = await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="Discuss the architecture"))
+    assert duplicate["duplicate"] and duplicate["run_id"] == result["id"]
+    assert len(bits.client.calls) == 8
+    await bits.coordinator.shutdown()
+
+
+async def test_direct_chat_single_call_owner_scope_and_alias(memory):
+    bits = await setup(memory, [reply("Friday here.")])
+    room = await bits.coordinator.create(1, CreateRoom(lead="nightcrawler"))
+    result = await send(bits, room, "Hello")
+    assert result["status"] == "succeeded" and len(bits.client.calls) == 1
+    assert "You are Friday" in bits.client.calls[0]["system"]
+    assert bits.profiles.require("friday").stable_id == "nightcrawler"
+    with pytest.raises(CoordinationError):
+        await bits.coordinator.events(2, room["id"])
+    with pytest.raises(CoordinationError):
+        await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="Different"))
+    with pytest.raises(CoordinationError):
+        await bits.coordinator.membership(1, room["id"], Membership(expected_version=99, action="invite", agent_id="optimus"))
+    await bits.coordinator.shutdown()
+
+
+async def test_unknown_paid_response_is_held_never_resent(memory):
+    bits = await setup(memory, [ProviderError("disconnect", "Connection lost after dispatch")])
+    room = await bits.coordinator.create(1, CreateRoom())
+    result = await send(bits, room)
+    assert result["status"] == "reconciling"
+    assert result["calls"][0]["status"] == "unknown"
+    with pytest.raises(CoordinationError, match="reconciliation"):
+        await bits.coordinator.resume(1, result["id"])
+    assert len(bits.client.calls) == 1
+    await bits.coordinator.shutdown()
+
+
+async def test_shared_worker_budget_and_anonymous_prompt(memory):
+    task = LLMMessage([Block(type="tool_use", id="worker", name="Task", input={
+        "description": "Read evidence", "prompt": "Read the evidence", "subagent_type": "general-purpose"})], "tool_use")
+    bits = await setup(memory, [task, reply("Evidence read.")], calls=2)
+    room = await bits.coordinator.create(1, CreateRoom())
+    result = await send(bits, room)
+    assert len(bits.client.calls) == 2, await bits.coordinator.events(1, room["id"])
+    assert "anonymous read-only task worker" in bits.client.calls[1]["system"]
+    assert not any(t["name"] in {"Task", "collaborate"} for t in bits.client.calls[1]["tools"])
+    assert result["status"] == "reconciling" and result["reserved"]["calls"] == 2
+    await bits.coordinator.shutdown()
+
+
+async def test_consult_reserves_return_slot(memory):
+    bits = await setup(memory, [tool({"action": "consult", "agent_id": "scourge", "message": "Review this"})], contributions=2)
+    room = await bits.coordinator.create(1, CreateRoom())
+    result = await send(bits, room)
+    assert len(result["steps"]) == 1 and len(bits.client.calls) == 1
+    assert result["status"] == "reconciling"
+    await bits.coordinator.shutdown()
+
+
+async def test_parallel_duplicate_input_and_daily_cap(memory):
+    bits = await setup(memory, [reply("Only admitted once")])
+    room = await bits.coordinator.create(1, CreateRoom())
+    original = bits.coordinator.launch
+    bits.coordinator.launch = lambda _: None
+    body = RoomInput(input_id="same", message="hello")
+    results = await asyncio.gather(*(bits.coordinator.start(1, room["id"], body) for _ in range(4)))
+    assert len({r["run_id"] for r in results}) == 1
+    assert sum(not r["duplicate"] for r in results) == 1
+    run_id = results[0]["run_id"]
+    await bits.budget.save(1, 1, bits.spending.model_copy(update={"daily_calls": 0}))
+    await bits.coordinator.execute(run_id)
+    assert not bits.client.calls
+    assert (await bits.coordinator.inspect_run(1, run_id))["reserved"]["calls"] == 0
+    await bits.coordinator.shutdown()
+
+
+async def test_paid_response_replays_after_delivery_crash_without_another_charge(memory):
+    bits = await setup(memory, [reply("Saved answer")])
+    room = await bits.coordinator.create(1, CreateRoom())
+    original = bits.engine.run
+    async def interrupted(context):
+        async for event in original(context):
+            yield event
+        raise RuntimeError("Crash before step result commit")
+    bits.engine.run = interrupted
+    result = await send(bits, room)
+    assert result["status"] == "reconciling" and result["calls"][0]["status"] == "complete"
+    bits.engine.run = original
+    resumed = await bits.coordinator.resume(1, result["id"])
+    await bits.coordinator.live[resumed["run_id"]]
+    final = await bits.coordinator.inspect_run(1, result["id"])
+    assert final["status"] == "succeeded" and final["steps"][0]["result"] == "Saved answer"
+    assert len(bits.client.calls) == 1 and final["reserved"]["calls"] == 1
+    await bits.coordinator.shutdown()
+
+
+async def test_consult_returns_to_caller_without_changing_membership(memory):
+    bits = await setup(memory, [tool({"action": "consult", "agent_id": "scourge", "message": "Check the assumption"}),
+        reply("Checking it."), reply("The assumption fails under concurrent writes."), reply("I have revised the plan.")], contributions=3)
+    room = await bits.coordinator.create(1, CreateRoom())
+    result = await send(bits, room)
+    assert result["status"] == "succeeded", await bits.coordinator.events(1, room["id"])
+    assert result["contributions"] == 3
+    assert (await bits.coordinator.rooms(1))[0]["members"] == ["speda"]
+    assert "assumption fails" in str(bits.client.calls[-1]["messages"])
+    await bits.coordinator.shutdown()
+
+
+async def test_parallel_model_reservations_never_exceed_root(memory):
+    bits = await setup(memory, [], calls=1)
+    room = await bits.coordinator.create(1, CreateRoom())
+    bits.coordinator.launch = lambda _: None
+    receipt = await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="hello"))
+    async with memory.sessions() as db, db.begin():
+        run = await db.get(CoordinationRun, receipt["run_id"])
+        run.status, run.executor, run.lease_until = "running", bits.coordinator.identity, time.time()+60
+        step = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id))
+    policy = await bits.policy.resolve(user_id=1)
+    ctx = memory.context(run_id=run.id, step_id=step.id, coordination=bits.coordinator)
+    admitted = await asyncio.gather(*(bits.budget.reserve(ctx, f"slot{i}", policy, {"input": i}, 100)
+                                    for i in range(4)), return_exceptions=True)
+    assert sum(not isinstance(x, BaseException) for x in admitted) == 1
+    assert all(not isinstance(x, BaseException) or isinstance(x, CoordinationError) for x in admitted)
+    assert (await bits.coordinator.inspect_run(1, run.id))["reserved"]["calls"] == 1
+
+
+async def test_cancellation_joins_stream_and_holds_uncertain_call(memory):
+    started, closed = asyncio.Event(), asyncio.Event()
+    bits = await setup(memory, [])
+    class SlowStream:
+        async def event_stream(self):
+            started.set()
+            yield "text", "Partial"
+            await asyncio.Event().wait()
+        async def get_final_message(self):
+            raise AssertionError("Cancelled stream cannot be complete")
+    @asynccontextmanager
+    async def slow(**args):
+        try:
+            yield SlowStream()
+        finally:
+            closed.set()
+    bits.client.stream_message = slow
+    room = await bits.coordinator.create(1, CreateRoom())
+    receipt = await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="hello"))
+    await asyncio.wait_for(started.wait(), 5)
+    result = await bits.coordinator.cancel(1, receipt["run_id"])
+    assert closed.is_set() and result["run"]["cancelled"]
+    assert result["run"]["status"] == "reconciling"
+    assert result["run"]["calls"][0]["status"] == "unknown"
+    assert not bits.coordinator.live
+    await bits.coordinator.shutdown()
+
+
+async def test_queued_owner_input_waits_and_does_not_leak_into_active_round(memory):
+    bits = await setup(memory, [tool({"action": "invite", "agent_id": "optimus", "message": "Review the first request"}),
+        reply("Inviting Optimus"), reply("First request reviewed"), reply("Second request answered")])
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = bits.client.stream_message
+    @asynccontextmanager
+    async def gated(**args):
+        if not bits.client.calls:
+            entered.set()
+            await release.wait()
+        async with original(**args) as stream:
+            yield stream
+    bits.client.stream_message = gated
+    room = await bits.coordinator.create(1, CreateRoom())
+    first = await bits.coordinator.start(1, room["id"], RoomInput(input_id="first", message="FIRST_OWNER_REQUEST"))
+    first_task = bits.coordinator.live[first["run_id"]]
+    await asyncio.wait_for(entered.wait(), 5)
+    second = await bits.coordinator.start(1, room["id"], RoomInput(input_id="second", message="SECOND_OWNER_REQUEST"))
+    assert second["status"] == "waiting_room" and second["run_id"] not in bits.coordinator.live
+    with pytest.raises(CoordinationError, match="active"):
+        await bits.coordinator.start(1, room["id"], RoomInput(input_id="reject", message="Reject", on_busy="reject"))
+    release.set()
+    await asyncio.wait_for(first_task, 10)
+    while bits.coordinator.live:
+        await asyncio.wait_for(asyncio.gather(*list(bits.coordinator.live.values())), 10)
+    assert len(bits.client.calls) == 4
+    for call in bits.client.calls[:3]:
+        assert "SECOND_OWNER_REQUEST" not in str(call["messages"])
+    assert "FIRST_OWNER_REQUEST" in str(bits.client.calls[2]["messages"])
+    assert "Second request" not in str(bits.client.calls[2]["messages"])
+    assert "SECOND_OWNER_REQUEST" in str(bits.client.calls[3]["messages"])
+    assert (await bits.coordinator.inspect_run(1, second["run_id"]))["status"] == "succeeded"
+    await bits.coordinator.shutdown()
+
+
+async def test_stop_reply_at_delivery_boundary_does_not_publish_completed_answer(memory):
+    bits = await setup(memory, [reply("Paid result")])
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = bits.coordinator._speak
+    async def delayed(*args):
+        text = await original(*args)
+        entered.set()
+        await release.wait()
+        return text
+    bits.coordinator._speak = delayed
+    room = await bits.coordinator.create(1, CreateRoom())
+    admitted = await bits.coordinator.start(1, room["id"], RoomInput(input_id="stop", message="Respond"))
+    task = bits.coordinator.live[admitted["run_id"]]
+    await asyncio.wait_for(entered.wait(), 5)
+    run = await bits.coordinator.inspect_run(1, admitted["run_id"])
+    step_id = run["steps"][0]["id"]
+    await bits.coordinator.stop_reply(1, step_id)
+    release.set()
+    await asyncio.wait_for(task, 5)
+    run = await bits.coordinator.inspect_run(1, admitted["run_id"])
+    assert run["status"] == "partial" and not run["cancelled"]
+    assert run["steps"][0]["status"] == "cancelled" and run["steps"][0]["result"] is None
+    assert run["calls"][0]["status"] == "complete"
+    events = (await bits.coordinator.events(1, room["id"]))["events"]
+    assert not any(e["kind"] == "message" for e in events)
+    assert any(e["kind"] == "delta" and e["payload"]["text"] == "Paid result" for e in events)
+    assert not (await bits.coordinator.stop_reply(1, step_id))["accepted"]
+    await bits.coordinator.shutdown()
+
+
+@pytest.mark.parametrize("scope", ["run", "reply"])
+async def test_cancelled_tool_with_completed_provider_call_requires_reconciliation(memory, scope):
+    bits = await setup(memory, [tool({"action": "invite", "agent_id": "optimus", "message": "Review"})])
+    entered = asyncio.Event()
+    async def interrupted_effect(*args):
+        entered.set()
+        await asyncio.Event().wait()
+    bits.engine._registry.execute = interrupted_effect
+    room = await bits.coordinator.create(1, CreateRoom())
+    admitted = await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="Ask Optimus"))
+    task = bits.coordinator.live[admitted["run_id"]]
+    await asyncio.wait_for(entered.wait(), 5)
+    if scope == "run":
+        await bits.coordinator.cancel(1, admitted["run_id"])
+    else:
+        run = await bits.coordinator.inspect_run(1, admitted["run_id"])
+        await bits.coordinator.stop_reply(1, run["steps"][0]["id"])
+    await asyncio.wait_for(task, 5)
+    result = await bits.coordinator.inspect_run(1, admitted["run_id"])
+    assert result["calls"][0]["status"] == "complete"
+    assert result["status"] == "reconciling"
+    from app.models.model_policy import ToolExecutionReceipt
+    async with memory.sessions() as db:
+        effect = await db.scalar(select(ToolExecutionReceipt).where(
+            ToolExecutionReceipt.request_id == result["steps"][0]["id"]))
+        assert effect.status == "started"
+    await bits.coordinator.shutdown()

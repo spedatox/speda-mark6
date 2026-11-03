@@ -3,6 +3,8 @@
 
 package com.speda.heartbreaker.data
 
+import com.speda.heartbreaker.domain.SubagentRun
+import com.speda.heartbreaker.domain.SubagentStep
 import com.speda.heartbreaker.domain.ChatMessage
 import com.speda.heartbreaker.domain.FileMeta
 import com.speda.heartbreaker.domain.Role
@@ -60,8 +62,21 @@ object MessageJson {
             images = images,
             files = files,
             uploads = uploads,
+            subagents = (o["subagents"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::parseSubagent) }?.toPersistentList(),
             status = null,
             sessionId = o["sessionId"].asIntOrNull(),
+            speaker = o["speaker"].asStringOrNull(),
+            coordinationStepId = o["coordinationStepId"].asStringOrNull(),
+            serverMessageId = o["serverMessageId"].asIntOrNull(),
+            roomSequence = (o["roomSequence"] as? JsonPrimitive)?.longOrNull,
+            roomOrder = (o["roomOrder"] as? JsonPrimitive)?.longOrNull,
+            roomEventSequence = (o["roomEventSequence"] as? JsonPrimitive)?.longOrNull ?: 0,
+            roomNotice = o["roomNotice"]?.takeUnless { it is JsonNull },
+            isWorkerAnchor = o["isWorkerAnchor"].asStringOrNull() == "true",
+            thinking = o["thinking"].asStringOrNull(),
+            thinkingDone = true,
+            thinkingRedacted = o["thinkingRedacted"].asStringOrNull() == "true",
+            thinkingMs = (o["thinkingMs"] as? JsonPrimitive)?.longOrNull,
         )
     }
 
@@ -113,6 +128,29 @@ object MessageJson {
     fun toolFrom(e: JsonElement): ToolBadge? = (e as? JsonObject)?.let(::parseTool)
     fun fileFrom(e: JsonElement): FileMeta? = (e as? JsonObject)?.let(::parseFile)
 
+    fun parseSubagent(o: JsonObject): SubagentRun? {
+        val id = o["id"].asStringOrNull() ?: o["executionId"].asStringOrNull() ?: o["execution_id"].asStringOrNull() ?: return null
+        val status = o["status"].asStringOrNull()
+        return SubagentRun(id = id, agent = o["agent"].asStringOrNull().orEmpty(), label = o["label"].asStringOrNull().orEmpty(),
+            prompt = o["prompt"].asStringOrNull(), report = o["report"].asStringOrNull(), source = o["source"].asStringOrNull(),
+            running = o["running"].asStringOrNull()?.let { it == "true" } ?: (status in setOf("queued", "running", "staging", "waiting_input", "waiting_dependency")),
+            ok = o["ok"].asStringOrNull()?.let { it == "true" }, status = status, model = o["model"].asStringOrNull(),
+            executionId = o["executionId"].asStringOrNull() ?: o["execution_id"].asStringOrNull(),
+            ownerAgent = o["ownerAgent"].asStringOrNull() ?: o["owner_agent"].asStringOrNull(),
+            workerRole = o["workerRole"].asStringOrNull() ?: o["role"].asStringOrNull(),
+            executionType = o["executionType"].asStringOrNull() ?: o["execution_type"].asStringOrNull(),
+            canInterrupt = (o["canInterrupt"] ?: o["can_interrupt"]).asStringOrNull()?.let { it == "true" },
+            canMessage = (o["canMessage"] ?: o["can_message"]).asStringOrNull()?.let { it == "true" },
+            lastSequence = ((o["lastSequence"] ?: o["last_sequence"]) as? JsonPrimitive)?.longOrNull,
+            activityPartial = o["activityPartial"].asStringOrNull() == "true",
+            seenEventIds = (o["seenEventIds"] as? JsonArray).orEmpty().mapNotNull { it.asStringOrNull() }.toPersistentList(),
+            steps = (o["steps"] as? JsonArray).orEmpty().mapNotNull { step -> (step as? JsonObject)?.let {
+                SubagentStep(kind = it["kind"].asStringOrNull() ?: return@let null,
+                    text = it["text"].asStringOrNull(), tool = it["tool"].asStringOrNull(), input = it["input"], result = it["result"].asStringOrNull(),
+                    toolCallId = it["toolCallId"].asStringOrNull() ?: it["tool_call_id"].asStringOrNull())
+            } }.toPersistentList())
+    }
+
     private fun parseTool(o: JsonObject): ToolBadge = ToolBadge(
         id = o["id"].asStringOrNull() ?: randomId(),
         name = o["name"].asStringOrNull().orEmpty(),
@@ -142,6 +180,17 @@ object MessageJson {
         put("isError", m.isError)
         m.errorNote?.let { put("errorNote", it) }
         m.sessionId?.let { put("sessionId", it) }
+        m.speaker?.let { put("speaker", it) }
+        m.coordinationStepId?.let { put("coordinationStepId", it) }
+        m.serverMessageId?.let { put("serverMessageId", it) }
+        m.roomSequence?.let { put("roomSequence", it) }
+        m.roomOrder?.let { put("roomOrder", it) }
+        put("roomEventSequence", m.roomEventSequence)
+        m.roomNotice?.let { put("roomNotice", it) }
+        put("isWorkerAnchor", m.isWorkerAnchor)
+        m.thinking?.let { put("thinking", it) }
+        put("thinkingRedacted", m.thinkingRedacted)
+        m.thinkingMs?.let { put("thinkingMs", it) }
         put("tools", buildJsonArray {
             for (t in m.tools) add(buildJsonObject {
                 put("id", t.id)
@@ -151,6 +200,23 @@ object MessageJson {
                 t.afterChars?.let { put("afterChars", it) }
             })
         })
+        m.subagents?.let { runs -> put("subagents", buildJsonArray {
+            for (run in runs) add(buildJsonObject {
+                put("id", run.id); put("agent", run.agent); put("label", run.label); put("running", run.running)
+                run.prompt?.let { put("prompt", it) }; run.report?.let { put("report", it) }; run.ok?.let { put("ok", it) }
+                run.source?.let { put("source", it) }; run.executionId?.let { put("executionId", it) }
+                run.ownerAgent?.let { put("ownerAgent", it) }; run.workerRole?.let { put("workerRole", it) }
+                run.executionType?.let { put("executionType", it) }; run.status?.let { put("status", it) }; run.model?.let { put("model", it) }
+                run.canInterrupt?.let { put("canInterrupt", it) }; run.canMessage?.let { put("canMessage", it) }
+                run.lastSequence?.let { put("lastSequence", it) }
+                put("activityPartial", run.activityPartial)
+                put("seenEventIds", buildJsonArray { for (id in run.seenEventIds) add(id) })
+                put("steps", buildJsonArray { for (step in run.steps) add(buildJsonObject {
+                    put("kind", step.kind); step.tool?.let { put("tool", it) }; step.text?.let { put("text", it) }
+                    step.input?.let { put("input", it) }; step.result?.let { put("result", it) }; step.toolCallId?.let { put("toolCallId", it) }
+                }) })
+            })
+        }) }
         m.files?.let { files ->
             put("files", buildJsonArray {
                 for (f in files) add(buildJsonObject {

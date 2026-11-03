@@ -89,7 +89,7 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
       }}
       style={{ flex: 1, overflowY: 'auto', padding: '26px 8px 0' }}
     >
-      {openRun && <SubagentDetailView run={openRun} onClose={() => setOpenRun(null)} />}
+      {openRun && <SubagentDetailView key={openRun.id} run={openRun} onClose={() => setOpenRun(null)} />}
       <div style={{
         maxWidth: 900, margin: '0 auto',
         display: 'flex', flexDirection: 'column', gap: 18,

@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { TextSegment } from './Message'
+import { TableBlock, TimelineBlock } from './StructuredBlock'
 import { loadBoardImage } from '../lib/voice'
 import { ChatContext } from '../store/chat'
 import { FRAMED, type PanelKind, type VoicePanel } from '../lib/voicePanels'
+import { useRenderSurface } from '../lib/renderSurface'
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -108,8 +110,8 @@ function Shot({ src, alt, height }: { src: string; alt: string; height?: number 
 }
 
 const LABEL_STYLE: React.CSSProperties = {
-  fontFamily: "'Rajdhani', sans-serif", fontSize: '0.58rem', fontWeight: 700,
-  letterSpacing: '0.18em', color: 'var(--hb-text-faint)', textTransform: 'uppercase',
+  fontFamily: "'Rajdhani', sans-serif", fontSize: '0.72rem', fontWeight: 700,
+  letterSpacing: '0.08em', color: 'var(--hb-text-dim)', textTransform: 'uppercase',
 }
 
 /* ── stat ──────────────────────────────────────────────────────────────────
@@ -134,8 +136,8 @@ function Stat({ src }: { src: string }) {
     }}>
       <div style={{
         fontFamily: "'Rajdhani', sans-serif", fontWeight: 700,
-        fontSize: 'clamp(1.4rem, 3.4vw, 2.4rem)', lineHeight: 1,
-        letterSpacing: '0.01em', color: 'var(--hb-text)', overflowWrap: 'anywhere',
+        fontSize: value.length > 18 ? '1.5rem' : 'clamp(1.4rem, 10cqi, 2.25rem)', lineHeight: 1.12,
+        letterSpacing: '0.01em', color: 'var(--hb-text)', overflowWrap: 'break-word', wordBreak: 'normal',
       }}>
         {value}
       </div>
@@ -275,25 +277,7 @@ function Card({ src }: { src: string }) {
  * at and a column of dated rows is best at, which is exactly why it is a kind:
  * spoken, six dates in a row are unfollowable. */
 function Timeline({ src }: { src: string }) {
-  const items = rows(src).map(line => {
-    const m = /^(.{1,32}?)\s*[—–\-:|]\s+(.*)$/.exec(line)
-    return m ? { when: m[1].trim(), what: m[2].trim() } : { when: '', what: line }
-  })
-  return (
-    <div style={{ height: '100%', overflow: 'auto', display: 'grid', gap: '0.05rem', alignContent: 'start' }}>
-      {items.map((it, n) => (
-        <div key={n} style={{ display: 'flex', gap: '0.6rem', padding: '0.32rem 0' , borderTop: n ? '1px solid var(--hb-line)' : undefined }}>
-          {/* The rail: a marker per event, so the column reads as a sequence
-              rather than as a list that happens to start with dates. */}
-          <span style={{ color: 'var(--hb-cyan-dim)', fontSize: '0.6rem', lineHeight: 1.9 }}>◆</span>
-          <div style={{ minWidth: 0 }}>
-            {it.when && <div style={LABEL_STYLE}>{it.when}</div>}
-            <div style={{ fontSize: '0.78rem', lineHeight: 1.45, color: 'var(--hb-text)' }}>{it.what}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+  return <TimelineBlock source={src} />
 }
 
 /* ── quote ─────────────────────────────────────────────────────────────────
@@ -329,7 +313,7 @@ function Quote({ src }: { src: string }) {
 
 const RENDERER: Partial<Record<PanelKind, (p: { src: string }) => JSX.Element>> = {
   stat: Stat, image: Picture, article: Article, card: Card,
-  timeline: Timeline, quote: Quote,
+  timeline: Timeline, table: ({ src }) => <TableBlock source={src} />, quote: Quote,
 }
 
 /**
@@ -339,24 +323,15 @@ const RENDERER: Partial<Record<PanelKind, (p: { src: string }) => JSX.Element>> 
  * no way for the two surfaces to drift apart.
  */
 export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flow?: boolean }) {
-  const framed = FRAMED.has(panel.kind)
-  const ref = useRef<HTMLDivElement>(null)
+  const { canvas } = useRenderSurface()
+  const framed = !canvas && FRAMED.has(panel.kind)
   const Custom = RENDERER[panel.kind]
-
-  // A window that is still being written rides its own tail — a long article
-  // excerpt or a growing timeline should show the end that is arriving, not the
-  // beginning that has already been read.
-  useEffect(() => {
-    const el = ref.current
-    if (!el || Custom) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [Custom, panel.source])
 
   const content = useMemo(
     () => (Custom
       ? <Custom src={panel.source} />
       : (
-        <div className="prose" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>
+        <div className="prose" style={{ overflowWrap: 'break-word', minWidth: 0 }}>
           <TextSegment text={panel.source} />
         </div>
       )),
@@ -365,8 +340,7 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
 
   return (
     <div
-      ref={ref}
-      className={framed ? 'hb-holo' : undefined}
+      className={canvas ? 'hb-canvas-body' : framed ? 'hb-holo' : undefined}
       style={{
         // On the BOARD a window has a size and its body fills it, scrolling if
         // the content overruns. In FLOW — the chat transcript, where the same
@@ -375,8 +349,8 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
         // the owner scrolls as one column.
         ...(flow
           ? { height: 'auto' }
-          : { flex: 1, minHeight: 0, overflow: Custom ? 'hidden' : 'auto' }),
-        padding: framed ? '0.7rem 0.85rem' : 0,
+          : { flex: 1, minHeight: 0, overflow: 'auto' }),
+        padding: canvas ? 16 : framed ? '0.7rem 0.85rem' : 0,
       }}
     >
       {content}

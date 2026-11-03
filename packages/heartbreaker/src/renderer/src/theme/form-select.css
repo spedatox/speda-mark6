@@ -1,0 +1,66 @@
+/* Form menus render in a portal, above dialogs and outside clipped panels. */
+.hb-form-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 1px solid var(--hb-edge, #354348);
+  border-radius: var(--r-tile, 12px) !important;
+  background: var(--glass-fill, #182327);
+  color: var(--hb-text, #dbe8ec);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hb-form-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-form-select svg { flex-shrink: 0; opacity: .7; }
+.hb-form-select:hover:not(:disabled), .hb-form-select[aria-expanded="true"] {
+  border-color: var(--hb-text-dim, #9bb3bc) !important;
+}
+.hb-form-select:focus-visible {
+  outline: 2px solid var(--accent, #8ab4f8) !important;
+  outline-offset: 3px;
+}
+.hb-form-select:disabled { opacity: .5; cursor: default; }
+.hb-form-select-menu {
+  position: fixed;
+  z-index: 11000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--hb-edge-bright, #40535b);
+  border-radius: var(--r-tile, 12px) !important;
+  background: var(--glass-menu, #101a20);
+  color: var(--hb-text, #dbe8ec);
+  box-shadow: 0 12px 36px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
+  font-family: var(--font-read, 'Inter', sans-serif);
+  font-size: .9375rem;
+  line-height: 1.5;
+  scrollbar-width: thin;
+}
+.hb-form-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 7px !important;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.hb-form-select-option[data-active] { background: rgba(158,189,202,.12); }
+.hb-form-select-option[aria-selected="true"] { background: rgba(158,189,202,.18); font-weight: 600; }
+.hb-form-select-option[aria-selected="true"][data-active] { background: rgba(158,189,202,.24); }
+.hb-form-select-check { flex-shrink: 0; width: 16px; color: var(--accent, #8ab4f8); }
+.hb-form-select-option[aria-disabled="true"] { opacity: .4; cursor: default; }
+.hb-form-select-group { padding: 10px 12px 5px; color: var(--hb-text-dim, #a0b5bf); font-size: .75rem; font-weight: 600; }
+@media (forced-colors: active) {
+  .hb-form-select-menu { background: Canvas; color: CanvasText; border-color: ButtonText; }
+  .hb-form-select-option[data-active] { outline: 1px solid Highlight; }
+  .hb-form-select-option[aria-selected="true"] { background: Highlight; color: HighlightText; }
+}

@@ -1,0 +1,30 @@
+# Deploy only an already-built immutable image and a reconciled candidate DB.
+# Existing n8n/Hisar/browser/sandbox/Caddy services remain in their own stack.
+services:
+  app:
+    image: ${SPEDA_IMAGE:?Set the verified immutable image ID or registry digest}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    env_file:
+      - ${SPEDA_ENV_FILE:?Set the reviewed private deployment env file}
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////data/speda.db
+      SPEDA_DATA_DIR: /state
+      TEMP_OUTPUTS_DIR: /tmp/speda_outputs
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8000
+    volumes:
+      - ${SPEDA_DATABASE_DIR:?Set the candidate database directory}:/data
+      - ${SPEDA_STATE_DIR:?Set the retained private configuration directory}:/state
+      - ${SPEDA_OUTPUTS_DIR:?Set the retained outputs directory}:/tmp/speda_outputs
+    ports:
+      - "${SPEDA_BIND_ADDRESS:-127.0.0.1}:${SPEDA_HTTP_PORT:-8000}:8000"
+    networks:
+      existing:
+        aliases:
+          - app
+networks:
+  existing:
+    external: true
+    name: ${SPEDA_DOCKER_NETWORK:?Set the inspected existing sidecar network}

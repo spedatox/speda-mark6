@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mark VI · Rooms</title>
+<style>
+:root{color-scheme:dark;font:15px/1.55 system-ui;background:#11151b;color:#e3e8ee}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit;color:inherit;background:#202832;border:1px solid #3c4757;border-radius:8px;padding:9px}button{cursor:pointer}button:hover{border-color:#6ce2c6}button:disabled{opacity:.45;cursor:default}input,textarea{min-width:0}label{display:grid;gap:5px;color:#b7c3cf}h1,h2,p{margin:0 0 12px}h1{font-size:20px}h2{font-size:16px}.muted{color:#99a9ba;font-size:13px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1}.accent{background:#215c52;border-color:#4da88e}.danger{border-color:#a76c6c}header{padding:18px 24px;border-bottom:1px solid #303946;display:flex;gap:20px;align-items:center}main{display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 81px)}aside{padding:20px;border-right:1px solid #303946;overflow:auto}section{min-width:0;display:flex;flex-direction:column}#roomHead{padding:20px 26px;border-bottom:1px solid #303946}#transcript{flex:1;overflow:auto;padding:24px 26px}article{max-width:950px;margin:0 0 20px;padding:16px 20px;background:#19212a;border-radius:10px;border-left:3px solid #5e7186}article.owner{background:#172822;border-color:#69c6a8}article strong{text-transform:capitalize;color:#8cdbcb}article .body{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px}.notice{font-size:13px;color:#aab8c7;margin-bottom:10px}details{margin:15px 0}summary{cursor:pointer;color:#b7c3cf}details label{margin-top:10px}#rooms button{display:block;width:100%;text-align:left;margin:8px 0}#rooms button.selected{border-color:#6ce2c6}#composer{border-top:1px solid #303946;padding:16px 26px}#message{width:100%;resize:vertical;min-height:70px;margin-bottom:10px}#status{color:#f1cb91;overflow-wrap:anywhere}dialog{background:#171e26;color:#e3e8ee;border:1px solid #526477;border-radius:12px;width:min(800px,94vw)}dialog textarea{width:100%;height:45vh;font:13px/1.5 monospace}dialog::backdrop{background:#000a}@media(max-width:700px){main{grid-template-columns:1fr;height:auto}aside{border-right:0;border-bottom:1px solid #303946}#rooms{max-height:150px;overflow:auto}section{min-height:70vh}header{flex-wrap:wrap}#transcript{min-height:250px;max-height:60vh}}
+</style>
+<header><h1>MARK VI <span class="muted">/ ROOMS</span></h1><div class="grow"></div><input id="key" type="password" autocomplete="off" placeholder="API key" aria-label="API key"><button id="connect">Connect</button><button id="budgetButton">Spending limits</button></header>
+<main><aside><div class="row"><h2 class="grow">Conversations</h2><button id="refresh">↻</button></div><div id="rooms"></div>
+<details open><summary>New conversation</summary><label>Title<input id="title" value="Conversation" maxlength="255"></label><label>Lead<select id="lead"></select></label><label>Project ID (optional)<input id="projectId" placeholder="Bind once, keep continuity"></label><button id="create" class="accent" style="margin-top:12px">Create room</button></details>
+<details><summary>Register a project</summary><label>Name<input id="projectName"></label><label>Path on configured host<input id="projectPath"></label><button id="registerProject" style="margin-top:12px">Register</button></details>
+<p class="muted">Keys stay in this page’s memory. Each speaker is a separate agent turn. Workers appear as project activity.</p></aside>
+<section><div id="roomHead"><h2 id="roomTitle">Choose a conversation</h2><div id="members" class="muted"></div><div class="row" style="margin-top:12px"><select id="persona" aria-label="Participant"></select><button id="invite">Invite</button><button id="handoff">Make lead</button><button id="dismiss">Dismiss</button><button id="projectDetails">Project</button></div></div>
+<div id="transcript"><p class="muted">Connect to load your rooms.</p></div>
+<form id="composer"><textarea id="message" placeholder="Talk to the lead, or start with @optimus, @scourge, @friday…" aria-label="Message"></textarea><div class="row"><select id="address" aria-label="Address agent"><option value="">Room lead</option></select><button id="send" class="accent">Send</button><button id="stop" type="button" class="danger">Stop run</button><span id="status" class="grow" role="status"></span></div></form></section></main>
+<dialog id="budgetDialog"><h2>Coordination spending limits</h2><p class="muted">Paused by default. Rates must conservatively cover the selected provider’s input, output and reasoning charges. Reservations remain charged at their ceiling. Iacon maintenance has separate limits.</p><textarea id="budgetJson" aria-label="Spending policy JSON"></textarea><div class="row"><button id="saveBudget" class="accent">Save limits</button><button id="closeBudget">Close</button></div></dialog>
+<dialog id="projectDialog"><h2>Project continuity and release review</h2><pre id="projectJson" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:65vh;overflow:auto"></pre><div id="releaseActions" class="row"></div><button id="closeProject">Close</button></dialog>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let key='',room=null,cursor=0,controller=null,runId=null,pending=null,budgetVersion=0;
+const cards=new Map();
+function status(text){$('status').textContent=text;}
+async function api(path,method='GET',body){
+ const response=await fetch('/coordination'+path,{method,headers:{'X-API-Key':key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await response.json();if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data));return data;
+}
+function guard(fn){return async event=>{try{await fn(event);}catch(error){if(error.name!=='AbortError')status(error.message);}};}
+function option(value,label){const o=document.createElement('option');o.value=value;o.textContent=label;return o;}
+async function refresh(){const rooms=await api('/rooms');$('rooms').replaceChildren();for(const item of rooms){const b=document.createElement('button');b.textContent=item.title;b.className=room?.id===item.id?'selected':'';b.onclick=guard(()=>openRoom(item));$('rooms').append(b);}return rooms;}
+function renderHead(){if(!room)return;$('roomTitle').textContent=room.title;$('members').textContent='Lead: '+room.lead+' · '+room.members.join(' · ');$('address').replaceChildren(option('','Room lead'));for(const m of room.members)$('address').append(option(m,m));$('projectDetails').disabled=!room.project_id;}
+async function openRoom(selected){controller?.abort();room=selected;cursor=0;runId=selected.active_run;pending=null;cards.clear();$('transcript').replaceChildren();renderHead();await refresh();const own=new AbortController();controller=own;stream(room.id,own);}
+function card(id,speaker,owner=false){if(cards.has(id))return cards.get(id);const a=document.createElement('article');if(owner)a.className='owner';const s=document.createElement('strong');s.textContent=speaker;const b=document.createElement('div');b.className='body';a.append(s,b);$('transcript').append(a);cards.set(id,b);return b;}
+function notice(text){const p=document.createElement('div');p.className='notice';p.textContent=text;$('transcript').append(p);}
+function control(body,label,action,once=true){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=guard(async()=>{await action();b.disabled=once;});body.parentElement.append(b);return b;}
+function removeControls(body){body.parentElement.querySelectorAll('button,input').forEach(b=>b.remove());}
+async function reviewRelease(id){const data=await api('/releases/'+id);$('projectJson').textContent=JSON.stringify(data,null,2);$('releaseActions').replaceChildren();if(data.status==='awaiting_approval')for(const decision of ['approve','reject']){const b=document.createElement('button');b.textContent=decision==='approve'?'Approve this release':'Reject';b.onclick=guard(async()=>{b.disabled=true;status('Release decision submitted');const result=await api('/releases/'+id+'/decision','POST',{plan_hash:data.plan_hash,decision});$('projectJson').textContent=JSON.stringify(result,null,2);$('releaseActions').replaceChildren();status('Release '+result.status);});$('releaseActions').append(b);}$('projectDialog').showModal();}
+function eventReceived(e){
+ if(e.sequence<=cursor)return;cursor=e.sequence;
+ const p=e.payload;
+ if(e.kind==='user_message'){const body=card('owner'+e.sequence,'You',true);body.textContent=p.text;control(body,'Stop this request and its tasks',async()=>{const result=await api('/runs/'+e.run_id+'/cancel','POST');status(result.run?.status||result.status);});}
+ else if(e.kind==='speaker_started'){runId=e.run_id;const body=card(e.step_id,e.speaker);body.textContent='';removeControls(body);control(body,'Stop this reply',async()=>{await api('/steps/'+e.step_id+'/cancel','POST');status('Reply stop requested; independent tasks retain their status');});}
+ else if(e.kind==='delta')card(e.step_id,e.speaker).textContent+=p.text;
+ else if(e.kind==='message'||e.kind==='consult_result'){const body=card(e.step_id,e.speaker+(e.kind==='consult_result'?' · consultation':''));body.textContent=p.text;removeControls(body);}
+ else if(e.kind==='contribution_stopped'){const body=card(e.step_id,e.speaker);body.textContent+='\n[Stopped — partial contribution]';removeControls(body);}
+ else if(e.kind==='membership'){notice(e.speaker+' · '+p.action+' '+p.agent_id);api('/rooms').then(rows=>{const updated=rows.find(r=>r.id===room?.id);if(updated){room=updated;renderHead();}}).catch(err=>status(err.message));}
+ else if(e.kind==='project_queued'){const body=card('job'+p.task_id,p.role+' worker');body.textContent='Queued: '+p.task;control(body,'Stop this task',async()=>{await api('/tasks/'+p.task_id+'/cancel','POST');status('Task stop requested');});const input=document.createElement('input');input.placeholder='Steer this worker';input.maxLength=6000;body.parentElement.append(input);control(body,'Send steering',async()=>{if(!input.value.trim())throw Error('Enter an instruction');await api('/tasks/'+p.task_id+'/input','POST',{input_id:crypto.randomUUID(),message:input.value});input.value='';status('Worker steering queued for the next checkpoint');},false);}
+ else if(e.kind==='project_started')card('job'+p.task_id,p.role+' worker').textContent='Running on revision '+p.revision;
+ else if(e.kind==='project_result'){const body=card('job'+p.task_id,e.speaker+' · project result');body.textContent=p.text+'\nArtifact: '+p.artifact.revision+'\nIntegration: '+p.artifact.integration;removeControls(body);}
+ else if(e.kind==='project_event'){const data=p.event?.data;const body=card('job'+p.task_id,p.role+' worker');const line=typeof data==='string'?data:JSON.stringify(data);body.textContent=(body.textContent+'\n'+p.event.type+': '+line).slice(-20000);}
+ else if(e.kind==='task_input_delivered')notice('Worker steering delivered at an execution checkpoint');
+ else if(e.kind==='supervisor_input_queued')notice('You · steering: '+p.text);
+ else if(e.kind==='supervisor_input_delivered')notice('Conversation steering delivered at a reasoning boundary');
+ else if(e.kind==='artifact_reviewed')notice(e.speaker+' assessed artifact '+p.revision+': '+p.verdict+' · '+p.rationale);
+ else if(e.kind==='release_prepared'){const body=card('release'+p.operation_id,'Publication approval');body.textContent='Target: '+p.target+'\nArtifact: '+p.revision;control(body,'Review release plan',()=>reviewRelease(p.operation_id));}
+ else if(e.kind==='release_finished')notice('Release '+p.operation_id+': '+p.status);
+ else if(e.kind==='decision'){const body=card('decision'+p.id,'Decision · '+p.speaker);body.textContent=p.proposal+'\nStatus: '+p.disposition+' · version '+p.version+'\nEvidence: '+p.evidence.join(', ')+(p.objections.length?'\nObjections: '+p.objections.join('\n'):'');removeControls(body);for(const disposition of ['accepted','rejected','deferred'])if(p.disposition!==disposition)control(body,disposition,async()=>{await api('/rooms/'+e.room_id+'/decisions','POST',{id:p.id,expected_version:p.version,proposal:p.proposal,evidence:p.evidence,objections:p.objections,disposition});});}
+ else if(e.kind==='run_stopped'){status(p.reason);notice(p.status+': '+p.reason);}
+ else if(e.kind==='round_finished'||e.kind==='project_run_finished'){status(p.status);for(const task of p.tasks||[]){const body=cards.get('job'+task.id);if(body&&task.status!=='succeeded'){body.textContent+='\nStatus: '+task.status+(task.reason?' · '+task.reason:'');removeControls(body);}}}
+ if((e.kind==='round_finished'||e.kind==='run_stopped')&&e.run_id===runId)runId=null;
+ $('transcript').scrollTop=$('transcript').scrollHeight;
+}
+async function stream(id,own){
+ while(!own.signal.aborted){try{
+  const r=await fetch('/coordination/rooms/'+id+'/stream?after='+cursor,{headers:{'X-API-Key':key},signal:own.signal});
+  if(!r.ok)throw Error('Stream rejected: '+r.status);
+  const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';
+  while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let end;
+   while((end=buffer.indexOf('\n\n'))>=0){const frame=buffer.slice(0,end);buffer=buffer.slice(end+2);const line=frame.split('\n').find(s=>s.startsWith('data: '));if(line)eventReceived(JSON.parse(line.slice(6)));}}
+ }catch(error){if(own.signal.aborted)return;status('Reconnecting: '+error.message);}
+ await new Promise(resolve=>setTimeout(resolve,1500));}
+}
+$('connect').onclick=guard(async()=>{key=$('key').value;$('key').value='';const profiles=await api('/personas');for(const id of ['lead','persona']){$(id).replaceChildren();for(const p of profiles)$(id).append(option(p.agent_id,p.name));}const rooms=await refresh();status('Connected');if(rooms.length)await openRoom(rooms[0]);});
+$('refresh').onclick=guard(refresh);
+$('create').onclick=guard(async()=>{const r=await api('/rooms','POST',{title:$('title').value,lead:$('lead').value||'speda',project_id:$('projectId').value||null});await openRoom(r);});
+for(const action of ['invite','handoff','dismiss'])$(action).onclick=guard(async()=>{if(!room)throw Error('Choose a room');room=await api('/rooms/'+room.id+'/members','POST',{expected_version:room.version,action,agent_id:$('persona').value});renderHead();});
+$('composer').onsubmit=guard(async e=>{e.preventDefault();if(!room)throw Error('Choose a room');const message=$('message').value.trim();if(!message)return;
+ const agent=$('address').value||null;if(!pending||pending.message!==message||pending.agent_id!==agent)pending={input_id:crypto.randomUUID(),message,agent_id:agent};
+ $('send').disabled=true;try{const result=await api('/rooms/'+room.id+'/messages','POST',pending);if(result.status==='queued')runId=result.run_id;pending=null;$('message').value='';status(result.status);}finally{$('send').disabled=false;}});
+$('stop').onclick=guard(async()=>{if(!runId)throw Error('No run selected');const result=await api('/runs/'+runId+'/cancel','POST');status(result.run?.status||result.status||'Cancellation requested');});
+$('budgetButton').onclick=guard(async()=>{const data=await api('/budget');budgetVersion=data.version;$('budgetJson').value=JSON.stringify(data.policy,null,2);$('budgetDialog').showModal();});
+$('saveBudget').onclick=guard(async()=>{const data=await api('/budget','PUT',{expected_version:budgetVersion,policy:JSON.parse($('budgetJson').value)});budgetVersion=data.version;$('budgetDialog').close();status('Spending limits saved');});
+$('closeBudget').onclick=()=>$('budgetDialog').close();
+$('registerProject').onclick=guard(async()=>{const p=await api('/projects','POST',{name:$('projectName').value,path:$('projectPath').value});$('projectId').value=p.id;status('Project registered. Create a room to bind it.');});
+$('projectDetails').onclick=guard(async()=>{if(!room?.project_id)throw Error('This room has no project');$('projectJson').textContent=JSON.stringify(await api('/projects/'+room.project_id),null,2);$('projectDialog').showModal();});
+$('closeProject').onclick=()=>$('projectDialog').close();
+const steerButton=document.createElement('button');steerButton.type='button';steerButton.textContent='Steer reply';$('stop').before(steerButton);steerButton.onclick=guard(async()=>{if(!runId)throw Error('No active supervisor reply; send a new message');const text=$('message').value.trim();if(!text)return;const result=await api('/runs/'+runId+'/input','POST',{input_id:crypto.randomUUID(),message:text});if(result.steered){$('message').value='';status('Supervisor steering queued');}else status(result.reason);});
+</script></html>

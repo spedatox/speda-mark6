@@ -59,12 +59,9 @@ fun InterfaceTab(config: AppConfig, graph: AppGraph) {
                     ThemeChip(locale.label, active = settings.locale == locale.wire) {
                         scope.launch {
                             graph.settings.setLocale(locale.wire)
-                            // Not just these strings. `agent_language` is what
-                            // stamps the language contract into every agent's
-                            // system prompt and what the speech locales are
-                            // derived from — the same master switch the composer
-                            // carries, reached from the other end.
-                            graph.api.saveConfig(
+                            // Backend preference is staged; Configuration shows
+                            // the pending restart. The interface changes immediately.
+                            graph.api.saveConfigPreferences(
                                 config,
                                 mapOf("agent_language" to JsonPrimitive(locale.wire)),
                             )

@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatContext } from '../store/chat'
+import { useWorkerStreams } from '../lib/useWorkerStreams'
 import { useSettings } from '../store/settings'
 import type { SSEEvent } from '../lib/types'
 import { streamChat, fetchSessions, attachStream, fetchActiveRuns, cancelRun, fetchWelcome, answerAsk, newRequestId, AttachGone } from '../lib/api'
@@ -198,7 +199,8 @@ interface Props {
   onSelectSession: (sessionId: number) => Promise<void>
 }
 
-export default function ChatMain({ config, onSelectSession }: Props) {
+export default function ChatMain({ config }: Props) {
+  const workerFeed = useWorkerStreams(config)
   const { state, dispatch } = useChatContext()
   const { settings } = useSettings()
   // One card at a time: the peer parks the ask inside a single tool dispatch,
@@ -377,7 +379,7 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       keepMessages: opts.keepMessages,
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
-      cwd: settings.forgeCwd || undefined,
+      cwd: state.activeSessionId || state.activeProjectId ? undefined : settings.forgeCwd || undefined,
       // The workspace this chat belongs to. Only read by the backend on the
       // turn that CREATES the session — a chat's project is fixed at birth —
       // so sending it on every turn is harmless and means a brand-new chat
@@ -456,7 +458,8 @@ export default function ChatMain({ config, onSelectSession }: Props) {
           // the in-flight stream is ours and SELECT_SESSION can preserve it.
           if (typeof event.session_id === 'number') {
             turnSessionRef.current = event.session_id
-            dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id } })
+            dispatch({ type: 'TAG_MESSAGE_SESSION', payload: { id: assistantId, sessionId: event.session_id,
+              stepId: (event.data as { step_id?: string } | null)?.step_id } })
           }
           dispatch({ type: 'SET_STATUS', payload: { id: assistantId, status: 'Thinking' } })
         } else if (event.type === 'thinking') {
@@ -691,6 +694,9 @@ export default function ChatMain({ config, onSelectSession }: Props) {
       try {
         for await (const event of attachStream(config, run.request_id, ctrl.signal)) {
           if (event.type === 'start') {
+            if (typeof event.session_id === 'number') dispatch({ type: 'TAG_MESSAGE_SESSION', payload: {
+              id: assistantId, sessionId: event.session_id, stepId: (event.data as { step_id?: string } | null)?.step_id,
+            } })
             const trig = (event.data as { trigger?: import('../lib/types').TriggerMeta } | null)?.trigger
             if (trig) dispatch({ type: 'SET_MESSAGE_TRIGGER', payload: { id: assistantId, trigger: trig } })
           } else if (event.type === 'thinking') {
@@ -834,6 +840,10 @@ export default function ChatMain({ config, onSelectSession }: Props) {
         )
       }
       {pendingAsk && <PermissionPrompt ask={pendingAsk} onResolve={resolveAsk} />}
+        {state.messages.some(message => message.subagents?.length) && (workerFeed.status !== 'connected' || workerFeed.error) &&
+          <div role="status" aria-live="polite" style={{ padding: '4px 16px', color: 'var(--hb-text-dim)', fontSize: '0.78rem' }}>
+            {workerFeed.error || 'Connecting to recorded worker activity…'}
+          </div>}
       <InputBar onSend={send} onStop={stop} config={config} />
     </div>
   )

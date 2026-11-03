@@ -233,7 +233,7 @@ export interface CanvasSettings {
 }
 
 export const CANVAS_FALLBACK: CanvasSettings = {
-  enabled: true, maxPanels: 10, revealStaggerMs: 160, captionLines: 3,
+  enabled: true, maxPanels: 24, revealStaggerMs: 160, captionLines: 3,
   activityAfterMs: 1200,
 }
 

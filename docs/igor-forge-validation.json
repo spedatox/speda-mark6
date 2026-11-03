@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-27",
+  "scope": "Local renovated Mark VI; source-informed Heartbreaker/Striker hardening and native IGOR/FORGE execution paths",
+  "source_review": {
+    "codex_repository": "https://github.com/openai/codex",
+    "codex_revision": "f088e0c4ffdfab3a7d4480c14855a9db00450384",
+    "codex_scope": "Public Rust app-server and TUI; not proprietary desktop source",
+    "openwebui_repository": "https://github.com/open-webui/open-webui",
+    "openwebui_revision": "33c1978d5bad52a31df75ea55143025dfad18d16",
+    "upstream_code_executed_or_copied": false
+  },
+  "focused_backend": {
+    "command": "python -m pytest -q -p no:cacheprovider --basetemp <external scratch> tests/test_forge_mission_control.py tests/test_projects.py tests/test_project_teams.py tests/test_worker_control.py tests/test_legion_api.py tests/test_client_compat.py tests/test_coordination.py tests/test_lifecycle.py",
+    "passed": 78,
+    "seconds": 130.79,
+    "environment": "PYTHONDONTWRITEBYTECODE=1; SQLite; fixture providers and Cell; real local publication and verification subprocesses",
+    "covers": [
+      "Concurrent supervisor reply and FORGE execution, later-turn steering of the original worker",
+      "Supervisor reasoning boundary restoration and stale effect refusal",
+      "Independent lightweight specialist answers without FORGE",
+      "Same-project exact predecessor artifacts across later conversational turns",
+      "Bounded automatic supervisor review, exact acceptance revision and Workshop checkpoint CAS",
+      "Owner-only exact-plan publication, single-use approval and review/source/target drift rejection",
+      "Health-check failure held for explicit reconciliation without redeployment",
+      "Native approval tray authentication and refusal of remembered publication approval",
+      "Dispatcher finish race, expected-step steering fence and idempotent acknowledgment",
+      "Existing worker cancellation, role isolation, receipts and client compatibility"
+    ]
+  },
+  "final_backend_followup": {
+    "command": "python -m pytest -q -p no:cacheprovider --basetemp <external scratch> tests/test_forge_mission_control.py tests/test_worker_control.py tests/test_legion_api.py",
+    "passed": 34,
+    "seconds": 66.66,
+    "reason": "Rerun after final event-page metadata caching, partial-preview flags and omitted-task accounting changes",
+    "new_assertions": [
+      "Post-completion supervisor assessments remain reachable in worker replay",
+      "One inspection per execution per session-event page",
+      "Snapshot floor captured before concurrently arriving events",
+      "Stable parent identities, explicit truncation and omitted projection count",
+      "Hidden parent and cross-owner snapshot isolation"
+    ],
+    "overlaps_focused_backend": true
+  },
+  "worker_clients": {
+    "command": "npm run test:workers",
+    "heartbreaker_passed": 18,
+    "striker_passed": 18,
+    "total_passed": 36,
+    "uses": "Actual React hooks, reducer, protocol decoder and Markdown/math rendering, bundled per client; Node test runner and React test renderer",
+    "covers": [
+      "Fragmented UTF-8, CRLF and multiline SSE with final frames",
+      "Malformed and oversized data fails explicitly and releases stream readers",
+      "Public reply and composer state independent from worker completion",
+      "Events before history, stale history and late responses after chat switching",
+      "Duplicate and out-of-order replay with exact tool-call identity",
+      "GET-only recovery and visible non-retrying permission rejection",
+      "Operational parent anchors and overlapping snapshot completeness",
+      "1000-event burst coalescing and bounded preview storage",
+      "Stable steering input IDs, single-flight sends and late acknowledgment fences",
+      "Newer draft/chat/specialist preserved after an old request succeeds",
+      "Patched math rendering retains formulas and refuses untrusted HTML commands"
+    ]
+  },
+  "client_builds": {
+    "heartbreaker_typescript": "passed",
+    "striker_typescript": "passed",
+    "heartbreaker_electron_build": "passed",
+    "striker_electron_build": "passed",
+    "heartbreaker_web_build": "passed",
+    "striker_web_build": "passed",
+    "downloaded_electron_binary_version": "42.11.18",
+    "warnings": [
+      "Web bundles exceed Vite's 500 kB chunk warning threshold",
+      "Earlier builds reported existing Samsung font-resolution warnings; packaged visual acceptance remains required"
+    ],
+    "signed_installer_or_visual_e2e": "not verified"
+  },
+  "dependency_audit": {
+    "command": "npm audit --json",
+    "initial_known_vulnerabilities": 35,
+    "initial_critical": 2,
+    "final_known_vulnerabilities": 0,
+    "note": "Registry advisory result for the resolved lockfile on this date, not a general security certification"
+  },
+  "earlier_full_backend_suite": {
+    "passed": 544,
+    "skipped": 88,
+    "failed": 3,
+    "seconds": 481.68,
+    "unresolved_environment_failures": [
+      "test_atomix_reports.py::test_real_atomix_pdf_has_original_template_and_turkish_text: missing native libgobject/Pango",
+      "test_document_integration.py::test_native_document_generation_delivery_and_reload[pdf]: missing native libgobject/Pango"
+    ],
+    "subsequently_fixed_failure": "Native asks compatibility fixture lacked app.state.projects; capability absence now returns an empty ask list and focused regression passes",
+    "full_suite_repeated_after_fix": false,
+    "note": "Earlier full run precedes final source-review hardening. Focused reruns are overlapping evidence and must not be summed into a unique test count."
+  },
+  "other_checks": {
+    "git_diff_check": "passed",
+    "production_deployed": false,
+    "owner_datasets_replaced": false,
+    "paid_provider_calls": 0,
+    "docker_available_on_host": false,
+    "java_available_on_host": false
+  },
+  "release_gates": [
+    "Live Docker Cell provisioning, isolation, cancellation and independently verified teardown",
+    "Live paid-provider quality, native continuation and long mission budget acceptance",
+    "PostgreSQL concurrency for the new supervisor/release contracts",
+    "Signed packaged desktop visual, GPU/map and interaction acceptance",
+    "Android build and visual acceptance; automatic session-wide background feedback remains unverified there",
+    "Real target deployment, release-identity health verification and external rollback exercise",
+    "Native PDF library provisioning and rerun of the two environmental PDF failures"
+  ]
+}

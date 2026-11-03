@@ -43,6 +43,7 @@
 
 import { useMemo } from 'react'
 import { looksIncomplete } from '../lib/partialJson'
+import { useRenderSurface } from '../lib/renderSurface'
 import {
   LineChart, Line,
   BarChart, Bar,
@@ -51,6 +52,7 @@ import {
   XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
+  type XAxisTickContentProps,
 } from 'recharts'
 
 /* ── Palette ──────────────────────────────────────────────────────────────── */
@@ -161,15 +163,16 @@ function ChartPanel({ title, subtitle, children }: {
   subtitle?: string
   children: React.ReactNode
 }) {
+  const { canvas } = useRenderSurface()
   const idx  = title ? title.indexOf('_') : -1
   const main = idx > -1 ? title!.slice(0, idx) : title
   const cap  = subtitle ?? (idx > -1 ? title!.slice(idx + 1).replace(/_/g, ' ') : '')
 
   return (
-    <div className="hb-glass hb-widget" style={{
+    <div className={canvas ? 'hb-widget hb-canvas-chart' : 'hb-glass hb-widget'} style={{
       position: 'relative',
-      margin: '0.75rem 0',
-      padding: '20px 22px 14px',
+      margin: canvas ? 0 : '0.75rem 0',
+      padding: canvas ? 0 : '20px 22px 14px',
       overflow: 'hidden',
       animation: 'widgetEntrance 0.35s ease both',
     }}>
@@ -223,8 +226,29 @@ interface ChartSpec {
   height?:  number
 }
 
+function labelLines(value: unknown): string[] {
+  const words = String(value ?? '').split(/\s+/)
+  const lines: string[] = []
+  for (const word of words) {
+    if (!lines.length || lines[lines.length - 1].length + word.length > 16) lines.push(word)
+    else lines[lines.length - 1] += ` ${word}`
+  }
+  return lines
+}
+function useCanvasAxis(spec: ChartSpec) {
+  const { canvas } = useRenderSurface()
+  if (!canvas) return xAxisProps
+  const height = Math.max(36, ...spec.data.map(row => labelLines(row[spec.xKey || 'x']).length * 15 + 14))
+  return { ...xAxisProps, height, interval: 0, tick: ({ x, y, payload }: XAxisTickContentProps) => (
+    <text x={x} y={Number(y) + 8} textAnchor="middle" fill="var(--hb-text-dim)" fontSize={12} fontFamily="var(--font-read)">
+      {labelLines(payload.value).map((line, i) => <tspan key={i} x={x} dy={i ? 15 : 0}>{line}</tspan>)}
+    </text>
+  ) }
+}
+
 /* Line ─────────────────────────────────────────────────────────────────────── */
 function StarkLineChart({ spec }: { spec: ChartSpec }) {
+  const axis = useCanvasAxis(spec)
   const { data, series = [], xKey = 'x', unit, yDomain, height = 210 } = spec
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tip = (p: any) => <StarkTooltip {...p} unit={unit} />
@@ -232,7 +256,7 @@ function StarkLineChart({ spec }: { spec: ChartSpec }) {
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 6, right: 16, bottom: 0, left: 0 }}>
         <CartesianGrid stroke={GRID} vertical={false} />
-        <XAxis dataKey={xKey} {...xAxisProps} />
+        <XAxis dataKey={xKey} {...axis} />
         <YAxis domain={yDomain ?? ['auto', 'auto']} {...yAxisProps} />
         <Tooltip content={tip} cursor={{ stroke: 'rgba(var(--hb-accent-rgb),0.18)', strokeWidth: 1 }} />
         <Legend content={StarkLegend} />
@@ -254,6 +278,7 @@ function StarkLineChart({ spec }: { spec: ChartSpec }) {
 
 /* Area ─────────────────────────────────────────────────────────────────────── */
 function StarkAreaChart({ spec }: { spec: ChartSpec }) {
+  const axis = useCanvasAxis(spec)
   const { data, series = [], xKey = 'x', unit, yDomain, height = 210 } = spec
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tip = (p: any) => <StarkTooltip {...p} unit={unit} />
@@ -272,7 +297,7 @@ function StarkAreaChart({ spec }: { spec: ChartSpec }) {
           })}
         </defs>
         <CartesianGrid stroke={GRID} vertical={false} />
-        <XAxis dataKey={xKey} {...xAxisProps} />
+        <XAxis dataKey={xKey} {...axis} />
         <YAxis domain={yDomain ?? ['auto', 'auto']} {...yAxisProps} />
         <Tooltip content={tip} cursor={{ stroke: 'rgba(var(--hb-accent-rgb),0.18)', strokeWidth: 1 }} />
         <Legend content={StarkLegend} />
@@ -294,6 +319,7 @@ function StarkAreaChart({ spec }: { spec: ChartSpec }) {
 
 /* Bar ──────────────────────────────────────────────────────────────────────── */
 function StarkBarChart({ spec }: { spec: ChartSpec }) {
+  const axis = useCanvasAxis(spec)
   const { data, series = [], xKey = 'x', unit, yDomain, height = 210 } = spec
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tip = (p: any) => <StarkTooltip {...p} unit={unit} />
@@ -315,7 +341,7 @@ function StarkBarChart({ spec }: { spec: ChartSpec }) {
           })}
         </defs>
         <CartesianGrid stroke={GRID} vertical={false} />
-        <XAxis dataKey={xKey} {...xAxisProps} />
+        <XAxis dataKey={xKey} {...axis} />
         <YAxis domain={yDomain ?? [0, 'auto']} {...yAxisProps} />
         <Tooltip content={tip} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
         <Legend content={StarkLegend} />
@@ -423,6 +449,7 @@ function Materializing() {
 
 /* ── Main export ──────────────────────────────────────────────────────────── */
 export default function ChartBlock({ children }: { children: string }) {
+  const { canvas, expanded } = useRenderSurface()
   const spec = useMemo<ChartSpec | null>(() => {
     try   { return JSON.parse(children) as ChartSpec }
     catch { return null }
@@ -434,10 +461,12 @@ export default function ChartBlock({ children }: { children: string }) {
 
   return (
     <ChartPanel title={spec.title} subtitle={spec.subtitle}>
-      {spec.type === 'line' && <StarkLineChart spec={spec} />}
-      {spec.type === 'area' && <StarkAreaChart spec={spec} />}
-      {spec.type === 'bar'  && <StarkBarChart  spec={spec} />}
-      {spec.type === 'pie'  && <StarkPieChart  spec={spec} />}
+      <div style={{ overflowX: 'auto' }}><div style={{ minWidth: canvas && spec.type !== 'pie' ? Math.max(400, spec.data.length <= 24 ? spec.data.length * 110 + 70 : 640) : 0 }}>
+        {spec.type === 'line' && <StarkLineChart spec={{ ...spec, height: canvas ? Math.max(spec.height || 0, expanded ? 360 : 280) : spec.height }} />}
+        {spec.type === 'area' && <StarkAreaChart spec={{ ...spec, height: canvas ? Math.max(spec.height || 0, expanded ? 360 : 280) : spec.height }} />}
+        {spec.type === 'bar'  && <StarkBarChart  spec={{ ...spec, height: canvas ? Math.max(spec.height || 0, expanded ? 360 : 280) : spec.height }} />}
+        {spec.type === 'pie'  && <StarkPieChart  spec={spec} />}
+      </div></div>
       {!['line','area','bar','pie'].includes(spec.type) && (
         <ParseError raw={`unknown type: ${spec.type}`} />
       )}

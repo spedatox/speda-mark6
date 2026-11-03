@@ -1,3 +1,0 @@
-GitHub Pages serves this directory verbatim instead of running it through
-Jekyll. Without this file, Jekyll would ignore any path beginning with an
-underscore and would try to interpret Liquid syntax inside the HTML.

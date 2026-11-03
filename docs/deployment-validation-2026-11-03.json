@@ -1,0 +1,430 @@
+{
+  "date": "2026-11-03",
+  "status": "deployed_with_owner_deferred_product_gaps",
+  "production_deployed": true,
+  "reference_final_commit": "c24c92f9c1126f8d07fb17a713d919ccef9bb3c5",
+  "preserved_remote_main_commit": "f1b4c15a20a72231affe920636a00aa732b8801a",
+  "tested_image_id": "sha256:70b5737b9588cb2544dd0e37557b3afd55ae398bc230aaa4d90dd61d369b4970",
+  "tested_source_sha256": "04862482fc9e23bfa490820f04a45138ce0090391ca3921337e45be95ee7ef75",
+  "later_runtime_changes": {
+    "baseline_image": "20261103-04",
+    "release_image": "20261103-06",
+    "validated_changes": [
+      "Private preference and automation metadata import",
+      "Per-role prebuilt Cell image pins",
+      "Telegram polling cursor preservation",
+      "Bot token redaction in logs",
+      "Existing Gmail acknowledgements retained"
+    ],
+    "source_changes_after_final_image": "Documentation only"
+  },
+  "backend": {
+    "unique_cases_verified": 710,
+    "full_run": {
+      "artifact": "backend-full-04.xml",
+      "sha256": "8738c9c8c987a4b4a46b7f3207418bfe4c82889ff9b3bea948c2212f962103c3",
+      "cases": 710,
+      "passed": 703,
+      "failures": 0,
+      "errors": 7,
+      "skipped": 0
+    },
+    "environment_recheck": {
+      "artifact": "backend-environment-recheck-04.xml",
+      "sha256": "dfabf839ba0eaebe545386a113121ef1d9889a20a1385152d77be73f8a047db7",
+      "cases": 7,
+      "passed": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "environment_incident": "The disposable tmpfs PostgreSQL container hit its 384 MiB memory limit during seven fixture setups. All seven cases passed on a fresh disk-backed disposable database with 768 MiB; no application test was skipped or waived.",
+    "cutover_changes": {
+      "artifact": "env-cutover-06.xml",
+      "sha256": "056d5bdff82fc250d3eced13466a0896c62e52bdefee610944f0cff8c520c5aa",
+      "passed": 45,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "docker": {
+    "result": {
+      "artifact": "docker-04.xml",
+      "sha256": "599f04c777a4f0c62dedcd5599b96e2a1005750f4c10a6c79b3ca33851e79949",
+      "cases": 2,
+      "passed": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "covers": [
+      "Non-root isolated workspace",
+      "Denied network and owner database/socket absence",
+      "Bounded timeout and honest receipt",
+      "Cancellation joined; container removal independently verified"
+    ]
+  },
+  "clients": {
+    "heartbreaker_typecheck": true,
+    "striker_typecheck": true,
+    "worker_behavior_cases_passed": 44,
+    "heartbreaker_electron_build": true,
+    "striker_electron_build": true,
+    "heartbreaker_web_build": true,
+    "striker_web_build": true,
+    "android_debug_build": true,
+    "android_unit_tests_passed": 68,
+    "android_java": 21,
+    "browser_renderers": {
+      "checks": [
+        {
+          "viewport": 320,
+          "panels": 10,
+          "scrolls": true,
+          "widget_survives_expand_restore": true
+        },
+        {
+          "viewport": 1440,
+          "panels": 10,
+          "scrolls": true,
+          "widget_survives_expand_restore": true
+        },
+        {
+          "viewport": 1920,
+          "panels": 10,
+          "scrolls": true,
+          "widget_survives_expand_restore": true
+        },
+        {
+          "agent_mentions_transport": true
+        }
+      ],
+      "page_errors": []
+    }
+  },
+  "memory": {
+    "authority": "Production data; local Renovated database retained separately, not merged",
+    "legacy_rows": {
+      "preserved": true,
+      "original_tables": 104,
+      "original_rows": 484398,
+      "changed_original_tables": [],
+      "integrity": "ok"
+    },
+    "native_documents": 207,
+    "native_entities": 60,
+    "native_states": 28,
+    "import_review_exceptions": 0,
+    "owner_message_sources": 11783,
+    "observation_sources": 2524,
+    "recall": {
+      "cases": [
+        {
+          "case": "personal_fact",
+          "status": "partial",
+          "elapsed_ms": 179.87,
+          "bytes": 3049,
+          "evidence_present": true,
+          "both_sibling_identities_present": null
+        },
+        {
+          "case": "sibling_relationship",
+          "status": "partial",
+          "elapsed_ms": 98.05,
+          "bytes": 5840,
+          "evidence_present": true,
+          "both_sibling_identities_present": true
+        },
+        {
+          "case": "sibling_names_followup",
+          "status": "partial",
+          "elapsed_ms": 59.44,
+          "bytes": 5701,
+          "evidence_present": true,
+          "both_sibling_identities_present": true
+        },
+        {
+          "case": "turkish_siblings",
+          "status": "partial",
+          "elapsed_ms": 48.52,
+          "bytes": 2658,
+          "evidence_present": true,
+          "both_sibling_identities_present": true
+        },
+        {
+          "case": "explicit_family_lookup",
+          "status": "partial",
+          "elapsed_ms": 47.7,
+          "bytes": 3740,
+          "evidence_present": true,
+          "both_sibling_identities_present": true
+        }
+      ],
+      "memory_provider_calls": 0,
+      "dataset": "latest production snapshot serving copy"
+    },
+    "retrieval_provider_calls": 0,
+    "reconcile_again_before_cutover": false,
+    "final_reconciliation": {
+      "effective_setting_changes_since_rehearsal": [],
+      "counts": {
+        "initial": {
+          "messages": 25627,
+          "sessions": 2068,
+          "memory_files": 207,
+          "automations": 15
+        },
+        "final": {
+          "messages": 25631,
+          "sessions": 2070,
+          "memory_files": 207,
+          "automations": 15
+        }
+      },
+      "final_offsets_retained": 8,
+      "source": "fresh_frozen_production",
+      "local_test_memory_merged": false
+    },
+    "final_snapshot": {
+      "snapshot": "/opt/speda-operations/releases/renovated-20261103-05/private/production-final.db",
+      "bytes": 718360576,
+      "sha256": "64cf19309ba3d7c50f1a6ca2a5d5e5b6b4e319891f32f8535a9c14b89c48c3ce",
+      "integrity": "ok"
+    },
+    "live_answer_acceptance_names_matched": 2
+  },
+  "http_smoke": {
+    "http_ready": true,
+    "unauthenticated_owner_access_rejected": true,
+    "history_reload_export": true,
+    "models_configuration_memory_and_static_ui": true,
+    "synthetic_memory_write": true,
+    "restart_verified": true
+  },
+  "retained_old_image_restore": {
+    "health": true,
+    "original_history_accessible": true
+  },
+  "live_provider": {
+    "model": "zai:glm-5.3",
+    "cases": [
+      {
+        "case": "memory_identity",
+        "passed": true,
+        "seconds": 12.4,
+        "answer_chars": 116,
+        "errors": 0,
+        "tool_events": 0
+      },
+      {
+        "case": "memory_followup",
+        "passed": true,
+        "seconds": 4.79,
+        "answer_chars": 58,
+        "errors": 0,
+        "tool_events": 0
+      },
+      {
+        "case": "native_provider_continuation",
+        "passed": true,
+        "seconds": 10.31,
+        "answer_chars": 67,
+        "errors": 0,
+        "tool_events": 0
+      }
+    ],
+    "pdf_tool_flow": {
+      "passed": true,
+      "seconds": 28.28,
+      "pages": 1,
+      "downloaded_bytes": 8966,
+      "history_file_card_retained": true,
+      "tool_events": 2
+    },
+    "combined_conservative_reservations": {
+      "calls": 6,
+      "tokens": 172959,
+      "microdollars": 435894
+    },
+    "hard_ceiling_usd": 1,
+    "paused_after_tests": true,
+    "billing_note": "Reservations are conservative ceilings, not a claim about invoiced spend."
+  },
+  "live_sidecars": {
+    "hisar": {
+      "configured": true,
+      "health_http": 200
+    },
+    "browser": {
+      "configured": true,
+      "health_http": 200
+    },
+    "sandbox": {
+      "configured": true,
+      "health_http": 200
+    },
+    "hisar_library": {
+      "configured": true,
+      "manifest_http": 200
+    }
+  },
+  "native_hisar": {
+    "configured": true,
+    "manifest_keys": [
+      "records",
+      "has_more",
+      "next_offset"
+    ],
+    "read_manifest": true
+  },
+  "hisar_identity_alias": {
+    "documents_checked": 6,
+    "friday_grants": 6,
+    "nightcrawler_grants": 6
+  },
+  "release_findings_fixed": [
+    "Missing Forge package in image",
+    "Missing PDF native libraries",
+    "Missing Solus static build",
+    "Legacy assistant-named user row hid owner-family routing",
+    "SQLite coordination write contention",
+    "Docker timeout KILL returned 137 but was not marked timed out",
+    "Deployed GLM native effort descriptors and legacy policy aliases",
+    "Midnight-dependent health test fixture",
+    "Flat-layout deployment/CI and retained reference design paths"
+  ],
+  "remaining_product_acceptance": {
+    "superior_gate_complete": false,
+    "pending_original_interfaces": 33,
+    "pending_protocol_skills": 6,
+    "protocols": [
+      "Doormat",
+      "Lifeboat",
+      "Lockdown",
+      "Octavius",
+      "Skyfall",
+      "system_ops"
+    ],
+    "continuous_input_voice": false,
+    "full_comparative_owner_workflow_evidence": false,
+    "no_waiver_from_passing_tests": true,
+    "deployment_authorized_with_gaps": true,
+    "owner_direction": "Deploy, we will add em later"
+  },
+  "deployed_checks": {
+    "live-internal-http-smoke": {
+      "http_ready": true,
+      "unauthenticated_owner_access_rejected": true,
+      "history_reload_export": true,
+      "models_configuration_memory_and_static_ui": true,
+      "synthetic_memory_write": false,
+      "restart_verified": false
+    },
+    "live-chat-summary": {
+      "chat_sse_completed": true,
+      "arithmetic_correct": true,
+      "memory_answer_saved_privately": true,
+      "event_types": [
+        "chunk",
+        "done",
+        "policy",
+        "start"
+      ],
+      "prior_acceptance_names_matched": 2
+    },
+    "live-mail-callbacks": {
+      "workflow_callbacks_updated": 2,
+      "schedules_unchanged": true,
+      "no_replay_requested": true
+    },
+    "telegram-webhook-cutover": {
+      "speda": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "friday": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "ultron": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "optimus": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "atomix": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "scourge": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "sentinel": {
+        "configured": true,
+        "pending_updates": 0
+      },
+      "orion": {
+        "configured": true,
+        "pending_updates": 0
+      }
+    },
+    "live-restart-persistence": {
+      "history_after_restart": true,
+      "controlled_chat_retained": true
+    },
+    "public-ready": {
+      "status": "ready",
+      "instance_id": "0386a7d8076d425894c7cb6de0a471ac"
+    },
+    "watchdog-status": {
+      "active": false,
+      "enabled": false,
+      "reason": "Owner requested Orion Spark stopped and disabled"
+    },
+    "voice-rehearsal": {
+      "voice_agents": 8,
+      "speech_audio_bytes": 32225,
+      "locale": "en-US",
+      "paid_speech_requests": 1
+    }
+  },
+  "configuration_cutover": {
+    "shared_production_settings_retained": 92,
+    "reviewed_native_settings": 103,
+    "secrets_in_git": false,
+    "model_voice_and_bot_agents": 8,
+    "existing_automation_definitions_retained": 15,
+    "missing_remote_workflow_ids": [
+      22,
+      23,
+      24,
+      25
+    ],
+    "missing_remotes_recreated": false,
+    "existing_mail_workflow_callbacks_adapted": 2,
+    "scheduler": "existing n8n container; schedules retained",
+    "chat_and_coordination_spending": "Active with tracking; production had no admission cap",
+    "iacon_daily_allowance": {
+      "calls": 200,
+      "tokens": 2000000,
+      "usd_ceiling": 1,
+      "historical_bulk_extraction": false
+    },
+    "orion_spark": "Stopped and disabled at owner request"
+  },
+  "deployment": {
+    "public_url": "https://speda.spedatox.systems",
+    "container": "speda-renovated-app-1",
+    "operations_directory": "/opt/speda-operations/releases/renovated-20261103-05",
+    "retained_legacy_container": "speda-app-1",
+    "legacy_database_replaced": false,
+    "fresh_database_mounted_separately": true,
+    "local_test_backup_retained": true,
+    "production_writes_open": true,
+    "rollback_after_open_requires_reconciliation": true
+  }
+}

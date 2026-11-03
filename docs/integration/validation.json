@@ -1,0 +1,314 @@
+{
+  "recorded_at": "2026-10-26T10:41:16.280759+00:00",
+  "scope": "Full local SQLite/disposable-PostgreSQL baseline followed by explicitly overlapping final focused checks. Fixture vendors, real native PDF renderers; no live-provider, production or blanket parity certification.",
+  "pytest": [
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\markvi-integration-release-20261024.xml",
+      "tests": 383,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\markvi-admissions-fixed-20261024.xml",
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\native-authority-final-20261024.xml",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\vendor-memory-regression-20261025.xml",
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\connections-full-20261025.xml",
+      "tests": 417,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\connections-revocation-20261025.xml",
+      "tests": 45,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\legion-full-20261025.xml",
+      "tests": 480,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:\\Users\\ahmet\\.codex\\tmp\\legion-final-contract-20261025.xml",
+      "tests": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/solus-native-20261025.xml",
+      "tests": 44,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/solus-allocation-20261025.xml",
+      "tests": 41,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/solus-sentinel-loop-20261025.xml",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/archive-native-20261025.xml",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/native-remote-solus-20261025.xml",
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/idle-rollback-fixed-20261025.xml",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/automations-native-20261026.xml",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/delivery-native-20261026.xml",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/voice-fixed-20261026.xml",
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/reminders-native-20261026.xml",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/controls-crossdb-20261026.xml",
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/atomix-render-20261026.xml",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/mail-fixed-20261026.xml",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/lifecycle-cleanup-20261026.xml",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/native-rest-full-20261026.xml",
+      "tests": 585,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/surface-native-20261026.xml",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/channel-model-pdf-20261026.xml",
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/comms-schema-fixed-20261026.xml",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/native-final-crossdb-20261026.xml",
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "source": "C:/Users/ahmet/.codex/tmp/native-last-retry-20261026.xml",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "clients": {
+    "heartbreaker": "Final node/web typechecks, production web build and 5 worker fold/control tests passed in external staging.",
+    "striker": "Final node/web typechecks, production web build and 5 worker fold/control tests passed in external staging.",
+    "speda_go": "App compileDebugKotlin and 60 app unit tests passed in external JDK 21 staging, including four child-event tests. Designsystem tests passed in the preceding Friday slice.",
+    "limitations": [
+      "Desktop inherited missing-font/chunk warnings",
+      "No signed desktop/Android packages installed",
+      "No complete visual/end-to-end certification",
+      "PDF native rendering not verified"
+    ]
+  },
+  "live_model_spend_usd": 0,
+  "authorized_live_model_cap_usd": 5,
+  "production_mutations": false,
+  "friday_branding": {
+    "date": "2026-10-25",
+    "desktop": "Both explicit node/web typechecks and web builds passed; alias/roster/transport assertions passed",
+    "android": ":designsystem:testDebugUnitTest and :app:compileDebugKotlin passed",
+    "visual_certification": false,
+    "build_staging": "C:/Users/ahmet/.codex/tmp/speda-clients-build-20261024",
+    "android_staging": "C:/Users/ahmet/.codex/tmp/speda-android-build-20261024"
+  },
+  "connections": {
+    "date": "2026-10-25",
+    "oauth": "Owner/provider/configuration-bound durable one-use state, browser cookie binding, Google/Microsoft PKCE; successful mocked exchanges and replay/expiry/rotation boundaries tested",
+    "custom_mcp": "Masked CRUD, persisted enablement, reserved names, native grants/receipts, fresh-lifetime reconnect and queued revocation tests passed",
+    "production_limits": [
+      "No live vendor sign-in or per-operation remote validation",
+      "Operator-approved exact package pins required; none guessed or installed",
+      "Single-process file-backed credentials/preferences",
+      "Actual sidecar network/mount/restart isolation remains a deployment gate"
+    ],
+    "paid_spend_usd": 0
+  },
+  "legion": {
+    "date": "2026-10-25",
+    "scope": "Native read-worker lifecycle, Forge team roles, shared paid/memory authority, owner/supervisor controls, replay and client presentation; fixture providers only.",
+    "full_suite": {
+      "tests": 480,
+      "latest_final_overlapping_suite_tests": 42,
+      "counts_overlap": true
+    },
+    "desktop_worker_tests_per_client": 5,
+    "android_app_unit_tests": {
+      "tests": 60,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "build_staging": "C:/Users/ahmet/.codex/tmp/speda-clients-build-20261024",
+    "android_staging": "C:/Users/ahmet/.codex/tmp/speda-android-build-20261024",
+    "audit": {
+      "pending_routes": 111,
+      "pending_skills": 44,
+      "voice_stubs": 2
+    },
+    "release_gates": [
+      "Live Hisar Docker Cells and restart/teardown",
+      "Canonical source integration/rollback",
+      "Live provider quality and paid evaluation",
+      "Complete visual/end-to-end acceptance"
+    ],
+    "paid_spend_usd": 0
+  },
+  "native_rest": {
+    "date": "2026-10-26",
+    "full_suite": {
+      "source": "C:/Users/ahmet/.codex/tmp/native-rest-full-20261026.xml",
+      "tests": 585,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "full_suite_predates_final_surface_channel_comms_refinements": true,
+    "focused_checks_cover_later_changes": true,
+    "counts_overlap": true,
+    "final_crossdb": {
+      "source": "C:/Users/ahmet/.codex/tmp/native-final-crossdb-20261026.xml",
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "latest_retry_api_postgres": {
+      "source": "C:/Users/ahmet/.codex/tmp/native-last-retry-20261026.xml",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_target_provenance_entries": 564,
+    "live_spend_usd": 0,
+    "production_mutations": false,
+    "pdf_native_runtime": "C:/Users/ahmet/.codex/environments/speda-pdf-native",
+    "pdf_visual_review": "C:/Users/ahmet/.codex/tmp/atomix-program-review-20261026.png",
+    "audit": {
+      "pending_routes": 45,
+      "pending_skills": 6,
+      "voice_stubs": 0
+    },
+    "remaining": [
+      "Operational protocols: Doormat, Lifeboat, Lockdown, Octavius, Skyfall and system_ops",
+      "Remaining configuration/welcome/media/library/admin adapters",
+      "Continuous-input speech admission/transport",
+      "Production and live service acceptance"
+    ],
+    "deferred_by_owner": [
+      "Projects UI/functionality",
+      "Canvas UI/functionality"
+    ],
+    "disposable_postgres_shutdown_verified": true
+  }
+}
