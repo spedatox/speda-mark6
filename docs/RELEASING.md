@@ -66,7 +66,7 @@ the installer. Destructive schema migrations require a separate reviewed cutover
 
 Installers are attached to [GitHub Releases](https://github.com/spedatox/speda-mark6/releases)
 as `SPEDA-Mark-VI-<version>-setup.exe`, together with `SHA256SUMS` and
-`heartbreaker-release.json`. The Renovated release series starts at `2.2.0`.
+`heartbreaker-release.json`. The Renovated release series starts at `3.0.0`.
 Later runs increment the highest exact semantic tag. Rerunning an already tagged
 commit reuses that version. Manual dispatch supports patch, minor or major bumps.
 

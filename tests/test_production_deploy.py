@@ -107,7 +107,7 @@ def test_success_and_failed_release_never_restore_over_current_data_or_config(ho
     assert driver.image == (OLD if failure else NEW)
     assert ['restore-proxy'] in driver.calls
     assert not any(call[:2] == ['systemctl', 'start'] for call in driver.calls)
-    assert (Path(host['operations_dir']) / next(p.name for p in Path(host['operations_dir']).iterdir()) / 'before.db').is_file()
+    assert (driver.logdir / 'before.db').is_file()
 
 
 def test_live_workers_and_paid_calls_hold_deployment(host):

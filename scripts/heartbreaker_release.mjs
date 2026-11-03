@@ -5,18 +5,19 @@ import { pathToFileURL } from 'node:url'
 
 const parse = tag => /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag)?.slice(1).map(Number)
 const compare = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+const floor = [3, 0, 0]
 export function releaseVersion(tags, currentTags = [], bump = 'patch') {
   if (!['patch', 'minor', 'major'].includes(bump)) throw Error('Unknown version bump')
   const ordered = values => values.map(parse).filter(Boolean).sort(compare)
-  const existing = ordered(currentTags).at(-1)
+  const existing = ordered(currentTags).filter(v => compare(v, floor) >= 0).at(-1)
   if (existing) return existing.join('.')
   const latest = ordered(tags).at(-1)
-  if (!latest) return '2.2.0'
+  if (!latest) return floor.join('.')
   const next = [...latest]
   const part = { major: 0, minor: 1, patch: 2 }[bump]
   next[part]++
   for (let i = part + 1; i < 3; i++) next[i] = 0
-  return (compare(next, [2, 2, 0]) < 0 ? [2, 2, 0] : next).join('.')
+  return (compare(next, floor) < 0 ? floor : next).join('.')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
