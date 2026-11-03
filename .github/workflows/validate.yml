@@ -1,9 +1,18 @@
-name: Renovated validation
+name: Renovated CI/CD
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_bump:
+        description: Heartbreaker version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+concurrency:
+  group: renovated-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
@@ -14,7 +23,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Build the production runtime and verification image
         run: |
-          docker build --target production -t speda-renovated:ci .
+          docker build --target production --label "org.opencontainers.image.revision=$GITHUB_SHA" -t speda-renovated:ci .
           docker build --target test -t speda-renovated-test:ci .
       - name: SQLite and disposable PostgreSQL contracts
         run: |
@@ -51,6 +60,29 @@ jobs:
         with:
           name: backend-verification
           path: ${{ runner.temp }}/speda-evidence
+      - name: Export the exact tested production image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/speda-release
+        run: |
+          mkdir -p "$RELEASE_DIR"
+          docker save speda-renovated:ci | gzip -1 > "$RELEASE_DIR/image.tar.gz"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          root=pathlib.Path(os.environ['RELEASE_DIR'])
+          with (root/'image.tar.gz').open('rb') as stream: checksum=hashlib.file_digest(stream,'sha256').hexdigest()
+          image=subprocess.check_output(['docker','image','inspect','speda-renovated:ci','--format','{{.Id}}'],text=True).strip()
+          (root/'release.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'image_id':image,'archive_sha256':checksum}))
+          PY
+      - name: Retain deployable production image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: renovated-production-image
+          path: ${{ runner.temp }}/speda-release
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
   clients:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -68,3 +100,124 @@ jobs:
             npm run striker:build
             npm run heartbreaker:web:build
             npm run striker:web:build'
+      - name: Test installer version allocation
+        run: node --test tests/test_heartbreaker_release.mjs
+  heartbreaker:
+    name: Heartbreaker Windows installer
+    needs: clients
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install the Heartbreaker workspace
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci --workspace packages/heartbreaker --include-workspace-root --no-audit --no-fund
+      - name: Allocate and stamp the installer version
+        id: version
+        env:
+          RELEASE_BUMP: ${{ inputs.release_bump || 'patch' }}
+        run: node scripts/heartbreaker_release.mjs
+      - name: Build Heartbreaker
+        env:
+          MAIN_VITE_SPEDA_API_BASE: ${{ vars.SPEDA_API_BASE || 'https://speda.spedatox.systems' }}
+          VITE_AGENT: speda
+        run: npm run heartbreaker:build
+      - name: Package the Windows installer
+        working-directory: packages/heartbreaker
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win --x64 --publish never
+      - name: Stage installer and checksum
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:RUNNER_TEMP 'heartbreaker-release'
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          $file = "SPEDA-Mark-VI-$env:VERSION-setup.exe"
+          Copy-Item -LiteralPath "packages/heartbreaker/dist/SPEDA Mark VI-$env:VERSION-setup.exe" -Destination (Join-Path $dest $file)
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $dest $file)).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path $dest 'SHA256SUMS'), "$hash  $file" + [char]10)
+          Copy-Item -LiteralPath heartbreaker-release.json -Destination $dest
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: heartbreaker-windows
+          path: ${{ runner.temp }}/heartbreaker-release
+          compression-level: 0
+          if-no-files-found: error
+  deploy:
+    name: Deploy Renovated production
+    needs: [backend, clients, heartbreaker]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: renovated-production-image
+          path: ${{ runner.temp }}/speda-release
+      - name: Configure verified SSH access
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: python3 scripts/prepare_deploy_ssh.py
+      - name: Upload and deploy the tested image
+        run: |
+          set -euo pipefail
+          remote="/tmp/speda-deploy-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh speda-production "umask 077; mkdir '$remote'"
+          scp "$RUNNER_TEMP/speda-release/image.tar.gz" "$RUNNER_TEMP/speda-release/release.json" "speda-production:$remote/"
+          ssh speda-production "sudo -n /usr/local/sbin/speda-renovated-deploy '$remote'"
+  publish-heartbreaker:
+    name: Publish Heartbreaker release
+    needs: [heartbreaker, deploy]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: heartbreaker-windows
+          path: ${{ runner.temp }}/heartbreaker-release
+      - name: Publish the verified installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/heartbreaker-release"
+          sha256sum -c SHA256SUMS
+          VERSION=$(jq -r .version heartbreaker-release.json)
+          TAG=$(jq -r .tag heartbreaker-release.json)
+          test "$(jq -r .commit heartbreaker-release.json)" = "$GITHUB_SHA"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          file="SPEDA-Mark-VI-${VERSION}-setup.exe"
+          cat > notes.md <<EOF
+          Heartbreaker for Renovated, built from commit ${GITHUB_SHA}.
+
+          The Renovated backend deployment and all required checks passed before publication.
+          This installer contains the server address and no owner API key. Enter your key in the connection screen.
+          Windows builds are currently unsigned. SHA256SUMS and the source commit are attached.
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            git -C "$GITHUB_WORKSPACE" fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+            test "$(git -C "$GITHUB_WORKSPACE" rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
+            gh release upload "$TAG" "$file" SHA256SUMS heartbreaker-release.json --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$file" SHA256SUMS heartbreaker-release.json --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "Heartbreaker $VERSION · Renovated" --notes-file notes.md
+          fi
