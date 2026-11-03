@@ -1,168 +1,306 @@
-# Renovated SPEDA Mark VI
+# SPEDA Mark VI · Renovated
 
-Iacon memory and the multi-provider answering layer, based on the original `first` checkout
-(commit `b473404`). The original `first` and `final` folders remain unchanged.
-The implementation blueprint is in [the memory design](docs/architecture/memory/IMPLEMENTATION_DESIGN.md).
-The implemented Iacon architecture and operator controls are documented in
-[Iacon](docs/IACON.md). Renovated was deployed on 2026-11-03 using a fresh,
-reconciled production database and the existing private service configuration.
+[![CI/CD](https://github.com/spedatox/speda-mark6/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/spedatox/speda-mark6/actions/workflows/validate.yml)
+[![Android](https://github.com/spedatox/speda-mark6/actions/workflows/speda-go.yml/badge.svg?branch=main)](https://github.com/spedatox/speda-mark6/actions/workflows/speda-go.yml)
+[![AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
-Deployment packaging, isolated server verification and the data-preserving
-cutover procedure are in [deployment instructions](docs/DEPLOYMENT.md).
-Production data is authoritative; the owner's local test database stays a
-separate retained backup. The `final` branch preserves the original final
-application, and the former remote `main` is retained separately before the
-Renovated source transition. See the [release verification record](docs/deployment-validation-2026-11-03.json)
-for the deployed image, validation and explicitly deferred product gaps.
+**Personal assistance with persistent memory, coordinated agents, and recoverable execution.**
 
-## What runs
+Renovated brings the backend, Heartbreaker desktop client and SPEDA Go Android
+client onto shared conversation, memory, model-policy and worker contracts.
+The backend is self-hosted and designed for one owner. Eight agent profiles work
+through one application, with explicit attribution, scoped capabilities and
+durable records of their work.
 
-- Chat persists the original owner message and its durable memory intake in one
-  transaction before contacting the answering model.
-- One local memory runtime supplies source-linked context in the first request.
-  It resolves person candidates, reads prepared sections, searches original owner
-  evidence, includes recent corrections, and respects one combined context budget.
-- SQLite FTS5 performs local search. Routine memory reads make zero model,
-  translation or embedding requests. Scoped caches are bounded and versioned.
-- `memory_lookup` provides one bounded batch for missing details. Its server
-  deadline is 2.5 seconds, with SQLite VM interruption and bounded results.
-  After that batch the registry removes it from the ordinary turn's tool list.
-- The answering model streams text immediately as it generates it. HTTP SSE and
-  authenticated WebSocket chat use the same persistence/orchestration path.
-- Orion proposes typed records from bounded source slices, then reviews proposals
-  against exact evidence. Invalid contracts are quarantined; successful paid
-  responses survive publication retries. Historical imports never trigger bulk
-  extraction, and every paid maintenance call requires a persistent reservation.
-- Native images reach the answering model unchanged. Available attachment text
-  can help routing; native vision can identify a name and request the one lookup.
+The **3.0 release series is live**. Production history and memory were carried
+forward with their original source records. Credentials and owner preferences
+remain in private persistent storage.
 
-Prepared memory is a disposable read view. It cannot edit a biography, merge
-people, invent a date, or mutate accounting records. Original source references,
-attribution and historical qualifiers accompany the selected text. The baseline
-does not yet expose the final version's canonical domain writers or other full
-application capabilities.
+## Downloads
 
-## Local run
+| Application | Platform | Release |
+| --- | --- | --- |
+| **Heartbreaker** | Windows x64 | [Windows installer](https://github.com/spedatox/speda-mark6/releases/latest) |
+| **SPEDA Go** | Android 12+ | [Signed Android APK](https://github.com/spedatox/speda-go/releases/latest) |
 
-This task's tested Python environment is outside the project:
-`C:/Users/ahmet/.codex/environments/speda-renovation`.
-Dependencies are pinned in `uv.lock`; an ordinary installation can use
-`uv sync --frozen --extra dev` with `UV_PROJECT_ENVIRONMENT` pointing outside the
-checkout.
+The first Renovated releases are [Heartbreaker 3.0.0](https://github.com/spedatox/speda-mark6/releases/tag/v3.0.0)
+and [SPEDA Go 3.0.0](https://github.com/spedatox/speda-go/releases/tag/v3.0.0).
+Enter your backend URL and owner API key in the connection screen. Public builds
+contain no owner API key. Windows installers are currently unsigned; Android
+releases use the existing signing identity so installed release apps can upgrade.
 
-Create a local `.env` from `.env.example` and configure the intended provider key
-there. Do not put credentials in source control. This baseline retains the first
-version's default Anthropic model choices. The renovated provider layer now
-supports Anthropic, OpenAI Responses, native Gemini/Vertex, and compatible
-connections for Kimi, DeepSeek, z.ai, NVIDIA and Ollama. No provider key is
-required for local structural tests. See [provider setup and controls](docs/PROVIDERS.md).
+## What Renovated contains
 
-From this directory in PowerShell:
+| Component | Responsibility |
+| --- | --- |
+| **Backend** | FastAPI, authenticated HTTP/SSE and WebSocket transports, native provider protocols, configuration and durable conversation state. |
+| **Heartbreaker** | Primary Electron/React desktop client: conversations, participants, streamed output, worker controls, voice preferences and owner configuration. |
+| **SPEDA Go** | Native Kotlin/Jetpack Compose Android client using the same conversation, reconnect, memory and worker contracts. |
+| **Iacon** | Source-linked knowledge, local recall, typed records, immutable revisions and independently reviewed background changes. |
+| **Coordinator / Legion** | Shared rooms, attributed contributions, bounded workers, pinned policies, steering, cancellation and recovery. |
+| **IGOR / FORGE / Workshop** | Isolated execution, durable claims, versioned checkpoints, verifiable artifacts and explicit integration/publication boundaries. |
+| **Hisar integration** | Document identities, editions and retrieval with live access-grant resolution. |
+| **Solus** | Deterministic accounting and ledger operations with native records, invariants and an operator UI. |
+| **n8n integration** | Business scheduling: automation definitions, authenticated callbacks, reminders and watches. |
 
-```powershell
-$env:PYTHONDONTWRITEBYTECODE = '1'
-$env:EXTERNAL_INTEGRATIONS_ENABLED = 'false'
-$env:HTTP_HOST = '127.0.0.1'
-& "$env:USERPROFILE/.codex/environments/speda-renovation/Scripts/python.exe" -m app.supervisor
-```
+Striker remains an additional desktop client. Shared conversation changes are
+checked across clients; native platform layouts and permissions remain distinct.
 
-The managed launcher enables **Configuration → Restart backend** after saving.
-Every declared backend setting and the native model, worker, spending and Iacon
-policy documents are available there. See [configuration controls](docs/CONFIGURATION.md)
-for persistence, activation, secret handling and restart behavior.
+## Architecture
 
-`POST /chat` accepts `{"message":"...","session_id":null}` with `X-API-Key`.
-Optional `model` and typed `thinking` fields select a route and native effort
-for that turn. The default model is unchanged unless explicitly configured.
-The message may also be native text/image content blocks. `/ws` accepts the same
-JSON request after API-key authentication. `/health` is public. API documentation
-is available only in debug mode.
+~~~mermaid
+flowchart TD
+    H[Heartbreaker] --> API[Authenticated API · HTTP/SSE and WebSocket]
+    G[SPEDA Go] --> API
+    T[Telegram webhooks] --> API
+    API --> C[Coordinator and AgentOrchestrator]
+    C --> P[Versioned model and spending policies]
+    C --> L[Native provider transports]
+    C --> M[Iacon · local context and evidence]
+    M --> D[(Persistent database · original sources and native records)]
+    C --> R[CapabilityRegistry]
+    R --> I[MCP · OAuth · Hisar · domain services]
+    R --> F[Bounded workers and isolated Forge Cells]
+    F --> W[Workshop · checkpoints and artifacts]
+    N[n8n · schedules and events] --> API
+~~~
 
-The default SQLite database is `./speda.db`, which is ignored by Git. To evaluate
-the imported offline serving database, explicitly set `DATABASE_URL` to that
-separate database before starting the process. Do not point the renovation at a
-production or original migration database.
+The orchestrator owns prompts and the answering loop. `AgentContext` carries
+request authority and state. `CapabilityRegistry` owns tool discovery and grants.
+The Coordinator owns admission, rooms and durable work; Iacon owns knowledge.
+n8n owns scheduling.
 
-Background work drains after a turn and at startup. Existing n8n invokes
-`POST /iacon/drain` with both `X-API-Key` and `X-N8N-Secret` for maintenance and
-Telegram follow-ups. `/admin/tasks/drain` remains a capture-only compatibility
-endpoint. There is no new scheduler. Expired work leases reuse saved responses;
-unknown provider outcomes require reconciliation and are not automatically replayed.
+### Memory that keeps its evidence
 
-## Offline snapshot import
+- The original owner message and durable intake commit together before an
+  answering-provider request begins.
+- Foreground recall uses local indexed reads. Routine selection makes **zero
+  model, translation or embedding calls**.
+- Prepared context is a disposable read view. Original records, source spans,
+  attribution and temporal qualifications remain the authority.
+- Owner statements, quoted material and agent contributions retain distinct
+  attribution. Assistant contributions do not become owner assertions.
+- A bounded `memory_lookup` can supply missing evidence within the turn's
+  shared retrieval allowance.
+- Orion proposes and independently reviews typed background changes. Paid
+  maintenance requires persistent budget reservations. Historical imports do
+  not launch bulk extraction.
 
-`scripts/import_memory_snapshot.py` accepts a consistent, uncompressed **offline**
-SQLite snapshot, a new destination path, and a new report path. It refuses an
-existing destination and an active WAL/journal. Original files and source hashes
-are preserved; no original table is rewritten.
+Corrections, revisions and source-level revocation have explicit records.
+Semantic recall quality is evaluated separately from retrieval speed; a fast
+query alone does not establish answer correctness. See [Iacon](docs/IACON.md)
+and the [memory design](docs/architecture/memory/IMPLEMENTATION_DESIGN.md).
 
-It creates a serving index of the original documents, owner conversation text
-and observation claims. Archived/derived surfaces and superseded claims remain
-preserved with restricted serving eligibility. Inferences are not injected as
-explicit facts. Original session/message IDs are provenance locators, never
-misused as foreign keys into newly created chat tables. The original snapshot
-must remain retained: this serving import is not a complete restore or a live
-cutover procedure.
+### Execution with accountable outcomes
 
-The owner-supplied October 10 snapshot has been exercised in a separate private
-replay directory under `.codex/research/dreaming-v3-20261016/private-replay`.
-Source-bearing databases, import ledgers and captured memory packets stay outside
-this checkout. The public research reports contain aggregate timings and counts.
+Model routes, thinking settings, persona and budget authority are pinned for
+admitted work. Room speakers and workers share the root execution allowance.
+Chat, coordination, speech and Iacon maintenance have explicit paid-call controls.
+A worker title cannot grant additional permissions.
 
-## Collaborative rooms and durable project work
+Tool receipts commit before effects. Lost connections and expired executor
+leases produce durable uncertainty for reconciliation. Provider calls, external
+sends and project effects with unknown outcomes are not silently replayed.
+Stopping a reply, task and run have separate scope.
 
-IGOR/FORGE now supports asynchronous dispatch during conversation, durable live
-steering, cross-turn mission continuity, bounded supervisor acceptance, and
-owner-approved publication through trusted deployment drivers. See
-[IGOR/FORGE architecture and operation](docs/IGOR_FORGE.md) for the implemented
-paths, approval contract, recovery semantics and live release gates.
+Forge workers use bounded workspace snapshots and isolated execution. Source
+integration and publication are distinct operations governed by trusted host
+configuration. See [IGOR/FORGE](docs/IGOR_FORGE.md), [Legion](docs/LEGION.md) and
+[orchestration](docs/ORCHESTRATION.md).
 
-The new `/rooms-ui` shell uses eight distinct profiles, attributed shared-room
-turns, queued owner messages, decision records and scoped stop controls. Room
-speakers and project workers share durable spending reservations. Project work
-uses isolated Forge artifacts and versioned Workshop checkpoints.
+## Run a development instance
 
-Spending starts paused and project execution disabled. Configuration, recovery,
-component ownership and remaining release gates are in
-[docs/ORCHESTRATION.md](docs/ORCHESTRATION.md). Live Hisar execution and owner-reviewed
-persona fidelity remain unverified. Legacy `/chat` does not use the new coordination
-budget; Iacon maintenance retains its separate limits.
+### Docker
+
+Requirements: Git, Docker Engine and Docker Compose v2.
+
+~~~bash
+git clone https://github.com/spedatox/speda-mark6.git
+cd speda-mark6
+cp .env.example .env
+~~~
+
+Set a unique `SPEDA_API_KEY` and the intended provider credentials in `.env`.
+Keep private env files and persistent data outside Git. Then start the application:
+
+~~~bash
+docker compose up -d --build
+curl http://127.0.0.1:8000/health/ready
+~~~
+
+The image includes Python, Forge, native PDF libraries and built Solus assets.
+Local compose binds port 8000 to loopback and persists the database and owner
+configuration in a named volume. Optional sidecars and execution-host grants
+are configured separately.
+
+Fresh installations start with chat/coordination spending paused and Iacon's
+paid allowance at zero. Configure routes and budgets through **Configuration**
+before making paid requests. Production retains its existing owner settings.
+See [configuration](docs/CONFIGURATION.md) and [providers](docs/PROVIDERS.md).
+
+### Python
+
+Use Python 3.11+ and `uv`. Keep development data separate from production and
+retained snapshots. This Bash example keeps the environment and data outside
+the checkout:
+
+~~~bash
+export UV_PROJECT_ENVIRONMENT="$HOME/.cache/speda/venv"
+export SPEDA_DATA_DIR="$HOME/.local/share/speda-dev"
+export DATABASE_URL="sqlite+aiosqlite:///$SPEDA_DATA_DIR/speda.db"
+export PYTHONDONTWRITEBYTECODE=1
+export EXTERNAL_INTEGRATIONS_ENABLED=false
+export HTTP_HOST=127.0.0.1
+mkdir -p "$SPEDA_DATA_DIR"
+uv sync --frozen --extra dev
+uv run --frozen --extra dev python -m app.supervisor
+~~~
+
+The managed launcher supports **Save → Restart backend**. Saved owner overrides
+in `SPEDA_DATA_DIR/configuration.json` take precedence over deployment env values.
+Native policy edits apply through their versioned writers; server settings apply
+on restart.
+
+Readiness and liveness endpoints are public; owner data requires authentication.
+For a local streaming request:
+
+~~~bash
+curl -N http://127.0.0.1:8000/chat/speda \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: <your-local-api-key>' \
+  -d '{"message":"Hello","session_id":null}'
+~~~
+
+See [transports](docs/TRANSPORTS.md) for delivery and streaming behavior.
+
+## Build the clients
+
+Use Node.js 24 and the committed npm lockfile:
+
+~~~bash
+npm ci
+npm run heartbreaker:dev
+npm run heartbreaker:typecheck
+npm run heartbreaker:build
+~~~
+
+Package a Windows installer with
+`npm run dist --workspace=packages/heartbreaker` on a Windows build host.
+Release builds supply the public API address and leave credentials for the
+connection screen.
+
+SPEDA Go uses JDK 21 for its Gradle build, Gradle 8.11.1, Android SDK 35 and the
+committed Kotlin/Compose version catalog. Its minimum Android API is 31.
+See the [Android build and signing guide](packages/speda-go/README.md).
+Signing material remains outside the repository. Firebase wake support requires
+an app `google-services.json`; the current APK retains the existing polling
+fallback because that configuration is absent.
+
+## CI/CD and releases
+
+The [Renovated workflow](.github/workflows/validate.yml) runs backend contracts,
+SQLite/PostgreSQL checks, real Docker isolation/teardown tests, desktop behavioral
+checks and Windows packaging. After validation, deployment and installer
+publication proceed independently.
+
+1. **Verify the image.** Transfer the tested archive over SSH with a pinned host
+   public key. Verify its checksum, rootfs layers, runtime configuration and source
+   revision, then select the host's immutable local image ID.
+2. **Preserve production.** Gate writes, drain active work and retain complete
+   database/config backups. Rehearse additive schema changes and the previous
+   image's compatibility. Update the application while retaining data, credentials,
+   policies and the existing sidecar stack.
+3. **Recover without discarding writes.** A failed candidate can return to the
+   previous image against the current database. Automatic rollback never copies
+   an old backup over current records or private settings. Unexpected source
+   changes or failed recovery keep writers gated for operator inspection.
+4. **Publish the clients.** Heartbreaker uploads the installer, SHA-256 checksums
+   and source metadata when backend/client validation and Windows packaging pass.
+   The [Android workflow](.github/workflows/speda-go.yml) tests and signs SPEDA Go,
+   mirrors tracked Android source into [spedatox/speda-go](https://github.com/spedatox/speda-go),
+   and publishes the APK there.
+
+Main deployment runs are serialized. Documentation-only updates do not redeploy
+production or issue another desktop installer. CI never supplies a replacement
+production dataset. Orion Spark remains stopped and disabled at the owner's request.
+
+The Renovated version floor is **3.0.0**. See [releasing](docs/RELEASING.md) for
+credentials, artifacts and rollback details, and [deployment](docs/DEPLOYMENT.md)
+for the original data-preserving cutover.
 
 ## Validation
 
-```powershell
-$env:PYTHONDONTWRITEBYTECODE = '1'
-$testScratch = Join-Path "$env:USERPROFILE/.codex/tmp" ('speda-memory-' + [guid]::NewGuid().ToString('N'))
-& "$env:USERPROFILE/.codex/environments/speda-renovation/Scripts/python.exe" -m pytest tests -q -p no:cacheprovider --basetemp $testScratch
-```
+Keep generated Python scratch outside the repository:
 
-Tests cover source/owner isolation, atomic intake, invalid/truncated capture,
-exact chunk coverage, publication retry/CAS, contextual answers, chronology,
-revocation, alias ambiguity, bounded results, real SQL deadline interruption,
-HTTP/WS chat, streaming and startup/shutdown. Test provider responses are mocks.
+~~~bash
+export PYTHONDONTWRITEBYTECODE=1
+uv run --frozen --extra dev python -m pytest tests -q \
+  -p no:cacheprovider --basetemp "$(mktemp -d)"
+npm run test:workers
+node --test tests/test_heartbreaker_release.mjs
+~~~
 
-`scripts/benchmark_memory.py` measures synthetic local selection at two corpus
-sizes. `scripts/replay_memory.py` measures targeted selection against a serving
-copy of the real snapshot. Neither benchmark measures answering-model quality.
+CI provisions disposable PostgreSQL and runs actual Docker Cell checks.
+Passing fixtures, live integration checks and full product acceptance are
+tracked separately. The [cutover record](docs/deployment-validation-2026-11-03.json)
+contains memory-preservation evidence; [local testing](docs/LOCAL_TESTING.md)
+covers the existing Windows development harness.
 
-## Remaining gates
+## Current boundaries
 
-The runtime is implemented and exercised locally. An identical ChatGPT feel is
-not established by retrieval timing alone. The broader held-out first-answer
-quality suite, >=90% correct tool avoidance, actual provider latency, cold-image
-OCR and full client/provider compatibility remain to be validated or completed.
+Renovated is deployed; the complete Superior Mark VI acceptance contract remains
+open. The owner approved shipping with these items deferred:
 
-Iacon now supports typed entities, claims, preferences, episodes, states and native
-documents, with reviewed background proposals, linked records, immutable revisions,
-Telegram follow-ups and Hisar retrieval. Broad semantic paraphrase coverage and
-answering-model quality still require evaluation. Source-level revocation is
-enforced; complete semantic erasure across independent historical copies is not
-implemented. Detailed operational limits are listed in docs/IACON.md.
+- Six host protocols: **Doormat, Lifeboat, Lockdown, Octavius, Skyfall and system_ops**.
+- Continuous-input voice. Bounded HTTP speech input/output and voice preferences
+  are available.
+- Remaining project/canvas client acceptance and comparative owner-workflow checks
+  tracked in the product contract.
 
-Context budgets currently use a conservative UTF-8 byte upper bound, not measured
-provider tokens. Serving traces separately report complete provider-payload bytes.
-Real model/token-budget tuning must preserve evidence adequacy rather than merely
-make the context smaller. Docker configuration uses persistent SQLite storage.
-The 3 November release preparation builds and exercises the production image,
-including native PDFs and Solus, on an isolated server candidate. The live
-application and its database have not been replaced.
+Source-level revocation is enforced; complete semantic erasure across independent
+historical copies is not implemented. Context limits use conservative UTF-8 byte
+bounds rather than measured provider-token counts. Optional paid Hisar embeddings
+are not enabled by default.
+
+See [Superior Mark VI](docs/SUPERIOR_MARK_VI.md),
+[cross-client parity](docs/SPEDA_GO_PARITY.md) and
+[integration status](docs/integration/STATUS.md) for the remaining work.
+
+## Repository map
+
+~~~text
+app/                    Backend, profiles, capabilities, services and native models
+forge/                  Isolated execution runtime
+packages/heartbreaker/  Primary Electron/React desktop client
+packages/speda-go/      Native Android client
+packages/striker/       Additional desktop client
+packages/solus/         Solus operator frontend
+scripts/                Imports, audits, release checks and deployment tooling
+tests/                  Backend, transport, preservation and execution contracts
+docs/                   Architecture, operational guides and validation records
+.github/workflows/      Validation, deployment and client delivery
+~~~
+
+`main` contains Renovated. The original Final application is retained on
+[`final`](https://github.com/spedatox/speda-mark6/tree/final); the pre-cutover main
+is retained on [`legacy-main-20261103`](https://github.com/spedatox/speda-mark6/tree/legacy-main-20261103).
+
+## Documentation
+
+| Topic | Guide |
+| --- | --- |
+| Owner settings and restart | [Configuration](docs/CONFIGURATION.md) |
+| Models and native thinking | [Providers](docs/PROVIDERS.md) |
+| Knowledge and evidence | [Iacon](docs/IACON.md) |
+| Rooms and workers | [Orchestration](docs/ORCHESTRATION.md), [Legion](docs/LEGION.md) |
+| Execution and artifacts | [IGOR/FORGE](docs/IGOR_FORGE.md) |
+| Accounting | [Solus](docs/SOLUS.md) |
+| Schedules and watches | [Automations](docs/AUTOMATIONS.md) |
+| Desktop recovery | [Heartbreaker reliability](docs/HEARTBREAKER_RELIABILITY.md) |
+| Shared client contracts | [SPEDA Go parity](docs/SPEDA_GO_PARITY.md) |
+| Production operation | [Deployment](docs/DEPLOYMENT.md), [Releasing](docs/RELEASING.md) |
+
+## License
+
+[GNU Affero General Public License v3](LICENSE). Source files include their
+copyright and SPDX notices.

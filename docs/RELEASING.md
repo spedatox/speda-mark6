@@ -88,3 +88,27 @@ installation and offers a destination-directory choice.
 Backend image archives are retained as Actions artifacts for three days.
 Verification reports and Windows installers are also retained as workflow
 artifacts; published releases are independent of artifact retention.
+
+## SPEDA Go Android delivery
+
+`.github/workflows/speda-go.yml` builds Android changes on main and supports
+manual dispatch. It uses JDK 21, Gradle 8.11.1 and the existing
+`SPEDA_GO_KEYSTORE_BASE64`, `SPEDA_GO_KEYSTORE_PASSWORD`, `SPEDA_GO_KEY_ALIAS` and
+`SPEDA_GO_KEY_PASSWORD` repository secrets. The signing identity is retained;
+no new keystore is generated. An APK must pass `apksigner verify` before upload.
+
+The workflow runs the app/design-system unit tests and assembles a signed,
+optimized release APK. Android version names begin at 3.0.0 and advance from
+the standalone repository's exact semantic tags. The version code is the
+workflow run number plus 300,000, preserving upgrades over the previous series.
+
+Tracked Android source is mirrored to `spedatox/speda-go` using the existing
+scoped `SPEDA_GO_TOKEN`. Its standalone README is preserved. Build directories
+and signing material are excluded by exporting tracked source with `git archive`.
+The APK is published to the standalone repository's Releases; Heartbreaker
+installers remain on `speda-mark6` Releases.
+
+The shipped Android 3.0.0 APK retains the existing polling fallback because the
+app's Firebase `google-services.json` is absent. The signing secret and Firebase
+client configuration are separate requirements; a signed build alone does not
+activate FCM wake notifications.
