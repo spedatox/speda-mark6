@@ -43,7 +43,7 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = buildNumber ?: 1
-        versionName = if (buildNumber != null) "$baseVersion-b$buildNumber" else baseVersion
+        versionName = baseVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

@@ -14,6 +14,7 @@ import shutil
 import signal
 import sqlite3
 import subprocess
+import tarfile
 import tempfile
 import time
 from urllib.error import HTTPError
@@ -26,6 +27,20 @@ from scripts.rehearse_sqlite import snapshot, verify
 
 class DataPreservationFailure(RuntimeError):
     """Keep the write gate closed for explicit reconciliation of unexpected DDL effects."""
+
+
+def verify_loaded_image(expected, actual, commit):
+    """Docker stores can rewrite config IDs on load; verify content and runtime config."""
+    keys = {'Env', 'Cmd', 'Entrypoint', 'User', 'WorkingDir', 'Labels', 'ExposedPorts',
+            'Volumes', 'StopSignal', 'Healthcheck', 'ArgsEscaped'} | set(expected['config'])
+    if (expected['rootfs']['diff_ids'] != actual['RootFS']['Layers']
+            or expected['os'] != actual['Os'] or expected['architecture'] != actual['Architecture']
+            or any((expected['config'].get(k) or None) != (actual['Config'].get(k) or None) for k in keys)
+            or actual['Config'].get('Labels', {}).get('org.opencontainers.image.revision') != commit):
+        raise ValueError('Loaded image content, runtime configuration or commit differs from CI archive')
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', actual['Id']):
+        raise ValueError('Loaded image lacks a valid immutable local identity')
+    return actual['Id']
 
 
 def manifest(payload, upload_root=Path('/tmp')):
@@ -88,6 +103,18 @@ class Deployment:
 
     def running(self, container):
         return self.run(['docker', 'inspect', container, '--format', '{{.State.Running}}']) == 'true'
+
+    def load_image(self, upload, release):
+        self.run(['docker', 'image', 'load', '-i', str(upload / 'image.tar.gz')])
+        with tarfile.open(upload / 'image.tar.gz', 'r:gz') as archive:
+            entries = json.load(archive.extractfile('manifest.json'))
+            if len(entries) != 1 or 'speda-renovated:ci' not in entries[0].get('RepoTags', []):
+                raise ValueError('Expected one tagged production image in the CI archive')
+            expected = json.load(archive.extractfile(entries[0]['Config']))
+        actual = json.loads(self.run(['docker', 'image', 'inspect', 'speda-renovated:ci', '--format', '{{json .}}']))
+        image = verify_loaded_image(expected, actual, release['commit'])
+        return {**release, 'ci_image_id': release['image_id'], 'image_id': image,
+                'archive_layers_and_runtime_config_verified': True}
 
     def idle(self):
         # All writers are gated before the final snapshot. Never cancel work to deploy.
@@ -193,9 +220,7 @@ class Deployment:
         old = self.run(['docker', 'inspect', app, '--format', '{{.Image}}'])
         self.logdir = self.root / (release['commit'][:12] + '-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + uuid4().hex[:8])
         self.logdir.mkdir(mode=0o700)
-        self.run(['docker', 'image', 'load', '-i', str(upload / 'image.tar.gz')])
-        revision = self.run(['docker', 'image', 'inspect', release['image_id'], '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}'])
-        if revision != release['commit']: raise ValueError('Image revision does not match the validated commit')
+        release = self.load_image(upload, release)
         # A deploy must never re-enable the watchdog the owner stopped.
         if self.run(['systemctl', 'show', 'orion-spark.service', '-p', 'ActiveState', '--value']) not in {'inactive', 'failed'}:
             raise RuntimeError('Orion Spark must remain stopped; inspect its unexpected activation')

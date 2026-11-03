@@ -15,8 +15,10 @@ or a manual run selected on `main`.
 3. Build a Windows x64 NSIS installer for Heartbreaker and retain its checksum
    and source commit. Packaging must pass before production deployment starts.
 4. Transfer the exact production image from that run over verified SSH. The
-   installed host command checks the archive digest, immutable image ID and
-   source-commit label. Production data and credentials never come from CI.
+   installed host command checks the archive digest, every root filesystem layer,
+   runtime configuration and source-commit label, then records the host's immutable
+   image ID. This also handles image-ID normalization between Docker stores.
+   Production data and credentials never come from CI.
 5. Close the application write gate, drain active work, and stop the existing n8n
    scheduler and application. Retain a complete SQLite backup and private config
    snapshot. Rehearse the additive schema with the new and previous images before

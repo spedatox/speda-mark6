@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 from unittest.mock import patch
 import pytest
-from scripts.deploy_production import Deployment, image_env, manifest
+from scripts.deploy_production import Deployment, image_env, manifest, verify_loaded_image
 
 
 COMMIT = 'a' * 40
@@ -31,6 +31,21 @@ def test_only_the_image_changes_in_private_deployment_env():
     with pytest.raises(ValueError): image_env(text + 'SPEDA_IMAGE=duplicate\n', NEW)
 
 
+def test_loaded_image_accepts_store_id_normalization_but_checks_all_layers_and_config():
+    import copy
+    config = {'Env': ['PATH=/app/bin'], 'Cmd': ['python', '-m', 'app.supervisor'],
+        'Labels': {'org.opencontainers.image.revision': COMMIT}, 'WorkingDir': '/app'}
+    expected = {'config': config, 'rootfs': {'diff_ids': ['sha256:fixture-layer']}, 'os': 'linux', 'architecture': 'amd64'}
+    actual = {'Id': NEW, 'Config': {**config, 'User': ''}, 'RootFS': {'Layers': ['sha256:fixture-layer']}, 'Os': 'linux', 'Architecture': 'amd64'}
+    assert verify_loaded_image(expected, actual, COMMIT) == NEW
+    for key in ('Env', 'Cmd', 'Entrypoint'):
+        changed = copy.deepcopy(actual); changed['Config'][key] = ['unexpected']
+        with pytest.raises(ValueError): verify_loaded_image(expected, changed, COMMIT)
+    changed = copy.deepcopy(actual); changed['RootFS']['Layers'].append('sha256:other')
+    with pytest.raises(ValueError): verify_loaded_image(expected, changed, COMMIT)
+    with pytest.raises(ValueError): verify_loaded_image(expected, actual, 'd' * 40)
+
+
 class Host(Deployment):
     def __init__(self, config, *, failure=None):
         super().__init__(config); self.calls = []; self.image = OLD; self.failure = failure; self.failed = False
@@ -45,6 +60,8 @@ class Host(Deployment):
         if argv[:2] == ['docker', 'compose']:
             self.image = next(x.split('=', 1)[1] for x in Path(self.config['deploy_env']).read_text().splitlines() if x.startswith('SPEDA_IMAGE='))
         return ''
+
+    def load_image(self, upload, release): return release
 
     def health(self, name):
         if self.failure == 'health' and self.image == NEW and not self.failed:
