@@ -245,6 +245,8 @@ Passing fixtures, live integration checks and full product acceptance are
 tracked separately. The [cutover record](docs/deployment-validation-2026-11-03.json)
 contains memory-preservation evidence; [local testing](docs/LOCAL_TESTING.md)
 covers the existing Windows development harness.
+The [delivery verification record](docs/cicd-validation-2026-11-03.json) records
+the successful backend, Windows and signed Android release runs.
 
 ## Current boundaries
 

@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-03",
+  "status": "verified_live_delivery",
+  "validated_source_commit": "7e1ae70b11786a50922c562335f78ad6c701c7cb",
+  "ci": {
+    "run_url": "https://github.com/spedatox/speda-mark6/actions/runs/41614533989",
+    "backend_cases_passed": 724,
+    "docker_cases_passed": 2,
+    "clients": "passed",
+    "windows_installer": "passed",
+    "publication": "passed",
+    "production_deployment": "passed"
+  },
+  "android": {
+    "run_url": "https://github.com/spedatox/speda-mark6/actions/runs/41612053858",
+    "version": "3.0.0",
+    "version_code": 300072,
+    "unit_tests": "passed",
+    "signed_apk_verified": true,
+    "release_url": "https://github.com/spedatox/speda-go/releases/tag/v3.0.0",
+    "firebase_wake_enabled": false,
+    "existing_polling_fallback": true
+  },
+  "windows": {
+    "first_renovated_version": "3.0.0",
+    "latest_verified_version": "3.0.1",
+    "first_release_url": "https://github.com/spedatox/speda-mark6/releases/tag/v3.0.0",
+    "latest_verified_release_url": "https://github.com/spedatox/speda-mark6/releases/tag/v3.0.1",
+    "owner_api_key_embedded": false,
+    "signed": false
+  },
+  "production": {
+    "image_id": "sha256:0931379a3db8b13613098c51556b7e9cfbf61e760c63ec3f3b03bf5864f0a72b",
+    "public_readiness_http": 200,
+    "database_replaced": false,
+    "private_configuration_retained": true,
+    "old_image_compatibility_rehearsed": true,
+    "original_rows_verified_before_restart": true,
+    "existing_scheduler_running": true,
+    "orion_spark_active": false,
+    "orion_spark_enabled": false
+  },
+  "release_policy": {
+    "validated_installer_publication_independent_of_server_restart": true,
+    "documentation_only_changes_do_not_deploy": true,
+    "unknown_outcomes_not_replayed": true,
+    "automatic_rollback_reuses_current_database": true
+  }
+}

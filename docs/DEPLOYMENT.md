@@ -108,7 +108,7 @@ external service activation or the comparative acceptance gate.
 ## Production release, 2026-11-03
 
 The owner authorized deployment with the six host protocols and continuous-input
-voice deferred. The deployed image is
+voice deferred. The initial cutover image was
 `sha256:70b5737b9588cb2544dd0e37557b3afd55ae398bc230aaa4d90dd61d369b4970`.
 The private release directory is
 `/opt/speda-operations/releases/renovated-20261103-05`; its `deploy.env`,
