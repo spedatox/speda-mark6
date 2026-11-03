@@ -186,7 +186,7 @@ jobs:
           ssh speda-production "sudo -n /usr/local/sbin/speda-renovated-deploy '$remote'"
   publish-heartbreaker:
     name: Publish Heartbreaker release
-    needs: [heartbreaker, deploy]
+    needs: [backend, clients, heartbreaker]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     permissions:
       contents: write
@@ -213,7 +213,7 @@ jobs:
           cat > notes.md <<EOF
           Heartbreaker for Renovated, built from commit ${GITHUB_SHA}.
 
-          The Renovated backend deployment and all required checks passed before publication.
+          Backend and client checks passed before publication. Production deployment is tracked separately in the workflow.
           This installer contains the server address and no owner API key. Enter your key in the connection screen.
           Windows builds are currently unsigned. SHA256SUMS and the source commit are attached.
           EOF

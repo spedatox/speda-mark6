@@ -26,7 +26,9 @@ or a manual run selected on `main`.
 6. Recreate only the application, verify authenticated access and readiness,
    restore n8n's previous running state, and reopen traffic. Retain both images,
    backups and the host deployment report.
-7. Publish the Heartbreaker installer to GitHub Releases after deployment passes.
+7. Publish the Heartbreaker installer once backend validation, client checks and
+   Windows packaging pass. Publication runs independently of the production
+   restart, so an installer is available as soon as its validation completes.
 
 Main-branch runs are serialized without cancelling an active deployment. A host
 file lock also prevents overlapping manual and CI deployments. Active work is
@@ -61,8 +63,9 @@ over current data or private settings, including newly rotated credentials.
 Unexpected changes to original rows leave writers stopped and the public gate
 closed for reconciliation. If neither application image becomes healthy, the
 gate stays closed. Private command logs and database/config backups remain in
-the host's deployment evidence directory; CI reports failure and does not publish
-the installer. Destructive schema migrations require a separate reviewed cutover.
+the host's deployment evidence directory; CI reports the deployment failure.
+Installer publication has its own successful-build gate. Destructive schema
+migrations require a separate reviewed cutover.
 
 ## Heartbreaker builds
 
