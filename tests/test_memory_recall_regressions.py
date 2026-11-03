@@ -139,7 +139,9 @@ async def test_legacy_assistant_display_name_does_not_hide_owner_family(memory,q
 async def test_room_fact_then_siblings_then_names_uses_automatic_evidence(memory):
     await seed_family(memory)
     await memory.seed('Born in Bursa and studied computer programming.',title='Owner Profile',kind='core',aliases=())
-    runtime=MemoryRuntime(memory.store)
+    # This checks evidence selection across room turns, not shared-runner speed.
+    # Dedicated deadline/SQLite-interruption tests enforce the runtime ceilings.
+    runtime=MemoryRuntime(memory.store,prepare_timeout=2.5)
     ctx=memory.context()
     ctx.room_id='test-room'
     ctx.conversation_history=[{'role':'user','content':'[Owner message, room event 1]\ntell a fact about me'}]
@@ -153,5 +155,6 @@ async def test_room_fact_then_siblings_then_names_uses_automatic_evidence(memory
             'text':'You have a younger brother and a sister.'})},
         {'role':'user','content':'[Owner message, room event 8]\ntheri names?'}]
     packet=await runtime.prepare(ctx)
+    assert packet.status not in {'deadline','unavailable'}, packet.omissions
     topics=[json.loads(b)['topic'] for b in packet.blocks]
     assert 'Can Kaya' in topics and 'Nora Kaya' in topics
