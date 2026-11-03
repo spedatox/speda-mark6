@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -202,6 +203,8 @@ internal fun GlassField(
     dirty: Boolean = false,
     mono: Boolean = false,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    enabled: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
     val palette = LocalHbPalette.current
     val base = if (mono) HbType.code.copy(fontSize = 13.sp) else HbType.read.copy(fontSize = 15.sp)
@@ -209,6 +212,8 @@ internal fun GlassField(
         value = value,
         onValueChange = onValueChange,
         singleLine = singleLine,
+        enabled = enabled,
+        keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         textStyle = base.merge(TextStyle(color = palette.text)),
         cursorBrush = SolidColor(palette.accentBright),

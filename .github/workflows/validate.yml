@@ -100,6 +100,7 @@ jobs:
             npm run heartbreaker:typecheck
             npm run striker:typecheck
             npm run test:workers
+            node --test packages/heartbreaker/tests/policy-settings.test.cjs packages/striker/tests/policy-settings.test.cjs
             npm run heartbreaker:build
             npm run striker:build
             npm run heartbreaker:web:build

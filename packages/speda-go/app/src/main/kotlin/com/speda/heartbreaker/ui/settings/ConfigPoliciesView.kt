@@ -7,58 +7,74 @@ import androidx.compose.runtime.*
 import com.speda.heartbreaker.AppGraph
 import com.speda.heartbreaker.data.ConfigPolicy
 import com.speda.heartbreaker.domain.AppConfig
+import com.speda.heartbreaker.domain.PolicyFields
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.i18n.Tr
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.*
 
-/** Full native policy documents; each save delegates to its existing revisioned writer. */
+/** Normal settings controls; saves retain the original draft revision to prevent lost updates. */
 @Composable
 fun ConfigPoliciesView(config: AppConfig, graph: AppGraph) {
     val scope = rememberCoroutineScope()
     val tr = LocalStrings.current == Tr
-    val pretty = remember { Json { prettyPrint = true } }
     var policies by remember { mutableStateOf<List<ConfigPolicy>>(emptyList()) }
-    val drafts = remember { mutableStateMapOf<String, String>() }
+    val drafts = remember { mutableStateMapOf<String, JsonObject>() }
+    val revisions = remember { mutableStateMapOf<String, Int>() }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
-    val schemas = remember { mutableStateMapOf<String, Boolean>() }
     var busy by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     suspend fun load() {
+        loading = true
         try { policies = graph.api.getConfigPolicies(config); message = "" }
-        catch (e: Exception) { message = e.message ?: "Policies unavailable" }
+        catch (e: Exception) { message = e.message ?: "Settings unavailable" }
+        finally { loading = false }
     }
-    LaunchedEffect(config) { load() }
+    LaunchedEffect(config) { drafts.clear(); revisions.clear(); load() }
     Column {
-        SectionHeader(if (tr) "Gelişmiş çalışma politikaları" else "Advanced runtime policies")
-        Hint(if (tr) "Tüm model, düşünme, bütçe, çalışan ve Iacon alanları. Politika kayıtları yeniden başlatmadan etkinleşir." else "Every model, thinking, budget, worker and Iacon policy field. Policy saves apply without a restart.")
+        SectionHeader(if (tr) "Model ve çalışma ayarları" else "Model and runtime settings")
+        Hint(if (tr) "Bu ayarlar kaydedildiğinde yeni çalıştırmalara uygulanır. Sunucuyu yeniden başlatmanız gerekmez." else "These settings apply to new runs when saved. No server restart is needed.")
         if (message.isNotEmpty()) Hint(message)
-        SettingsButton(if (tr) "Politikaları yeniden yükle (taslak korunur)" else "Reload policies (keep drafts)", enabled = !busy, onClick = { scope.launch { load() } })
-        policies.forEach { policy ->
-            SettingsButton("${policy.label} · v${policy.revision}", onClick = { expanded[policy.id] = expanded[policy.id] != true })
+        SettingsButton(if (tr) "Ayarları yenile (taslak korunur)" else "Reload settings (keep drafts)", enabled = !busy && !loading, onClick = { scope.launch { load() } })
+        if (loading) Hint(if (tr) "Yükleniyor…" else "Loading…")
+        policies.forEach { policy -> key(policy.id) {
+            val title = when (policy.id) {
+                "models" -> if (tr) "Modeller ve düşünme" else "Models and thinking"
+                "coordination" -> if (tr) "Çalıştırma ve çalışan sınırları" else "Run and worker limits"
+                "global" -> if (tr) "Genel harcama sınırları" else "Overall spending limits"
+                "iacon" -> if (tr) "Iacon bakım ayarları" else "Iacon maintenance"
+                else -> policy.label
+            }
+            val conflict = policy.id in drafts && revisions[policy.id] != policy.revision
+            SettingsButton(title + (if (policy.id in drafts) (if (tr) " · Kaydedilmedi" else " · Unsaved") else ""), onClick = { expanded[policy.id] = expanded[policy.id] != true })
             if (expanded[policy.id] == true) {
-                GlassField(
-                    value = drafts[policy.id] ?: pretty.encodeToString(JsonObject.serializer(), policy.value),
-                    onValueChange = { if (!busy) drafts[policy.id] = it },
-                    singleLine = false, mono = true, placeholder = "JSON",
-                )
-                SettingsButton(if (tr) "Politikayı kaydet" else "Save policy", enabled = !busy && policy.id in drafts, onClick = {
-                    scope.launch {
+                if (conflict) Hint(if (tr) "Bu ayarlar başka bir yerde değişti. Son kayıtlı değerleri kullanmak için değişiklikleri geri alın." else "These settings changed elsewhere. Discard your edits to use the latest saved values.")
+                (policy.schema["properties"] as? JsonObject)?.forEach { (name, schema) -> key(name) {
+                    PolicyFieldView(schema.jsonObject, policy.schema, (drafts[policy.id] ?: policy.value)[name], "${policy.id}.$name", PolicyFields.label(name, tr), tr, !busy && !loading) {
+                        if (policy.id !in revisions) revisions[policy.id] = policy.revision
+                        drafts[policy.id] = JsonObject((drafts[policy.id] ?: policy.value) + (name to it))
+                        message = ""
+                    }
+                } }
+                SettingsButton(if (tr) "Ayarları kaydet" else "Save settings", enabled = !busy && !loading && !conflict && policy.id in drafts, onClick = {
+                    val value = drafts.getValue(policy.id)
+                    val errors = PolicyFields.validate(policy.schema, policy.schema, value)
+                    if (errors.isNotEmpty()) message = (if (tr) "Alanları kontrol edin: " else "Check these fields: ") + errors.joinToString(" ")
+                    else scope.launch {
                         busy = true; message = ""
                         try {
-                            val value = Json.parseToJsonElement(drafts.getValue(policy.id)).jsonObject
-                            policies = graph.api.saveConfigPolicy(config, policy, value)
-                            drafts.remove(policy.id)
+                            policies = graph.api.saveConfigPolicy(config, policy.copy(revision = revisions.getValue(policy.id)), value)
+                            drafts.remove(policy.id); revisions.remove(policy.id)
                             message = if (tr) "Kaydedildi" else "Saved"
-                        } catch (e: Exception) { message = e.message ?: "Policy save failed" }
+                        } catch (e: Exception) { message = e.message ?: "Settings save failed" }
                         finally { busy = false }
                     }
                 })
-                SettingsButton(if (tr) "Tüm alanlar ve sınırlar" else "All fields and constraints", onClick = { schemas[policy.id] = schemas[policy.id] != true })
-                if (schemas[policy.id] == true) Hint(pretty.encodeToString(JsonObject.serializer(), policy.schema))
+                if (policy.id in drafts) SettingsButton(if (tr) "Değişiklikleri geri al" else "Discard changes", enabled = !busy && !loading, onClick = {
+                    drafts.remove(policy.id); revisions.remove(policy.id); message = ""
+                })
             }
-        }
+        } }
     }
 }

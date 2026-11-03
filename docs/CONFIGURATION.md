@@ -8,8 +8,10 @@ MCP and OAuth application settings, Iacon/Hisar, storage and network bindings,
 Telegram/n8n, speech, domain providers and existing execution settings.
 This does not implement the deferred project/canvas UI or revive retired engines.
 
-The advanced runtime section edits all fields of the four native policy
-documents, with the complete JSON schema beside each editor:
+The model and runtime settings section presents the four native policies as
+normal settings: labeled number and text fields, switches, dropdowns, and
+add/remove controls for named entries and ordered lists. No JSON editing is
+required. Nested model capabilities and price entries remain available.
 
 - Models: routes, per-agent/role defaults, native thinking, output and tool limits.
 - Coordination: rooms, workers, run budgets and admitted model prices.
@@ -18,6 +20,15 @@ documents, with the complete JSON schema beside each editor:
 
 Policy writes use the existing native writer and expected revision. They apply
 without a backend restart; previously admitted work keeps its pinned policy.
+Run and worker limits includes a Per-run limits group with a Reserved token
+limit field. Its help explains that reservations include request size, maximum
+response and reasoning allowance, and that per-run bounds still apply with
+spending checks disabled. Currency fields state their microdollar unit.
+Invalid numbers cannot be saved. Failed saves and reloads retain drafts together
+with their original revision; a revision conflict requires discarding the stale
+draft and using the latest saved values, so a reload cannot silently authorize
+overwriting another client's changes. English and Turkish controls are available
+in Heartbreaker, Striker and SPEDA Go.
 Configuration links to connection grants, personalities, automations, voice pins
 and tuning, reminders and general client settings. Striker now exposes the
 existing personality, voice and reminder editors too. Canonical memory/accounting
