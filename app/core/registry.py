@@ -281,8 +281,9 @@ class CapabilityRegistry:
         from sqlalchemy import select
         from sqlalchemy.exc import IntegrityError
         from app.models.model_policy import ToolExecutionReceipt
+        from app.database import write_session
         digest = hashlib.sha256(json.dumps(call.input, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        async with self._receipt_sessions() as db, db.begin():
+        async with write_session(self._receipt_sessions) as db:
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == context.user_id,
                 ToolExecutionReceipt.request_id == context.request_id,
@@ -307,7 +308,7 @@ class CapabilityRegistry:
                 result = await self.execute(call.name, call.input, context)
         else:
             result = await self.execute(call.name, call.input, context)
-        async with self._receipt_sessions() as db, db.begin():
+        async with write_session(self._receipt_sessions) as db:
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == context.user_id,
                 ToolExecutionReceipt.request_id == context.request_id,

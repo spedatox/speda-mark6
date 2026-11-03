@@ -38,3 +38,63 @@ async def test_competing_wal_writers_acquire_before_read_and_do_not_block_reader
         assert await read()==2
     finally:
         await engine.dispose()
+
+@pytest.mark.parametrize('receipt_select', [1, 2], ids=['admission', 'completion'])
+async def test_tool_receipts_acquire_writer_before_read_without_replaying_effect(memory, receipt_select):
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.core.registry import CapabilityRegistry
+    from app.models.model_policy import ToolExecutionReceipt
+    from app.schemas.llm import Block
+    from app.skills.base import Skill
+
+    @event.listens_for(memory.engine.sync_engine, 'connect')
+    def explicit_transactions(connection, _):
+        connection.isolation_level = None
+    @event.listens_for(memory.engine.sync_engine, 'begin')
+    def begin(connection):
+        connection.exec_driver_sql('BEGIN')
+    await memory.engine.dispose()
+    writers = []
+    selects = 0
+    async def compete():
+        async with write_session(memory.sessions) as db:
+            await db.execute(text('UPDATE users SET name=name WHERE id=1'))
+
+    class InterleavedSession(AsyncSession):
+        async def execute(self, statement, *args, **kwargs):
+            nonlocal selects
+            result = await super().execute(statement, *args, **kwargs)
+            if str(statement).lstrip().startswith('SELECT') and 'FROM tool_execution_receipts' in str(statement):
+                selects += 1
+                if selects == receipt_select:
+                    writers.append(asyncio.create_task(compete()))
+                    await asyncio.sleep(.15)
+            return result
+
+    class ReadOnce(Skill):
+        name = 'read_once'
+        description = 'Read the fixture schedule without changing domain records.'
+        input_schema = {'type': 'object', 'properties': {}}
+        read_only = True
+        calls = 0
+        async def execute(self, args, context):
+            self.calls += 1
+            return 'Schedule read successfully'
+
+    sessions = async_sessionmaker(memory.engine, class_=InterleavedSession, expire_on_commit=False)
+    registry = CapabilityRegistry(receipt_sessions=sessions)
+    skill = ReadOnce()
+    await registry.register_skill(skill)
+    context = memory.context()
+    call = Block(id='schedule-read', name=skill.name, input={})
+    try:
+        assert await registry.execute_recorded(call, context) == 'Schedule read successfully'
+        await asyncio.wait_for(asyncio.gather(*writers), 5)
+        assert await registry.execute_recorded(call, context) == 'Schedule read successfully'
+        assert skill.calls == 1
+        async with memory.sessions() as db:
+            receipt = await db.scalar(select(ToolExecutionReceipt).where(ToolExecutionReceipt.request_id == context.request_id))
+            assert receipt.status == 'completed'
+    finally:
+        await asyncio.gather(*writers, return_exceptions=True)
