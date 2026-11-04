@@ -18,7 +18,7 @@ import app.models  # noqa: F401
 ADDITIONS={
     'compat_automation_admissions':{'created_at':'TIMESTAMP'},
     'native_automations':{'connection_binding':"JSON NOT NULL DEFAULT '{{}}'"},
-    'native_telegram_inputs':{'model':'VARCHAR(255)'},
+    'native_telegram_inputs':{'model':'VARCHAR(255)','reply_context':'JSON'},
 }
 
 

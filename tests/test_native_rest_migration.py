@@ -1,4 +1,4 @@
-from sqlalchemy import inspect,text
+from sqlalchemy import text
 from scripts.migrate_native_rest import migrate
 
 
@@ -7,8 +7,11 @@ async def test_additive_upgrade_retains_rows_and_second_apply_is_empty(memory):
         await db.exec_driver_sql('ALTER TABLE compat_automation_admissions DROP COLUMN created_at')
         await db.exec_driver_sql('ALTER TABLE native_automations DROP COLUMN connection_binding')
         await db.exec_driver_sql('ALTER TABLE native_telegram_inputs DROP COLUMN model')
+        await db.exec_driver_sql('ALTER TABLE native_telegram_inputs DROP COLUMN reply_context')
     plan=await migrate(memory.engine)
-    assert not plan['applied'] and len(plan['add_columns'])==3
+    assert not plan['applied'] and len(plan['add_columns'])==4
+    assert 'native_telegram_inputs.reply_context' in plan['add_columns']
+    assert not plan['unsupported_columns']
     result=await migrate(memory.engine,apply=True)
     assert result['applied'] and not result['data_replacement']
     again=await migrate(memory.engine)
