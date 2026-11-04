@@ -49,14 +49,15 @@ class LegionInspectSkill(Skill):
 class LegionControlSkill(Skill):
     name = "legion_control"
     description = (
-        "Interrupts one live worker execution or queues a steering message for a live Forge Autobot. "
+        "Interrupts one live worker, queues a steering message, or reconciles an abandoned Docker Autobot. "
         "Use the exact execution_id from legion_inspect or the Task progress events, and reuse message_id when retrying the same message. "
         "Do not target a ticket number, guess an ID, restart an uncertain execution, or treat a queued acknowledgment as model consumption. "
-        "Returns acceptance and saved receipts; messages enter at a legal tool or turn boundary, while interruption settles after cleanup."
+        "For reconcile, supply text describing partial-work uncertainty; recovery verifies the supervisor has stopped and verifies removal of its stopped Cell before releasing its claim. "
+        "Live or unverifiable Cells and legacy runs require operator intervention. Returns acceptance and saved receipts; messages enter at a legal boundary, while interruption settles after cleanup."
     )
     input_schema = {"type": "object", "properties": {
         "execution_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
-        "action": {"type": "string", "enum": ["interrupt", "message"]},
+        "action": {"type": "string", "enum": ["interrupt", "message", "reconcile"]},
         "text": {"type": "string", "minLength": 1, "maxLength": 16000},
         "message_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
     }, "required": ["execution_id", "action"], "additionalProperties": False}
@@ -70,6 +71,8 @@ class LegionControlSkill(Skill):
         try:
             if args["action"] == "interrupt":
                 result = await self._service.interrupt(args["execution_id"], **scope)
+            elif args["action"] == "reconcile":
+                result = await self._service.reconcile(args["execution_id"], args.get("text", ""), **scope)
             else:
                 result = await self._service.message(args["execution_id"], args.get("text", ""),
                                                      message_id=args.get("message_id"), **scope)

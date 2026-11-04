@@ -105,6 +105,7 @@ async def run_job(
     cell_pool: "CellPool | None" = None,
     inbox: "Inbox | None" = None,
     identity_free: bool = False,
+    before_cell_start=None,
 ) -> Terminal:
     """Run one job to a single Terminal, streaming JobEvents via `emit`.
 
@@ -163,6 +164,7 @@ async def run_job(
             image=image,
             policy=policy,
             workspace=repo_path,
+            **({"before_start": before_cell_start} if before_cell_start is not None else {}),
         )
 
     cell = None

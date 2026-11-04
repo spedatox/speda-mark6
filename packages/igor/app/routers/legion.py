@@ -41,6 +41,10 @@ class WorkerMessageBody(BaseModel):
     message_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
+class WorkerReconcileBody(BaseModel):
+    note: str = Field(min_length=1, max_length=8000)
+
+
 @router.get("/legion/executions")
 async def worker_executions(request: Request, session_id: int | None = None, agent_id: str | None = None):
     return await request.app.state.worker_control.list(user_id=1, session_id=session_id, agent_id=agent_id)
@@ -65,6 +69,11 @@ async def interrupt_worker(execution_id: str, request: Request):
 async def worker_event_artifact(execution_id: str, digest: str, request: Request):
     data = await request.app.state.worker_control.event_artifact(execution_id, digest, user_id=1)
     return Response(data, media_type="application/json")
+
+
+@router.post("/legion/executions/{execution_id}/reconcile")
+async def reconcile_worker(execution_id: str, body: WorkerReconcileBody, request: Request):
+    return await request.app.state.worker_control.reconcile(execution_id, body.note, user_id=1)
 
 
 @router.post("/legion/executions/{execution_id}/messages")

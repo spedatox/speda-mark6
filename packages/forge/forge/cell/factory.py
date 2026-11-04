@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Callable
+from typing import Awaitable, Callable
 
 from forge.cell.base import Cell, CellPolicy, CellCleanupError
 from forge.cell.docker_cell import DockerCell
@@ -45,6 +45,7 @@ async def build_cell(
     image: str = "python:3.12-slim",
     policy: CellPolicy | None = None,
     workspace: Path | None = None,
+    before_start: Callable[[Cell], Awaitable[None]] | None = None,
 ) -> Cell:
     """Build and start one Cell for `agent_id`.
 
@@ -81,6 +82,8 @@ async def build_cell(
         # being reshaped to fit a contract nothing else uses yet.
         cell = builder(agent_id=agent_id, workspace=ws, policy=policy, image=image)
 
+    if before_start is not None:
+        await before_start(cell)
     try:
         await cell.start()
     except BaseException:

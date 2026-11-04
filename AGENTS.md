@@ -375,7 +375,12 @@ Forge package additions: `packages/forge/forge/workshop.py` owns operational
 project checkpoints, run results and exclusive checkout claims. The anonymous
 runtime in `packages/forge/forge/runtime/__init__.py` acquires a claim before
 starting a Cell and releases it only after confirmed cleanup. Claims surviving
-a crash require operator reconciliation; never expire or steal them on a timer.
+a crash require explicit reconciliation; never expire or steal them on a timer.
+`packages/forge/forge/recovery.py` holds an OS execution lock through the complete
+runtime and verifies Docker daemon identity and Cell shutdown before releasing
+an abandoned claim. New Docker runs can use `legion_control(action="reconcile")`;
+legacy and subprocess runs still require operator verification. Recovery never
+restarts workers or marks uncertain work successful.
 The workspace root's `.forge/workshop.sqlite3` must be on a persistent local
 volume shared by every Igor executor, outside individual worker mounts.
 `packages/forge/forge/artifacts.py` retains verified original engineering inputs

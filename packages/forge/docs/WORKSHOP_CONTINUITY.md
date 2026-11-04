@@ -100,6 +100,27 @@ or trigger exists, the saved project waits for the next authorized turn.
 Never infer that `running` means alive or that a lost connection means stopped.
 Never restart a command merely because no final result was recorded.
 
+New Mark VI Docker runs retain a supervisor OS lock for their entire lifetime,
+including input staging and cleanup, and persist Cell name and Docker daemon
+identity before starting the Cell. An explicit
+`legion_control(action="reconcile", execution_id=..., text="partial-work context")`
+or authenticated `POST /legion/executions/{id}/reconcile` with `{"note":"..."}`
+can now reconcile an abandoned run. It refuses a resident executor, a held
+supervisor lock, a changed/unavailable Docker daemon, or an active overlapping
+Cell. It removes only the exact stopped Cell without force, verifies removal,
+then records failure and releases the claim. Project files are preserved. A
+missing Cell requires operator verification unless a previous recovery already
+saved its exact stopped identity before removal; this closes the in-flight
+Docker creation gap and permits retries after a failed final commit.
+This is explicit recovery, never a startup sweep or automatic worker replay.
+Lock files stay outside worker mounts and must never be unlinked while this
+workshop is in use. The worker journal is repaired after the authoritative claim;
+retrying a failed journal commit is safe and preserves existing parent receipts.
+
+Legacy runs without this evidence and development subprocess workers still
+require the operator procedure below. It must verify the full old process tree;
+an agent-provided boolean is not accepted as shutdown evidence by the new control.
+
 1. Inspect the run with `workshop_status(execution_id=...)` or the operator CLI:
 
    ```sh
@@ -119,7 +140,7 @@ Never restart a command merely because no final result was recorded.
    ```
 
    The confirmation is an operator assertion, not automatic process detection.
-   This command is intentionally absent from the agent's workshop tools. It
+   This assertion-based legacy command is absent from the agent's workshop tools. It
    records failure and evidence, never success, and never deletes project files.
 4. Inspect and update the project checkpoint. Resume with a new execution ID
    and a bounded task based on the actual remaining work. Do not reuse the old

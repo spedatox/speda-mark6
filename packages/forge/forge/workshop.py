@@ -46,6 +46,9 @@ class Workshop:
                 );
                 CREATE INDEX IF NOT EXISTS runs_project ON runs(project_id, started);
             """)
+            db.execute("BEGIN IMMEDIATE")
+            if "runtime" not in {r[1] for r in db.execute("PRAGMA table_info(runs)")}:
+                db.execute("ALTER TABLE runs ADD COLUMN runtime TEXT NOT NULL DEFAULT '{}'")
 
     @contextmanager
     def _connect(self):
@@ -188,6 +191,14 @@ class Workshop:
                 raise ValueError("Unknown execution ID")
             return dict(row)
 
+    def record_runtime(self, job_id: str, runtime: dict) -> None:
+        """Persist recovery evidence before the Cell can start, never as telemetry."""
+        with self._connect() as db:
+            changed = db.execute("UPDATE runs SET runtime=? WHERE id=? AND status IN ('running','interrupted')",
+                                 (json.dumps(runtime), job_id))
+            if changed.rowcount != 1:
+                raise ValueError("Execution claim is missing or already terminal")
+
     def discover(self, *, max_entries: int = 2000, max_depth: int = 4) -> dict:
         """Bounded discovery; never follow directory links or traverse repository internals."""
         pending = [(self.root, 0)]
@@ -234,7 +245,12 @@ def main() -> None:
     if args.reconcile:
         if not args.cell_stopped or not args.note.strip():
             parser.error("Reconciliation requires --cell-stopped and an evidence --note; never guess")
-        store.finish(args.job, "failed", "Operator reconciliation: " + args.note)
+        runtime = json.loads(store.run_status(args.job).get("runtime", "{}"))
+        if runtime.get("version") == 1 and runtime.get("backend") == "docker":
+            from forge.recovery import reconcile
+            reconcile(store, args.job, args.note)
+        else:
+            store.finish(args.job, "failed", "Operator reconciliation: " + args.note)
     import sys
     sys.stdout.write(json.dumps(store.run_status(args.job), ensure_ascii=False, indent=2) + "\n")
 

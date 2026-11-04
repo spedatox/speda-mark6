@@ -320,6 +320,43 @@ class WorkerControlService:
         await self._notify()
         return result
 
+    async def reconcile(self, execution_id, note, *, user_id, agent_id=None):
+        """Explicit recovery; Docker evidence and an OS lock precede claim release."""
+        async with self._factory() as db:
+            row = await self._owned(db, execution_id, user_id, agent_id)
+            if row.backend != "forge" or not self._artifact_root:
+                raise WorkspaceError("Recovery requires a configured Forge workshop")
+            if execution_id in self._live:
+                raise WorkspaceError("Executor is still resident; interrupt and await cleanup first")
+            if row.status not in {"running", "unknown"}:
+                return {"accepted": False, "execution": self._snapshot(row)}
+        from forge.workshop import Workshop
+        from forge.recovery import reconcile
+        try:
+            store = await asyncio.to_thread(Workshop, Path(self._artifact_root))
+            run = await asyncio.to_thread(reconcile, store, execution_id, note)
+        except (ValueError, OSError) as exc:
+            raise WorkspaceError(str(exc)) from exc
+        # The stores cannot commit atomically. Release the authoritative claim
+        # first; retry repairs this projection without repeating worker effects.
+        status = {"failed": "failed", "cancelled": "interrupted", "succeeded": "completed"}[run["status"]]
+        async with self._factory() as db:
+            sequence = (await db.execute(update(WorkerExecution).where(
+                WorkerExecution.id == execution_id, WorkerExecution.status.in_(["running", "unknown"]))
+                .values(last_sequence=WorkerExecution.last_sequence + 1, status=status,
+                        result=run["report"], finished_at=datetime.now(timezone.utc).replace(tzinfo=None))
+                .returning(WorkerExecution.last_sequence))).scalar_one_or_none()
+            if sequence is not None:
+                db.add(WorkerEvent(execution_id=execution_id, sequence=sequence,
+                                   payload={"phase": "reconciled", "status": status, "report": run["report"]}))
+                row = await db.get(WorkerExecution, execution_id)
+                if row.background and await db.get(WorkerCompletion, execution_id) is None:
+                    db.add(WorkerCompletion(execution_id=execution_id, request_id=f"worker-report-{execution_id}"))
+                await db.commit()
+        await self._notify()
+        return {"accepted": sequence is not None,
+                "execution": await self.inspect(execution_id, user_id=user_id, agent_id=agent_id)}
+
     async def claim_messages(self, execution_id):
         async with self._factory() as db:
             # Exactly one execution consumes its own messages. Neither a control

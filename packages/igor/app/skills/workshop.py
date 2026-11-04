@@ -22,7 +22,7 @@ class WorkshopStatusSkill(Skill):
         "objective, checkpoint revision, next steps, blockers and recent Forge runs. Use it "
         "before continuing engineering work or answering where a project was left. Do not "
         "treat a running claim as proof a worker is alive, or a successful worker as a finished "
-        "project; after a crash an operator must reconcile the old Cell. Returns project IDs, "
+        "project; after a crash use legion_control reconcile for a verifiable abandoned Docker run, otherwise request operator reconciliation. Returns project IDs, "
         "host paths, availability and durable execution reports without starting a worker."
     )
     read_only = True

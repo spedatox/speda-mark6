@@ -110,6 +110,77 @@ async def test_restart_preserves_events_inputs_and_unknown_runtime(harness):
     await stop(service, eid, task)
 
 
+async def test_explicit_reconciliation_repairs_both_stores_and_retains_receipts(harness, monkeypatch):
+    from forge.workshop import Workshop
+    from forge import recovery
+    from app.models.worker_execution import WorkerCompletion
+    factory, service, context, root, desk = harness
+    eid = uuid.uuid4().hex
+    await service.begin(eid, context=context, worker=LEGION_ROSTER["autobot"], model="test",
+                        task="partial edit", ui_run_id="tool", background=True)
+    store = Workshop(root)
+    store.claim(desk, eid, "partial edit")
+    store.record_runtime(eid, {"version": 1, "backend": "docker", "container": "forge-cell-old", "daemon": "test-daemon"})
+    containers = [{"Id": "a" * 64, "Name": "/forge-cell-old",
+                   "State": {"Status": "exited", "Running": False, "Pid": 0},
+                   "Mounts": [{"Type": "bind", "Source": str(desk), "Destination": "/workspace"}]}]
+    def docker(*args):
+        if args[0] == "info":
+            return "test-daemon"
+        if args[0] == "ps":
+            return "\n".join(c["Id"] for c in containers)
+        if args[0] == "inspect":
+            return json.dumps(containers)
+        if args[0] == "rm":
+            containers.clear()
+            return args[1]
+        raise AssertionError(args)
+    monkeypatch.setattr(recovery, "docker", docker)
+    with pytest.raises(WorkspaceError, match="not found"):
+        await service.reconcile(eid, "partial work", user_id=2)
+    with pytest.raises(WorkspaceError, match="not found"):
+        await service.reconcile(eid, "partial work", user_id=1, agent_id="speda")
+    task, _ = await hold(service, eid)
+    try:
+        with pytest.raises(WorkspaceError, match="resident"):
+            await service.reconcile(eid, "partial work", user_id=1)
+    finally:
+        await stop(service, eid, task)
+    # Simulate a prior uncertain terminal report; preserve its delivery receipt.
+    await service.finish(eid, "unknown", "Cell cleanup unknown")
+    from sqlalchemy.ext.asyncio import AsyncSession
+    commit = AsyncSession.commit
+    async def unavailable(_):
+        raise OSError("journal unavailable after claim release")
+    monkeypatch.setattr(AsyncSession, "commit", unavailable)
+    with pytest.raises(OSError, match="journal unavailable"):
+        await service.reconcile(eid, "Partial files preserved; checks pending", user_id=1)
+    assert store.run_status(eid)["status"] == "failed"
+    assert (await service.inspect(eid, user_id=1))["stored_status"] == "unknown"
+    monkeypatch.setattr(AsyncSession, "commit", commit)
+    result = await service.reconcile(eid, "Partial files preserved; checks pending", user_id=1)
+    assert result["accepted"] and result["execution"]["status"] == "failed"
+    assert store.run_status(eid)["status"] == "failed"
+    events = await service.events(eid, user_id=1)
+    assert events["events"][-1]["phase"] == "reconciled"
+    assert not (await service.reconcile(eid, "retry", user_id=1))["accepted"]
+    async with factory() as db:
+        assert len((await db.execute(select(WorkerCompletion))).scalars().all()) == 1
+    store.claim(desk, "fresh-worker", "inspect actual remaining work")
+
+
+async def test_reconcile_requires_machine_evidence_and_does_not_release_legacy_claim(harness):
+    from forge.workshop import Workshop
+    _, service, context, root, desk = harness
+    eid = await start(service, context)
+    store = Workshop(root)
+    store.claim(desk, eid, "legacy")
+    with pytest.raises(WorkspaceError, match="operator verification"):
+        await service.reconcile(eid, "I think it stopped", user_id=1)
+    assert store.run_status(eid)["status"] == "running"
+    assert (await service.inspect(eid, user_id=1))["stored_status"] == "running"
+
+
 async def test_owner_agent_scope_and_missing_cursor_errors(harness):
     _, service, context, _, _ = harness
     eid = await start(service, context)

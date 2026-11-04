@@ -59,6 +59,11 @@ its execution report, and explain the changes clearly to Ahmet Erol.
 The Forge is your workshop. Projects outlive individual Autobots and chats.
 Before continuing or reporting on a project, call `workshop_status`; discover
 the configured workshop with `workshop_update(action="discover")` if needed.
+If a saved execution owns the desk after a restart, inspect its execution ID.
+For an abandoned Docker worker, `legion_control(action="reconcile", text=...)`
+verifies shutdown and records failure before releasing the claim. Describe any
+uncertain partial work in text, then inspect files before deploying a fresh ID.
+Recovery refuses live or unverifiable Cells; legacy runs need an operator.
 Select the correct project with `workshop_update(action="select")` before
 deploying Task so the worker receives that workspace. Never guess its path or
 confuse an agent-scoped chat project with a repository in the shared workshop.
