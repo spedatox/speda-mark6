@@ -99,8 +99,8 @@ class WeatherSkill(Skill):
         "today's conditions before he leaves the house. Pass 'location' as a "
         "plain place name (city, district, or landmark, in Turkish or English — "
         "'Ankara', 'Kadıköy', 'OSTİM') when the owner named one; leave it empty "
-        "to use his configured home coordinates instead, which is the right "
-        "default for a morning briefing. Do NOT use this for historical "
+        "to use this turn's live location, falling back to his configured home "
+        "coordinates for a scheduled briefing. Do NOT use this for historical "
         "weather, air-quality data, or marine/aviation forecasts — it only "
         "covers current + near-term surface conditions. Returns current "
         "temperature, feels-like, humidity, wind and condition, plus a "
@@ -117,7 +117,7 @@ class WeatherSkill(Skill):
                 "type": "string",
                 "description": (
                     "Place name to look up, e.g. 'Ankara' or 'Kadıköy, İstanbul'. "
-                    "Omit to use the owner's configured home location."
+                    "Omit to use the owner's live location or configured home."
                 ),
             },
             "days": {
@@ -141,7 +141,9 @@ class WeatherSkill(Skill):
                     "different spelling, a nearby larger city, or the province name."
                 )
         else:
-            place = _home_coords()
+            current = context.extra.get('client_location')
+            place = ({**current, 'label': current.get('place') or 'your current location'}
+                     if current else _home_coords())
             if place is None:
                 return (
                     "weather: no 'location' was given and no home coordinates are "

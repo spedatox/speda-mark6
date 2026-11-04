@@ -43,6 +43,12 @@ native trigger, then the matching `/seen`. Each request carries the native key
 and content revision. Scans match exact sender domains or recipient addresses,
 bound pages, bytes and elapsed time, and retain immutable observed batches.
 The trigger reads that stored batch, not a replacement body sent by a workflow.
+Native mail callbacks carry the batch fingerprint. The agent receives a bounded
+excerpt of every item and uses the subjects to retrieve relevant owner context.
+An owner can opt a watch or briefing into `mail_calendar_create`. That run can
+read authorized sources and create a one-off private primary-calendar entry
+without attendees after a successful calendar lookup covering the event. Manual
+definition tests run with calendar creation disabled.
 Acknowledgement requires a durable admitted run. It records a **local per-watch
 receipt**; it does not label, mark read or otherwise change the mailbox. This
 deliberately replaces the old remote-label writer. Pending batches survive lost

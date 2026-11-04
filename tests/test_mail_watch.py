@@ -13,7 +13,7 @@ from tests.test_automations import build
 from tests.test_coordination import reply
 
 
-async def watcher(memory,provider='google'):
+async def watcher(memory,provider='google',*,calendar_create=False):
     bits,manager,admissions=await build(memory,[reply('Observed mail summarized')])
     async def token(): return 'fixture-mail-token'
     client=SimpleNamespace(_connected=True,active=True,allowed_agents={'sentinel'},allowed_tools=None)
@@ -21,7 +21,8 @@ async def watcher(memory,provider='google'):
     service=MailWatches(bits.coordinator,SimpleNamespace(tokens={'google':SimpleNamespace(get=token),'microsoft':SimpleNamespace(get=token)}),registry)
     bits.coordinator.mail_watches=service
     created=await manager.create(1,{'request_id':'mail-watch','agent_id':'sentinel','spec':{'name':'Course announcements',
-        'template':'hook_mail','instruction':'Summarize this announcement','domain':'example.org','mail_provider':provider}})
+        'template':'hook_mail','instruction':'Summarize this announcement','domain':'example.org','mail_provider':provider,
+        **({'mail_calendar_create':True} if calendar_create else {})}})
     await manager.sync(1,created['id'])
     row,op=await manager.snapshot(1,created['id'])
     body=MailScanRequest(automation_key=row.public_key,automation_revision=1)
@@ -95,4 +96,78 @@ async def test_cutover_retains_gmail_provider_acknowledgements(memory):
         return {'messages':[]}
     service.get=get
     assert (await service.scan(1,'google',body))['count']==0
+    await bits.coordinator.shutdown()
+
+
+async def test_mail_batch_preserves_every_subject_and_can_check_then_create_private_event(memory):
+    from app.mcp.google_rest import GoogleRestClient, _CALENDAR_TOOLS
+    from app.schemas.llm import Block, LLMMessage, ProviderError
+    from app.services.memory_query import turn_query
+    from app.skills.tool_search import ToolSearchSkill
+
+    bits,manager,admissions,service,row,body,_=await watcher(memory,calendar_create=True)
+    registry=bits.engine._registry
+    calls=[]
+
+    async def calendar(name,args,token):
+        calls.append((name,args))
+        return 'No events in this range' if name=='calendar_list_events' else 'Confirmed private entry'
+
+    calendar_client=GoogleRestClient('google_calendar',_CALENDAR_TOOLS,calendar,
+        service.oauth.tokens['google'])
+    calendar_client.allowed_agents={'sentinel'}
+    await registry.register_mcp(calendar_client)
+    await registry.register_skill(ToolSearchSkill(registry))
+    names={original:name for name,original in registry._mcp_original_names.items()}
+    start='2035-11-07T10:00:00+03:00'
+    end='2035-11-07T10:30:00+03:00'
+
+    def tool(id,name,**inputs):
+        return LLMMessage([Block(type='tool_use',id=id,name=name,input=inputs)],'tool_use')
+
+    bits.client.script=[
+        tool('find','tool_search',query='calendar_list_events calendar_create_event'),
+        tool('check',names['calendar_list_events'],time_min='2035-11-07T00:00:00+03:00',
+            time_max='2035-11-08T00:00:00+03:00'),
+        tool('create',names['calendar_create_event'],summary='Lab arrival',start=start,end=end),
+        reply('Lab arrival is required by 10:00. I checked your calendar and added a private entry.'),
+    ]
+    original='Be in the lab by 10:00 on November 7. '
+    mail_html=base64.urlsafe_b64encode(('<p>'+original+'Ö'*2100+'</p>').encode()).decode()
+
+    async def get(provider,path,token,**kwargs):
+        if path=='/messages':
+            return {'messages':[{'id':f'mail{i}'} for i in range(10)]}
+        return {'payload':{'mimeType':'text/html','headers':[
+            {'name':'From','value':'Teacher <teacher@example.org>'},
+            {'name':'Subject','value':'Lab arrival '+path.rsplit('/',1)[-1]},
+        ],'body':{'data':mail_html}}}
+
+    service.get=get
+    observed=await service.scan(1,'google',body)
+    assert observed['messages'][0]['body'].startswith(original)
+    result=await admissions.start(1,'sentinel',TriggerRequest(payload={
+        'automation_key':row.public_key,'automation_revision':1,
+        'data':{'fingerprint':observed['fingerprint']}},output_mode='push'))
+    await bits.coordinator.live[result['run_id']]
+    assert (await admissions.inspect(1,result['request_id']))['status']=='succeeded'
+    assert [name for name,_ in calls]==['calendar_list_events','calendar_create_event']
+    assert calls[-1][1]['visibility']=='private'
+    wire=str(bits.client.calls[0]['messages'])
+    assert 'Lab arrival mail0' in wire and 'Lab arrival mail9' in wire
+    assert 'clearly established future commitment' in bits.client.calls[0]['system']
+    ctx=memory.context(agent_id='sentinel',task_role='background')
+    ctx.triggered_by='n8n'
+    ctx.trigger_payload={'type':'mail_watch','mail_calendar_create':True,'event_data':observed}
+    ctx.extra['loaded_tools']={names['calendar_create_event']}
+    assert turn_query(ctx).startswith('Lab arrival mail0')
+    with pytest.raises(ProviderError,match='Check the primary calendar'):
+        registry.validate_call(tool('unchecked',names['calendar_create_event'],summary='Lab arrival',
+            start=start,end=end).content[0],ctx)
+    with pytest.raises(ProviderError,match='without attendees'):
+        registry.validate_call(tool('invite',names['calendar_create_event'],summary='Lab arrival',
+            start=start,end=end,attendees=['teacher@example.org']).content[0],ctx)
+    _,operation=await manager.snapshot(1,row.id)
+    callback=next(node for node in operation.workflow['nodes'] if node['name']=='Notify Speda')
+    assert '"data": { "fingerprint": $json.fingerprint }' in callback['parameters']['jsonBody']
     await bits.coordinator.shutdown()

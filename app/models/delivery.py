@@ -30,6 +30,7 @@ class TelegramInput(Base):
     request_hash:Mapped[str]=mapped_column(String(64))
     room_id:Mapped[str]=mapped_column(ForeignKey('coord_rooms.id'))
     text:Mapped[str]=mapped_column()
+    reply_context:Mapped[dict|None]=mapped_column(JSON,default=None)
     model:Mapped[str|None]=mapped_column(String(255),default=None)
     run_id:Mapped[str|None]=mapped_column(ForeignKey('coord_runs.id'),default=None)
 

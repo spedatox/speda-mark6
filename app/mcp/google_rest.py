@@ -391,10 +391,13 @@ async def _calendar_dispatch(name: str, a: dict, token: str) -> str:
             params["q"] = a["query"]
         r = await _req("GET", f"{_CAL}/calendars/{cal}/events", token, params=params)
         r.raise_for_status()
-        items = r.json().get("items", [])
-        if not items:
-            return "No events found in that range."
-        return f"{len(items)} event(s):\n" + "\n".join(_event_line(ev) for ev in items)
+        listing = r.json()
+        items = listing.get("items", [])
+        result = (f"{len(items)} event(s):\n" + "\n".join(_event_line(ev) for ev in items)
+                  if items else "No events found in that range.")
+        if listing.get("nextPageToken"):
+            result += "\nMore events exist in this range. Use a shorter time window to check every entry."
+        return result
 
     if name == "calendar_get_event":
         ev = await _get_event(token, cal, a["event_id"])
@@ -436,6 +439,8 @@ async def _calendar_dispatch(name: str, a: dict, token: str) -> str:
 
     if name == "calendar_create_event":
         body = _event_body({**a, "summary": a["summary"]}, tz, partial=False)
+        if a.get("visibility") == "private":
+            body["visibility"] = "private"
         params = {}
         if a.get("attendees"):
             params["sendUpdates"] = "all"
@@ -683,6 +688,7 @@ _CALENDAR_TOOLS = [
                 "calendar_id": _CALENDAR_ID_PROP,
                 "description": {"type": "string", "description": "Optional details."},
                 "location": {"type": "string", "description": "Optional location."},
+                "visibility": {"enum": ["default", "private"], "description": "Optional calendar visibility."},
                 "recurrence": {
                     "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
                     "description": (

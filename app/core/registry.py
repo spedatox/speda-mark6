@@ -219,6 +219,9 @@ class CapabilityRegistry:
             tools = [tool for tool in tools if tool['name'] not in {'Task', 'project_delegate'}]
         if context is not None and context.extra.get('worker_tool_scope') is not None:
             tools = [tool for tool in tools if tool['name'] in context.extra['worker_tool_scope']]
+        if self._bounded_mail_automation(context):
+            tools = [tool for tool in tools if self.call_is_read_only(tool['name'], {})
+                     or (context.trigger_payload['mail_calendar_create'] and self._mail_calendar_tool(tool['name']))]
         return tools
 
     def search_tools(self, query, context=None, *, agent_id=None, allowlist=None, active_servers=None):
@@ -245,6 +248,36 @@ class CapabilityRegistry:
         server = self._mcp_tool_map.get(name)
         return bool(server and self._mcp_clients[server].read_only(self._mcp_original_names[name]))
 
+    @staticmethod
+    def _bounded_mail_automation(context):
+        return (context is not None and context.task_role == 'background'
+                and 'mail_calendar_create' in context.trigger_payload)
+
+    def _mail_calendar_tool(self, name):
+        return (self._mcp_tool_map.get(name) == 'google_calendar'
+                and self._mcp_original_names.get(name) == 'calendar_create_event')
+
+    @staticmethod
+    def _calendar_instant(value):
+        from datetime import datetime
+        try:
+            instant = datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+        return instant if instant.tzinfo else None
+
+    def _check_mail_calendar_args(self, args, context):
+        from datetime import datetime, timezone
+        from app.schemas.llm import ProviderError
+        if args.get('attendees') or args.get('recurrence') or args.get('calendar_id', 'primary') != 'primary':
+            raise ProviderError('unauthorized_tool', 'Mail automations can create only one-off primary calendar entries without attendees')
+        start = self._calendar_instant(args.get('start'))
+        end = self._calendar_instant(args.get('end'))
+        if not start or not end or end <= start or start <= datetime.now(timezone.utc):
+            raise ProviderError('invalid_arguments', 'Use a future start and end time with explicit UTC offsets')
+        if not any(lower <= start and end <= upper for lower, upper in context.extra.get('mail_calendar_checked', ())):
+            raise ProviderError('unauthorized_tool', 'Check the primary calendar for this time range before creating the entry')
+
     def discovery_index(self, context):
         visible = {tool['name'] for tool in self.list_tools(context)}
         return [tool['name'] for tool in self.list_tools(context, include_deferred=True) if tool['name'] not in visible]
@@ -264,6 +297,8 @@ class CapabilityRegistry:
                 raise ProviderError('mcp_schema_changed', 'MCP tool changed during this run; start a new turn after reviewing the connection')
         if any(Draft202012Validator(definition["input_schema"]).iter_errors(call.input)):
             raise ProviderError("invalid_arguments", "The model's tool arguments do not match the registered schema")
+        if self._bounded_mail_automation(context) and self._mail_calendar_tool(call.name):
+            self._check_mail_calendar_args(call.input, context)
 
     async def execute_recorded(self, call, context):
         """Validate authorization/schema, admit durably, then execute at most once.
@@ -339,8 +374,20 @@ class CapabilityRegistry:
 
             if tool_name in self._mcp_tool_map:
                 server_name = self._mcp_tool_map[tool_name]
-                return await self._mcp_clients[server_name].call_tool(self._mcp_original_names[tool_name], args,
+                original_name = self._mcp_original_names[tool_name]
+                if self._bounded_mail_automation(context) and self._mail_calendar_tool(tool_name):
+                    self._check_mail_calendar_args(args, context)
+                    args = {**args, 'visibility':'private'}
+                result = await self._mcp_clients[server_name].call_tool(original_name, args,
                     expected_schema=context.extra.get('mcp_schemas', {}).get(tool_name))
+                if (self._bounded_mail_automation(context) and server_name == 'google_calendar'
+                        and original_name == 'calendar_list_events' and args.get('calendar_id', 'primary') == 'primary'
+                        and not args.get('query') and 'More events exist in this range.' not in result):
+                    lower = self._calendar_instant(args.get('time_min'))
+                    upper = self._calendar_instant(args.get('time_max'))
+                    if lower and upper and lower < upper:
+                        context.extra.setdefault('mail_calendar_checked', []).append((lower, upper))
+                return result
 
             if tool_name in self._adapters:
                 return await self._adapters[tool_name].execute(args, context)

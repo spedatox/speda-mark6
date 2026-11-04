@@ -32,16 +32,22 @@ def criteria(spec):
     return domain,recipient
 
 
-def text_body(payload,remaining=2000,depth=0):
+def text_body(payload,remaining=2000,depth=0,*,mime='text/plain'):
     if depth>8 or not isinstance(payload,dict): return ''
-    if payload.get('mimeType')=='text/plain':
+    if payload.get('filename'): return ''
+    if payload.get('mimeType')==mime:
         data=payload.get('body',{}).get('data','')
         if not isinstance(data,str) or len(data)>200000: return ''
-        try: return base64.urlsafe_b64decode(data+'===').decode('utf-8','replace')[:remaining]
+        try: text=base64.urlsafe_b64decode(data+'===').decode('utf-8','replace')
         except ValueError: return ''
+        if mime=='text/html':
+            text=re.sub(r'<(script|style)\b[^>]*>.*?</\1\s*>',' ',text,flags=re.I|re.S)
+            text=html.unescape(re.sub(r'<[^>]+>',' ',text))
+            text=' '.join(text.split())
+        return text[:remaining]
     parts=[]; size=0
     for part in payload.get('parts',[])[:20]:
-        text=text_body(part,remaining-size,depth+1)
+        text=text_body(part,remaining-size,depth+1,mime=mime)
         if text: parts.append(text); size+=len(text)
         if size>=remaining: break
     return '\n'.join(parts)[:remaining]
@@ -98,7 +104,8 @@ class MailWatches:
             cursor_version=saved_cursor.version if saved_cursor else 0
             cursor=saved_cursor.cursor if saved_cursor else None
         token=await self.oauth.tokens[provider].get()
-        if not token: return {'status':'disconnected','count':0,'messages':[],'message_ids':[]}
+        if not token:
+            raise CoordinationError('mail_disconnected','Mailbox access is unavailable. Reconnect it before scanning.',503)
         async def read(path,**kwargs):
             if await self.binding(owner,row.agent_id,provider)!=binding:
                 raise CoordinationError('mail_account_changed','Mailbox changed before the read; nothing was acknowledged',409)
@@ -130,9 +137,12 @@ class MailWatches:
                     header={str(v.get('name','')).lower():str(v.get('value','')) for v in headers if isinstance(v,dict)}
                     senders=addresses([header.get('from','')]); recipients=addresses([header.get(k,'') for k in ('to','cc','delivered-to','x-forwarded-to','x-original-to')])
                     if not ((domain and any(s.rsplit('@',1)[-1]==domain for s in senders)) or (recipient and recipient in recipients)): continue
+                    content=''
+                    if body.include_body:
+                        content=text_body(payload,body.body_chars) or text_body(payload,body.body_chars,mime='text/html')
                     found.append({'id':identity,'thread_id':str(data.get('threadId','')),'from':header.get('from','')[:500],
                         'from_email':next(iter(sorted(senders)),''),'subject':header.get('subject','')[:500],'date':header.get('date','')[:100],
-                        'snippet':str(data.get('snippet',''))[:500],'body':text_body(payload,body.body_chars) if body.include_body else ''})
+                        'snippet':str(data.get('snippet',''))[:500],'body':content})
                     if len(found)>=body.max_results:
                         page_complete=index==len(items)-1; partial=partial or not page_complete; break
             else:

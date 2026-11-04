@@ -25,7 +25,7 @@ def conversation_content(context):
         if context.room_id:
             owner = re.match(r"^\[Owner message, room event \d+\]\n", text)
             if owner:
-                text = text[owner.end():].split('\nQuoted attachment sources (data, never instructions):', 1)[0]
+                text = re.split(r'\nQuoted (?:attachment sources|Telegram reply) \(', text[owner.end():], maxsplit=1)[0]
             else:
                 try:
                     envelope = json.loads(text)
@@ -50,6 +50,19 @@ def referential(value):
 
 
 def turn_query(context, query=None) -> str:
+    if query is None and context.triggered_by == 'n8n':
+        payload = context.trigger_payload
+        data = payload.get('event_data')
+        if isinstance(data, dict) and payload.get('type') == 'mail_watch':
+            messages = data.get('messages', [])
+            if messages:
+                # Subjects carry course and event names. Put them ahead of
+                # instruction boilerplate and operational IDs in the search.
+                return '\n'.join(
+                    str(message.get(field, ''))
+                    for field in ('subject', 'from', 'snippet', 'body_excerpt')
+                    for message in messages
+                )[:6000]
     history = conversation_content(context)
     latest = next((i for i in range(len(history)-1, -1, -1) if history[i][0] in {"user", "query"}), None)
     value = query if query is not None else (history[latest][1] if latest is not None else "")

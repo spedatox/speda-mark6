@@ -37,7 +37,9 @@ uses deterministic update identities. Input retries and paused-budget recovery
 share the same run. Telegram model pins use the revisioned native policy and
 are retained with the admitted input; changing a later channel default cannot
 reroute an exact update retry. Forwarded material is declined rather than stored as an
-owner assertion. Media ingress and live polling are not implemented here.
+owner assertion. When the owner replies to an alert, the bounded quoted text
+stays attached through retries and is available as attributed context. Media
+ingress and live polling are not implemented here.
 
 Reminders have versioned definitions and one open question per stable reminder
 identity. `/reminders/tick` requires both scheduler secrets; it computes due

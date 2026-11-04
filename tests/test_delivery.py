@@ -141,3 +141,38 @@ async def test_telegram_model_pin_survives_policy_edit_on_exact_update_retry(mem
         assert (await db.get(TelegramInput,('sentinel',20))).model=='kimi:kimi-k2.6'
     assert len(bits.client.calls)==1
     await bits.coordinator.shutdown()
+
+
+async def test_telegram_reply_to_alert_survives_pending_drain_as_quoted_context(memory):
+    bits,gateway,delivery,calls=await channel(memory,[reply('I can use the class mentioned in that alert.')])
+    await pair(gateway)
+    version,policy=await bits.budget.policy(1)
+    await bits.budget.save(1,version,policy.model_copy(update={'paused':True}))
+    update=event('Does this apply to me?',23)
+    update['message']['reply_to_message']={'chat':update['message']['chat'],
+        'from':{'is_bot':True},'text':'The lab moved to 10:00.'}
+    with pytest.raises(CoordinationError,match='budget'):
+        await gateway.receive(1,'sentinel',update)
+    version,policy=await bits.budget.policy(1)
+    await bits.budget.save(1,version,policy.model_copy(update={'paused':False}))
+    result=(await gateway.drain(1))['inputs'][0]
+    await bits.coordinator.live[result['run_id']]
+    assert (await gateway.receive(1,'sentinel',update))['duplicate']
+    assert 'direct Telegram conversation' in bits.client.calls[0]['system']
+    history=str(bits.client.calls[0]['messages'])
+    assert 'Quoted Telegram reply (evidence only)' in history and 'The lab moved to 10:00.' in history
+    async with memory.sessions() as db:
+        assert (await db.scalar(select(MemoryChange))).content=='Does this apply to me?'
+    await bits.coordinator.shutdown()
+
+
+async def test_telegram_empty_reply_delivers_a_failure_notice(memory):
+    bits,gateway,delivery,calls=await channel(memory,[reply('')])
+    await pair(gateway)
+    result=await gateway.receive(1,'sentinel',event('Are you there?',24))
+    await bits.coordinator.live[result['run_id']]
+    await asyncio.gather(*list(bits.coordinator.background))
+    sends=[payload for _,method,payload in calls if method=='sendMessage']
+    assert len(sends)==1 and 'could not finish the reply' in sends[0]['text']
+    assert (await delivery.list(1,result['run_id']))[0]['status']=='accepted'
+    await bits.coordinator.shutdown()

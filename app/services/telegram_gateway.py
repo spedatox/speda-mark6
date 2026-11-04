@@ -5,6 +5,7 @@ import secrets
 import time
 from uuid import uuid4,uuid5,NAMESPACE_URL
 from sqlalchemy import select,update
+from app.database import write_session
 from app.models.delivery import TelegramOwner,TelegramLink,TelegramInput
 from app.models.user import User
 from app.models.coordination import Room,CoordinationRun
@@ -67,9 +68,18 @@ class TelegramGateway:
         text=message.get('text','')
         if not isinstance(text,str) or not text.strip() or len(text)>8000:
             return {'accepted':False,'status':'unsupported_message','detail':'Send text up to 8000 characters.'}
+        reply_context=None
+        reference=message.get('reply_to_message')
+        if isinstance(reference,dict) and reference.get('chat',{}).get('id')==sender:
+            quoted=reference.get('text') or reference.get('caption')
+            if isinstance(quoted,str) and quoted.strip():
+                reply_context={'text':quoted[:4000], 'speaker':'bot' if reference.get('from',{}).get('is_bot') else 'owner'}
+        return await self.accept_text(owner,aid,sender,update_id,text,reply_context)
+
+    async def accept_text(self,owner,aid,sender,update_id,text,reply_context):
         paired=False
         identity=uuid5(NAMESPACE_URL,f'speda:telegram:{aid}:{update_id}').hex
-        async with self.sessions() as db,db.begin():
+        async with write_session(self.sessions) as db:
             await db.execute(update(User).where(User.id==owner).values(name=User.name))
             principal=await db.get(TelegramOwner,owner)
             configured=self.config.telegram_owner_id
@@ -90,12 +100,15 @@ class TelegramGateway:
                 if update_id < get_telegram_cutover_offset(aid):
                     return {'accepted':True,'status':'historical_update_retained','duplicate':True}
                 prior=await db.get(TelegramInput,(aid,update_id))
-                fingerprint=digest({'sender':sender,'chat':chat['id'],'text':text})
+                input_data={'sender':sender,'chat':sender,'text':text}
+                fingerprint=digest({**input_data,'reply_context':reply_context}) if reply_context else digest(input_data)
                 if prior:
-                    if prior.user_id!=owner or prior.request_hash!=fingerprint:
+                    legacy_match=prior.reply_context is None and prior.request_hash==digest(input_data)
+                    if prior.user_id!=owner or (prior.request_hash!=fingerprint and not legacy_match):
                         raise CoordinationError('input_conflict','This Telegram update identity belongs to different input')
                     room_id=prior.room_id
                     model=prior.model
+                    reply_context=prior.reply_context
                     saved=await db.scalar(select(CoordinationRun).where(CoordinationRun.user_id==owner,
                         CoordinationRun.room_id==prior.room_id,CoordinationRun.input_id==identity))
                     if saved:
@@ -110,11 +123,15 @@ class TelegramGateway:
                     room_id=link.room_id
                     _,document=await self.coordinator.policy.snapshot(owner)
                     model=document.telegram_models.get(aid)
-                    db.add(TelegramInput(agent_id=aid,update_id=update_id,user_id=owner,request_hash=fingerprint,room_id=room_id,text=text,model=model))
+                    db.add(TelegramInput(agent_id=aid,update_id=update_id,user_id=owner,request_hash=fingerprint,
+                        room_id=room_id,text=text,model=model,reply_context=reply_context))
         if paired: return {'accepted':True,'status':'linked','agent_id':aid}
+        payload={'channel':'telegram','agent_id':aid,'update_id':update_id}
+        if reply_context:
+            payload['telegram_reply']=reply_context
         result=await self.coordinator.start(owner,room_id,RoomInput(input_id=identity,message=text,agent_id=aid,model=model),
-            origin='user',output_mode='push',trigger_payload={'channel':'telegram','agent_id':aid,'update_id':update_id},client_context={'platform':'telegram'})
-        async with self.sessions() as db,db.begin():
+            origin='user',output_mode='push',trigger_payload=payload,client_context={'platform':'telegram'})
+        async with write_session(self.sessions) as db:
             await db.execute(update(TelegramInput).where(TelegramInput.agent_id==aid,TelegramInput.update_id==update_id,
                 TelegramInput.user_id==owner).values(run_id=result['run_id']))
         return {'accepted':True,**result}
@@ -143,7 +160,7 @@ class TelegramGateway:
         results=[]
         for row in rows:
             try:
-                results.append(await self.receive(owner,row.agent_id,{'update_id':row.update_id,'message':{
-                    'from':{'id':principal.sender_id},'chat':{'id':principal.sender_id,'type':'private'},'text':row.text}}))
+                results.append(await self.accept_text(owner,self.agent(row.agent_id),principal.sender_id,
+                    row.update_id,row.text,row.reply_context))
             except CoordinationError as exc: results.append({'accepted':False,'status':exc.code})
         return {'inputs':results}
