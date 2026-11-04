@@ -119,6 +119,35 @@ async def test_direct_chat_single_call_owner_scope_and_alias(memory):
     await bits.coordinator.shutdown()
 
 
+async def test_parallel_memory_requests_keep_the_first_result_and_finish_the_turn(memory):
+    import json
+
+    from app.services.memory_runtime import MemoryRuntime
+    from app.skills.memory_lookup import MemoryLookupSkill
+
+    await memory.seed("Mira is the owner's sister and used to live in Izmir.", title="Mira", aliases=("Mira",))
+    batch = LLMMessage([
+        Block(type="tool_use", id="personal", name="memory_lookup", input={"query": "Mira"}),
+        Block(type="tool_use", id="history", name="memory_lookup",
+              input={"query": "Mira", "corpus": "conversation_history"}),
+    ], "tool_use")
+    bits = await setup(memory, [batch, reply("Mira used to live in Izmir.")])
+    await bits.engine._registry.register_skill(MemoryLookupSkill(MemoryRuntime(memory.store)))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        run = await send(bits, room, "What do you remember about Mira?")
+        assert run["status"] == "succeeded"
+        followup = bits.client.calls[1]
+        assert "memory_lookup" not in {tool["name"] for tool in followup["tools"]}
+        results = [block for message in followup["messages"] if isinstance(message["content"], list)
+                   for block in message["content"] if block["type"] == "tool_result"]
+        assert [item["tool_use_id"] for item in results] == ["personal", "history"]
+        assert "Izmir" in results[0]["content"]
+        assert json.loads(results[1]["content"])["status"] == "budget_exhausted"
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_unknown_paid_response_is_held_never_resent(memory):
     bits = await setup(memory, [ProviderError("disconnect", "Connection lost after dispatch")])
     room = await bits.coordinator.create(1, CreateRoom())

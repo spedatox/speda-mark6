@@ -610,7 +610,7 @@ class LegionInbox:
     async def claim(self):
         ctx=self.context
         await ctx.coordination.ensure_active(ctx)
-        async with self.control.sessions() as db,db.begin():
+        async with write_session(self.control.sessions) as db:
             await self.control.bound_context(db,ctx)
             await self.control.coordinator.owned_room(db,ctx.user_id,ctx.room_id,lock=True)
             rows=list(await db.scalars(select(LegionInput).where(LegionInput.execution_id == ctx.step_id,
@@ -621,7 +621,7 @@ class LegionInbox:
 
     async def record_boundary(self,messages):
         if not self.claimed:return
-        async with self.control.sessions() as db,db.begin():
+        async with write_session(self.control.sessions) as db:
             ctx=self.context
             await self.control.bound_context(db,ctx)
             await self.control.coordinator.owned_room(db,ctx.user_id,ctx.room_id,lock=True)

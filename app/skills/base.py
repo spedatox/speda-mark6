@@ -25,6 +25,10 @@ class Skill(ABC):
     requires_network: bool = False
     restricted_to: frozenset[str] | None = None
 
+    def offered(self, context: "AgentContext") -> bool:
+        """Control discovery only. Execution must handle a spent allowance itself."""
+        return True
+
     @abstractmethod
     async def execute(self, args: dict, context: "AgentContext") -> str:
         """Execute the skill and return a string result for Claude to reason over."""

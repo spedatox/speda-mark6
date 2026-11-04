@@ -18,6 +18,6 @@ class SearchHistorySkill(Skill):
         'additionalProperties':False}
 
     def __init__(self, lookup): self.lookup=lookup
-    def available(self, context): return self.lookup.available(context)
+    def offered(self, context): return self.lookup.offered(context)
     async def execute(self, args, context):
         return await self.lookup.execute({**args,'query':args.get('query',''),'corpus':'conversation_history'},context)

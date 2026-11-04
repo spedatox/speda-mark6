@@ -35,7 +35,7 @@ async def test_archive_uses_real_text_owner_agent_scope_and_one_shared_batch(mem
     result=json.loads(await SearchHistorySkill(lookup).execute({'query':'ilayda'},context))
     assert [r['message_id'] for r in result['results']]==[identity]
     assert result['results'][0]['source_id']==source
-    assert context.memory_budget.lookup_batches==1 and not lookup.available(context)
+    assert context.memory_budget.lookup_batches==1 and not lookup.offered(context)
     assert 'budget exhausted' in await lookup.execute({'query':'İlayda'},context)
 
 

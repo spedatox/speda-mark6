@@ -133,6 +133,57 @@ async def test_worker_steering_is_idempotent_and_boundary_delivery_is_not_compli
     await bits.coordinator.shutdown()
 
 
+@pytest.mark.parametrize("boundary", ["claim", "deliver"])
+async def test_worker_inbox_serializes_with_a_concurrent_sqlite_writer(memory, monkeypatch, boundary):
+    from sqlalchemy import event
+    from app.database import write_session
+
+    @event.listens_for(memory.engine.sync_engine, "connect")
+    def explicit_transactions(connection, _):
+        connection.isolation_level = None
+
+    @event.listens_for(memory.engine.sync_engine, "begin")
+    def begin(connection):
+        connection.exec_driver_sql("BEGIN")
+
+    await memory.engine.dispose()
+    bits, control = await environment(memory)
+    writers = []
+
+    async def compete(room_id):
+        async with write_session(memory.sessions) as db:
+            await db.execute(update(Room).where(Room.id == room_id).values(sequence=Room.sequence + 1))
+
+    original = control.bound_context
+
+    async def interleave(db, context):
+        rows = await original(db, context)
+        writer = asyncio.create_task(compete(context.room_id))
+        writers.append(writer)
+        await asyncio.wait({writer}, timeout=0.3)
+        return rows
+
+    try:
+        _, context, _ = await worker(memory, bits, control)
+        await control.message(1, context.step_id, "Prioritize source dates.", uuid4().hex)
+        inbox = LegionInbox(control, context)
+        if boundary == "claim":
+            with monkeypatch.context() as patch:
+                patch.setattr(control, "bound_context", interleave)
+                assert await inbox.claim() == ["Prioritize source dates."]
+        else:
+            assert await inbox.claim() == ["Prioritize source dates."]
+            with monkeypatch.context() as patch:
+                patch.setattr(control, "bound_context", interleave)
+                await inbox.record_boundary([{"role": "user", "content": "Prioritize source dates."}])
+        await asyncio.gather(*writers)
+        saved = await control.inspect(1, context.step_id)
+        assert saved["messages"][0]["status"] == ("delivering" if boundary == "claim" else "delivered")
+    finally:
+        await asyncio.gather(*writers, return_exceptions=True)
+        await bits.coordinator.shutdown()
+
+
 async def test_worker_event_artifacts_are_scoped_and_all_payload_fields_are_bounded(memory):
     bits,control = await environment(memory)
     parent,context,_ = await worker(memory,bits,control)

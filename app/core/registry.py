@@ -172,7 +172,7 @@ class CapabilityRegistry:
 
     # ── Unified interface ──────────────────────────────────────────────────────
 
-    def list_tools(self, context=None, *, include_deferred=False) -> list[dict]:
+    def list_tools(self, context=None, *, include_deferred=False, for_execution=False) -> list[dict]:
         """
         Return all tools across all four tiers in Anthropic tool format.
         Claude sees no difference between tiers.
@@ -186,6 +186,8 @@ class CapabilityRegistry:
             if context and context.task_role == "worker" and not skill.read_only:
                 continue
             if context is not None and hasattr(skill, "available") and not skill.available(context):
+                continue
+            if context is not None and not for_execution and not skill.offered(context):
                 continue
             if context is not None and skill.restricted_to is not None and context.agent_id not in skill.restricted_to:
                 continue
@@ -252,7 +254,7 @@ class CapabilityRegistry:
         from app.schemas.llm import ProviderError
         if not getattr(call, "id", None) or not getattr(call, "name", None) or not isinstance(getattr(call, "input", None), dict):
             raise ProviderError("invalid_call", "The model returned an incomplete tool call")
-        definition = next((t for t in self.list_tools(context) if t["name"] == call.name), None)
+        definition = next((t for t in self.list_tools(context, for_execution=True) if t["name"] == call.name), None)
         if definition is None:
             raise ProviderError("unauthorized_tool", "The model requested an unavailable tool")
         if call.name in self._mcp_definitions:
@@ -322,7 +324,7 @@ class CapabilityRegistry:
     async def execute(self, tool_name: str, args: dict, context: "AgentContext") -> str:
         """Route a tool call to the correct tier handler."""
         from app.schemas.llm import ProviderError
-        if tool_name not in {tool['name'] for tool in self.list_tools(context, include_deferred=True)}:
+        if tool_name not in {tool['name'] for tool in self.list_tools(context, include_deferred=True, for_execution=True)}:
             raise ProviderError("unauthorized_tool", "The requested capability is not authorized")
         try:
             if tool_name == "Task":
