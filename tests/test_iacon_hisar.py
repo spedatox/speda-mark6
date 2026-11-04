@@ -177,7 +177,7 @@ async def test_catalog_and_exact_document_reads_use_the_existing_shared_lookup_b
     listing = json.loads(await skill.execute({"query":"", "corpus":"hall_of_records", "operation":"list"}, context))
     assert listing["documents"][0]["id"] == doc
     assert context.memory_budget.lookup_batches == 1
-    assert not skill.available(context)
+    assert not skill.offered(context)
     exact_context = memory.context()
     read = json.loads(await skill.execute({"query":"", "corpus":"hall_of_records", "operation":"read",
         "document_ids":[doc], "revision_id":revision}, exact_context))
