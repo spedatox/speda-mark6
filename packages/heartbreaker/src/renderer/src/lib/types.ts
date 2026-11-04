@@ -197,6 +197,7 @@ export interface Session {
  * switches the entire project set. There is no shared project.
  */
 export interface Project {
+  cloud?: boolean
   cwd: string
   host_id: string
   workshop_project_id: string

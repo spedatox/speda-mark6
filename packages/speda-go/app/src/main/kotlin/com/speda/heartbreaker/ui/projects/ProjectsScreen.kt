@@ -3,6 +3,15 @@
 
 package com.speda.heartbreaker.ui.projects
 
+import java.util.UUID
+import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -38,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -97,6 +107,7 @@ fun ProjectsScreen(
     var openId by remember(initialProjectId) { mutableStateOf(initialProjectId) }
     var showArchived by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    var creatingCloud by remember { mutableStateOf(false) }
 
     suspend fun reload() { projects = api.fetchProjects(config, showArchived) }
     LaunchedEffect(config, showArchived) { reload() }
@@ -175,20 +186,32 @@ fun ProjectsScreen(
                     showArchived = !showArchived
                 }
                 Spacer(Modifier.width(6.dp))
-                PillButton(t.projects.newProject, palette.accentBright) { creating = !creating }
+                PillButton(t.projects.newProject, palette.accentBright) { creatingCloud = false; creating = !creating }
                 Spacer(Modifier.width(4.dp))
                 Box(Modifier.size(28.dp).clickable(onClick = onClose), Alignment.Center) {
                     HbGlyphs.Close(palette.iconDim, 13.dp)
                 }
             }
 
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), horizontalArrangement = Arrangement.End) {
+                PillButton("New cloud project", palette.accentBright) { creating = false; creatingCloud = !creatingCloud }
+            }
+            if (creatingCloud) {
+                CloudEnvironmentForm(config, api, onCancel = { creatingCloud = false }) { projectId ->
+                    scope.launch {
+                        reload()
+                        creatingCloud = false
+                        openId = projectId
+                    }
+                }
+            }
             if (creating) {
                 NewProjectForm(
                     t = t,
                     onCancel = { creating = false },
-                    onCreate = { name, description, instructions, icon ->
+                    onCreate = { name, description, instructions, icon, path ->
                         scope.launch {
-                            val made = api.createProject(config, name, description, instructions, icon)
+                            val made = api.createProject(config, name, description, instructions, icon, path)
                             creating = false
                             if (made != null) {
                                 projects = listOf(made) + (projects ?: emptyList())
@@ -320,12 +343,13 @@ private fun ProjectCard(
 private fun NewProjectForm(
     t: AppStrings,
     onCancel: () -> Unit,
-    onCreate: (name: String, description: String, instructions: String, icon: String) -> Unit,
+    onCreate: (name: String, description: String, instructions: String, icon: String, path: String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var instructions by remember { mutableStateOf("") }
     var icon by remember { mutableStateOf("") }
+    var path by remember { mutableStateOf("") }
     val palette = LocalHbPalette.current
 
     Column(
@@ -341,6 +365,8 @@ private fun NewProjectForm(
             Field(name, { name = it }, t.projects.namePlaceholder, Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
+        Field(path, { path = it }, "Project folder on execution host", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
         Field(description, { description = it }, t.projects.descriptionPlaceholder, Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         Field(
@@ -352,11 +378,202 @@ private fun NewProjectForm(
             PillButton(t.projects.cancel, palette.iconDim, onCancel)
             Spacer(Modifier.width(6.dp))
             PillButton(t.projects.create, palette.accentBright) {
-                if (name.isNotBlank()) onCreate(name, description, instructions, icon)
+                if (name.isNotBlank() && path.isNotBlank()) onCreate(name, description, instructions, icon, path)
             }
         }
     }
     Spacer(Modifier.height(10.dp))
+}
+
+private fun JsonObject.text(key: String): String =
+    (this[key] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull.orEmpty()
+
+private fun JsonObject.objects(key: String): List<JsonObject> =
+    (this[key] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+
+@Composable
+private fun CloudEnvironmentForm(
+    config: AppConfig,
+    api: IgorApi,
+    project: Project? = null,
+    previous: JsonObject? = null,
+    onCancel: () -> Unit,
+    onPrepared: (Int) -> Unit,
+) {
+    val palette = LocalHbPalette.current
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf(project?.name.orEmpty()) }
+    var repo by remember { mutableStateOf(previous?.text("repository").orEmpty()) }
+    var branch by remember { mutableStateOf(previous?.text("branch") ?: "main") }
+    var check by remember { mutableStateOf(previous?.text("check") ?: "git --version") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val requestId = remember(name, repo, branch, check) { UUID.randomUUID().toString() }
+    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (project == null) Field(name, { name = it }, "Project name", Modifier.fillMaxWidth())
+        Field(repo, { repo = it }, "GitHub owner/repository", Modifier.fillMaxWidth())
+        Field(branch, { branch = it }, "Base branch", Modifier.fillMaxWidth())
+        Field(check, { check = it }, "Environment check", Modifier.fillMaxWidth(), singleLine = false)
+        if (error.isNotBlank()) HbText(error, style = HbType.read, color = palette.amber)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("Cancel", palette.iconDim, onCancel)
+            PillButton(if (busy) "Preparing…" else "Prepare environment", palette.accentBright) {
+                if (!busy && name.isNotBlank() && repo.isNotBlank() && branch.isNotBlank() && check.isNotBlank()) {
+                    busy = true
+                    error = ""
+                    scope.launch {
+                        try {
+                            val path = project?.let { "/${it.id}/cloud/environments" } ?: "/cloud/environments"
+                            val result = api.projectRequest(config, path, buildJsonObject {
+                                put("request_id", requestId)
+                                put("agent_id", config.agentId)
+                                put("name", name.trim())
+                                put("repository", repo.trim())
+                                put("branch", branch.trim())
+                                put("check", check)
+                            })
+                            onPrepared(result.text("project_id").toInt())
+                        } catch (exception: kotlinx.coroutines.CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            error = exception.message ?: "Could not prepare environment"
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CloudProjectDetail(config: AppConfig, api: IgorApi, project: Project, onPublished: (Boolean) -> Unit) {
+    val palette = LocalHbPalette.current
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var cloud by remember(project.id) { mutableStateOf<JsonObject?>(null) }
+    var workspace by remember(project.id) { mutableStateOf<JsonObject?>(null) }
+    var changes by remember(project.id) { mutableStateOf<JsonObject?>(null) }
+    var title by remember(project.id) { mutableStateOf("") }
+    var error by remember(project.id) { mutableStateOf("") }
+    var refresh by remember(project.id) { mutableStateOf(0) }
+    var preparing by remember(project.id) { mutableStateOf(false) }
+    var busy by remember(project.id) { mutableStateOf(false) }
+    val base = "/${project.id}"
+
+    LaunchedEffect(config, project.id, refresh) {
+        try {
+            do {
+                val result = api.projectRequest(config, "$base/cloud")
+                cloud = result
+                val environments = result.objects("environments")
+                onPublished(environments.any { it.text("status") == "published" })
+                workspace = api.projectRequest(config, "$base/workspace")
+                val active = environments.any { it.text("status") == "preparing" } ||
+                    result.objects("pull_requests").any { it.text("status") == "executing" }
+                if (active) delay(2000)
+            } while (active)
+        } catch (exception: kotlinx.coroutines.CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            error = exception.message ?: "Could not load project environment"
+        }
+    }
+
+    fun action(block: suspend () -> Unit) {
+        if (busy) return
+        busy = true
+        error = ""
+        scope.launch {
+            try {
+                block()
+            } catch (exception: kotlinx.coroutines.CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                error = exception.message ?: "Project action failed"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionLabel("Cloud environment")
+        if (error.isNotBlank()) HbText(error, style = HbType.read, color = palette.amber)
+        val environments = cloud?.objects("environments").orEmpty()
+        for (environment in environments) {
+            HbText("${environment.text("repository")} · ${environment.text("branch")} · ${environment.text("status")}",
+                style = HbType.read, color = palette.text)
+            val commit = environment.text("commit")
+            if (commit.isNotEmpty()) HbText("Commit ${commit.take(12)}", style = HbType.read, color = palette.textDim)
+            val output = (environment["check_result"] as? JsonObject)?.text("output").orEmpty()
+            if (output.isNotBlank()) HbText(output, style = HbType.read, color = palette.textDim)
+            if (environment.text("error").isNotBlank()) HbText(environment.text("error"), style = HbType.read, color = palette.amber)
+            if (environment.text("status") == "ready") {
+                PillButton("Publish environment", palette.accentBright) {
+                    action {
+                        api.projectRequest(config, "$base/cloud/publish", buildJsonObject {
+                            put("environment_id", environment.text("id"))
+                            put("review_hash", environment.text("review_hash"))
+                        })
+                        refresh += 1
+                    }
+                }
+            }
+        }
+        if (preparing) {
+            CloudEnvironmentForm(config, api, project, environments.firstOrNull(), onCancel = { preparing = false }) {
+                preparing = false
+                refresh += 1
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("Prepare new revision", palette.accentBright) { preparing = true }
+                PillButton("Refresh", palette.iconDim) { refresh += 1 }
+            }
+        }
+        for (task in workspace?.objects("tasks").orEmpty()) {
+            val label = task.text("task")
+            HbText("$label · ${task.text("status")}", style = HbType.read, color = palette.textDim)
+            if (task.text("status") == "succeeded") PillButton("Review changes", palette.accentBright) {
+                action {
+                    changes = api.projectRequest(config, "$base/changes/${task.text("id")}")
+                    title = label.take(200)
+                }
+            }
+        }
+        changes?.let { review ->
+            HbText(review.text("diff"), style = HbType.read, color = palette.textDim)
+            Field(title, { title = it }, "Pull request title", Modifier.fillMaxWidth())
+            PillButton("Open draft pull request", palette.accentBright) {
+                if (title.isNotBlank() && review.objects("changes").isNotEmpty()) action {
+                    api.projectRequest(config, "$base/cloud/pull-requests", buildJsonObject {
+                        put("task_id", review.text("task_id"))
+                        put("title", title.trim())
+                        put("expected_source_revision", review.text("expected_source_revision"))
+                        put("expected_artifact_revision", review.text("expected_artifact_revision"))
+                    })
+                    changes = null
+                    refresh += 1
+                }
+            }
+        }
+        for (pr in cloud?.objects("pull_requests").orEmpty()) {
+            val url = pr.text("url")
+            if (url.startsWith("https://github.com/")) {
+                PillButton(pr.text("title"), palette.accentBright) { uriHandler.openUri(url) }
+            } else {
+                HbText("${pr.text("title")} · ${pr.text("status")}", style = HbType.read, color = palette.textDim)
+            }
+            if (pr.text("status") == "reconciling") PillButton("Check GitHub result", palette.iconDim) {
+                action {
+                    api.projectRequest(config, "$base/cloud/pull-requests/${pr.text("id")}/reconcile", buildJsonObject {})
+                    refresh += 1
+                }
+            }
+        }
+    }
 }
 
 /* ── Detail pane ──────────────────────────────────────────────────────────── */
@@ -383,6 +600,7 @@ private fun ProjectDetail(
     var uploading by remember { mutableStateOf<List<String>>(emptyList()) }
     var uploadError by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
+    var cloudPublished by remember(project.id) { mutableStateOf(!project.cloud) }
 
     LaunchedEffect(config, project.id) {
         sessions = api.fetchProjectSessions(config, project.id)
@@ -441,8 +659,14 @@ private fun ProjectDetail(
                     maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
-                PillButton(t.projects.newChatHere, palette.accentBright, onNewChat)
+                if (cloudPublished && !project.archived) {
+                    PillButton(t.projects.newChatHere, palette.accentBright, onNewChat)
+                }
             }
+        }
+
+        if (project.cloud) item {
+            CloudProjectDetail(config, api, project) { cloudPublished = it }
         }
 
         // ── Instructions ─────────────────────────────────────────────────────

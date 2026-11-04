@@ -101,6 +101,8 @@ class Projects:
         self.dispatchers, self.drain_locks = {}, {}
         self.dispatch_pending = set()
         self.project_locks = {}
+        from app.services.cloud_projects import CloudEnvironments
+        self.cloud = CloudEnvironments(self)
         self.root = Path(settings.project_workspace_root).resolve() if settings.project_workspace_root else None
         self.state = Path(settings.project_state_root).resolve() if settings.project_state_root else None
         self.workshop = None
@@ -230,7 +232,8 @@ class Projects:
                 raise CoordinationError("task_limit", "This run has reached its eight-task queue limit")
             if body.dependencies:
                 eligible = set(await db.scalars(select(ProjectTask.id).join(CoordinationRun).where(
-                    CoordinationRun.user_id == context.user_id, ProjectTask.owner_agent == context.agent_id,
+                    CoordinationRun.user_id == context.user_id,
+                    (CoordinationRun.room_id == context.room_id) | (ProjectTask.owner_agent == context.agent_id),
                     ProjectTask.project_id == project.id)))
                 if any(d not in eligible for d in body.dependencies):
                     raise CoordinationError("dependency_scope", "Dependencies must belong to this supervisor and folder project")
@@ -427,6 +430,12 @@ class Projects:
     async def run_task(self, task_id):
         async with self.sessions() as db:
             task = await db.get(ProjectTask, task_id)
+            run = await db.get(CoordinationRun, task.run_id)
+        if run.policy.get('cloud_environment'):
+            # Every task gets its own workspace and Cell claim. The published
+            # baseline is read-only and can seed several independent runs.
+            await self._run_task(task_id)
+            return
         lock = self.project_locks.setdefault(task.project_id, asyncio.Lock())
         signal = self.signals.setdefault(task_id, asyncio.Event())
         # Multiple conversational rounds may assign work to the same project.
@@ -469,9 +478,20 @@ class Projects:
             project = await self.owned(run.user_id, task.project_id)
             if self.settings.project_cell_backend != "docker":
                 raise CoordinationError("cell_backend", "Project workers require the configured Docker isolation backend")
-            handoff = await asyncio.to_thread(self.workshop.claim, Path(project.path), source_claim, task.task)
-            claimed = True
-            source = Path(project.path)
+            environment = run.policy.get('cloud_environment')
+            if environment:
+                predecessors = [(d.result or {}).get('cloud_environment') for d in dependencies]
+                if predecessors:
+                    first_environment = predecessors[0]
+                    if not first_environment or any(item != first_environment for item in predecessors):
+                        raise CoordinationError('cloud_dependency_scope', 'Follow-up tasks must share one published environment')
+                    environment = first_environment
+                source = await self.cloud.source(environment)
+                handoff = await asyncio.to_thread(self.workshop.inspect, project.legacy_id)
+            else:
+                handoff = await asyncio.to_thread(self.workshop.claim, Path(project.path), source_claim, task.task)
+                claimed = True
+                source = Path(project.path)
             canonical_revision = (await asyncio.to_thread(inventory, source))[0]
             # A review/change depending on one result receives that exact artifact.
             # Multiple divergent artifacts need explicit integration, not guessed merges.
@@ -545,7 +565,8 @@ class Projects:
                     + '\nContinue from the existing files in this checkout. Before editing, read root AGENTS.md '
                     'and any AGENTS.md files between the root and the file being changed. Preserve existing work.', workspace=target,
                 model_ref=ctx.model, max_iterations=min(30, worker.max_iterations), timeout_s=120,
-                allow_network=False, cell_backend="docker", cell_image=cell_image_for(self.settings,worker.runtime_role))
+                allow_network=False, cell_backend="docker", cell_image=(environment['image'] if environment
+                    else cell_image_for(self.settings, worker.runtime_role)))
             runtime_settings = ForgeSettings(workspace_root=self.state, cell_backend="docker", retry_attempts=0,
                 max_tokens=ctx.output_token_cap)
             async with asyncio.timeout(max(0, run.deadline - time.time())):
@@ -565,12 +586,14 @@ class Projects:
             payload = {"status": result.status, "report": result.report[:16000], "error": result.error,
                 "workspace": str(target), "base_revision": revision, "revision": final_revision,
                 "canonical_source_revision": canonical_revision,
+                **({'cloud_environment': environment} if environment else {}),
                 "integration": "pending", "verification": "worker_report; inspect recorded tool results"}
             async with write_session(self.sessions) as db:
                 await db.execute(update(ProjectTask).where(ProjectTask.id == task.id)
                     .values(status=result.status, result=payload))
-            await asyncio.to_thread(self.workshop.finish, source_claim, result.status, json.dumps(payload))
-            claimed = False
+            if claimed:
+                await asyncio.to_thread(self.workshop.finish, source_claim, result.status, json.dumps(payload))
+                claimed = False
             await self.coordinator.emit(run.id, "project_result", task.owner_agent,
                 {**worker_metadata(task), "project_id": project.id,
                  "text": result.report[:16000], "artifact": payload})

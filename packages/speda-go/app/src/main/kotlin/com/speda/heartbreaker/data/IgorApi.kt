@@ -457,6 +457,7 @@ class IgorApi(
         description: String = "",
         instructions: String = "",
         icon: String = "",
+        path: String = "",
     ): Project? = withContext(Dispatchers.IO) {
         runCatching {
             postJson(
@@ -468,6 +469,7 @@ class IgorApi(
                     put("description", description)
                     put("instructions", instructions)
                     put("icon", icon)
+                    put("path", path)
                 },
             )?.let { json.decodeFromString<ProjectDto>(it).toModel() }
         }.getOrNull()
@@ -520,6 +522,25 @@ class IgorApi(
                     }
                 }
             }.getOrNull() ?: emptyList()
+        }
+
+    suspend fun projectRequest(config: AppConfig, path: String, payload: JsonObject? = null): JsonObject =
+        withContext(Dispatchers.IO) {
+            val separator = if ('?' in path) '&' else '?'
+            val request = Request.Builder()
+                .url("${config.apiBase}/projects$path${separator}agent_id=${config.agentId}")
+                .header("X-API-Key", config.apiKey)
+                .apply { if (payload != null) post(payload.toString().toRequestBody(jsonMedia)) }
+                .build()
+            restClient.newCall(request).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                val result = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
+                if (!response.isSuccessful) {
+                    val detail = runCatching { result?.get("detail")?.jsonPrimitive?.contentOrNull }.getOrNull()
+                    error(detail ?: "Project request failed (${response.code})")
+                }
+                result ?: error("Project response was unreadable")
+            }
         }
 
     suspend fun fetchProjectFiles(config: AppConfig, projectId: Int): List<ProjectFile> =
@@ -1792,10 +1813,11 @@ class IgorApi(
         @SerialName("last_activity_at") val lastActivityAt: String = "",
         @SerialName("chat_count") val chatCount: Int = 0,
         @SerialName("file_count") val fileCount: Int = 0,
+        val cloud: Boolean = false,
     ) {
         fun toModel() = Project(
             id, agentId, name, description, instructions, icon, color,
-            pinned, archived, lastActivityAt, chatCount, fileCount,
+            pinned, archived, lastActivityAt, chatCount, fileCount, cloud,
         )
     }
 

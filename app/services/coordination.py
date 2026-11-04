@@ -321,8 +321,9 @@ class Coordinator:
             if room.project_id and self.projects:
                 from app.services.project_workspace import ProjectWorkspace
                 workspace = ProjectWorkspace(self)
+                environment = await self.projects.cloud.binding(db, room.project_id)
                 # Pin private project instructions/documents per speaker for this run.
-                run.policy = {**run.policy, 'project_contexts': {
+                run.policy = {**run.policy, 'cloud_environment': environment, 'project_contexts': {
                     persona: await workspace.context(owner, persona, room.project_id) for persona in profiles}}
             await db.flush()
             if not room.active_run:
@@ -645,6 +646,9 @@ class Coordinator:
         context.extra['mcp_schemas'] = dict(profile.get('mcp_schemas', {}))
         context.extra['owner_instructions'] = stored.get('owner_instructions', '')
         context.extra['project_context'] = stored.get('project_contexts', {}).get(step.agent_id)
+        if stored.get('cloud_environment') and context.extra['project_context']:
+            context.extra['project_context'] = {**context.extra['project_context'],
+                'cloud_environment': stored['cloud_environment']}
         context.extra['room_state'] = {"lead": room.lead, "members": [
             {"agent_id": aid, "name": run.profiles[aid]["name"]} for aid in room.members],
             "your_agent_id": step.agent_id, "exchange": step.mode,

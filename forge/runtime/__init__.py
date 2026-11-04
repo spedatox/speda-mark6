@@ -120,7 +120,7 @@ async def _execute_claimed(spec, *, model, emit, signal, settings, handoff, inbo
     workspace = spec.workspace.resolve()
 
     tool_types = SECURITY_TOOLS if spec.role == "pentester" else CODING_TOOLS
-    denied = {"task", "ask_operator", "claude_code", "enter_worktree", "exit_worktree"}
+    denied = {"task", "ask_operator", "claude_code", "enter_worktree", "exit_worktree", "git_push", "open_pr"}
     tools = tuple(t.name for t in tool_types if t.name not in denied)
     if spec.role == "reviewer":
         tools = tuple(n for n in tools if n not in {"write_file", "edit_file", "run_command"})

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import en from '../lib/i18n/en'
 import tr from '../lib/i18n/tr'
-import type { AppConfig } from '../lib/types'
+import type { AppConfig, Project } from '../lib/types'
+import { CloudProjectPanel } from './CloudProjects'
 import { projectRequest, type FolderListing, type WorkspaceState, type ProjectChanges } from '../lib/projectWorkspace'
 
 const box: React.CSSProperties = {padding:12, marginBottom:12, border:'1px solid var(--hb-edge)', borderRadius:8}
@@ -60,7 +61,7 @@ export function ProjectFolderPicker({config, value, onChange, locale = 'en'}: {
   </div>
 }
 
-export default function ProjectWorkspace({config, projectId, locale = 'en'}: {config:AppConfig; projectId:number; locale?:string}) {
+export default function ProjectWorkspace({config, projectId, project, onCloudReady, locale = 'en'}: {config:AppConfig; projectId:number; project?:Project; onCloudReady?:(ready:boolean)=>void; locale?:string}) {
   const t = (locale === 'tr' ? tr : en).projects.workspace
   const [state, setState] = useState<WorkspaceState | null>(null)
   const [changes, setChanges] = useState<ProjectChanges | null>(null)
@@ -68,6 +69,9 @@ export default function ProjectWorkspace({config, projectId, locale = 'en'}: {co
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [epoch, setEpoch] = useState(0)
+  const [cloudRefresh, setCloudRefresh] = useState(0)
+  const [prTitle, setPrTitle] = useState('')
+  const published = useRef<string | null>(null)
   useEffect(() => {
     let alive = true
     projectRequest<WorkspaceState>(config, `/${projectId}/workspace`)
@@ -77,7 +81,10 @@ export default function ProjectWorkspace({config, projectId, locale = 'en'}: {co
   }, [config.apiBase, config.apiKey, config.agentId, projectId, epoch])
   const review = async (taskId: string) => {
     setBusy(true); setError('')
-    try { setChanges(await projectRequest<ProjectChanges>(config, `/${projectId}/changes/${taskId}`)) }
+    try {
+      setChanges(await projectRequest<ProjectChanges>(config, `/${projectId}/changes/${taskId}`))
+      setPrTitle(state?.tasks.find(task => task.id === taskId)?.task.slice(0, 200) ?? 'Optimus project update')
+    }
     catch (err) { setError(message(err)) } finally { setBusy(false) }
   }
   const apply = async () => {
@@ -89,6 +96,18 @@ export default function ProjectWorkspace({config, projectId, locale = 'en'}: {co
         expected_artifact_revision:changes.expected_artifact_revision,
       })
       setChanges(null); setPreview(null); setEpoch(n => n+1)
+    } catch (err) { setError(message(err)) } finally { setBusy(false) }
+  }
+  async function openPullRequest() {
+    if (!changes?.environment || !prTitle.trim() || busy) return
+    setBusy(true); setError('')
+    try {
+      await projectRequest(config, `/${projectId}/cloud/pull-requests`, {
+        task_id: changes.task_id, title: prTitle.trim(),
+        expected_source_revision: changes.expected_source_revision,
+        expected_artifact_revision: changes.expected_artifact_revision,
+      })
+      setChanges(null); setCloudRefresh(value => value + 1)
     } catch (err) { setError(message(err)) } finally { setBusy(false) }
   }
   const rollback = async (operationId:string) => {
@@ -109,8 +128,13 @@ export default function ProjectWorkspace({config, projectId, locale = 'en'}: {co
       <button className="hb-btn" disabled={busy} onClick={() => setEpoch(n=>n+1)}>{t.refresh}</button></div>
     {error && <p role="alert">{error}</p>}
     {!state && !error && <p>{t.loading}</p>}
+    {project?.cloud && <CloudProjectPanel config={config} project={project} refresh={cloudRefresh}
+      onPublished={id => {
+        onCloudReady?.(id !== null)
+        if (id !== published.current) { published.current = id; setEpoch(n => n+1) }
+      }} />}
     {state && <>
-      <p style={{overflowWrap:'anywhere', userSelect:'text'}}>{state.host_id}: {state.cwd}</p>
+      <p style={{overflowWrap:'anywhere', userSelect:'text'}}>{state.environment ? `${state.environment.repository} · ${state.environment.branch} · ${state.environment.commit.slice(0, 12)}` : `${state.host_id}: ${state.cwd}`}</p>
       {!state.execution_enabled && <p>{t.disabled}</p>}
       {state.checkpoint && <div><strong>{state.checkpoint.objective}</strong><p>{state.checkpoint.progress}</p>
         {state.checkpoint.next_steps?.map((step,i)=><p key={i}>{t.next}: {step}</p>)}
@@ -134,8 +158,14 @@ export default function ProjectWorkspace({config, projectId, locale = 'en'}: {co
         {changes.changes.map(c=><p key={c.path}>{c.change}: {c.path}</p>)}
         <pre style={code}>{changes.diff || t.noChanges}</pre>
         {changes.source_changed_since_execution && <p role="alert">{t.stale}</p>}
-        <button className="hb-btn" disabled={busy || changes.source_changed_since_execution || !changes.changes.length} onClick={apply}>{t.apply}</button>
-        <p>{t.rollbackCopy}</p>
+        {changes.environment ? <>
+          <p>{changes.environment.repository} · {changes.environment.branch}</p>
+          <label>Pull request title <input className="hb-field" value={prTitle} onChange={e=>setPrTitle(e.target.value)} /></label>
+          <button className="hb-btn" disabled={busy || !changes.changes.length || !prTitle.trim()} onClick={() => void openPullRequest()}>Open draft pull request</button>
+        </> : <>
+          <button className="hb-btn" disabled={busy || changes.source_changed_since_execution || !changes.changes.length} onClick={apply}>{t.apply}</button>
+          <p>{t.rollbackCopy}</p>
+        </>}
       </div>}
       {state.operations.filter(o=>o.status==='complete' && o.details.after_revision===state.source_revision).slice(0,1).map(o=>
         <button key={o.id} className="hb-btn" disabled={busy} onClick={()=>rollback(o.id)}>{t.undo}</button>)}

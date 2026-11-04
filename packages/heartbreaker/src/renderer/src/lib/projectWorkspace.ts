@@ -19,7 +19,9 @@ export interface FolderListing {
   path: string; root: string; parent: string | null; host_id: string
   directories: {name: string; path: string}[]; truncated: boolean
 }
+export interface CloudBinding { id: string; repository: string; branch: string; commit: string; image: string }
 export interface WorkspaceState {
+  environment?: CloudBinding | null
   cwd: string; host_id: string; execution_enabled: boolean; source_revision: string; files: string[]; files_omitted: number
   checkpoint: {objective?: string; progress?: string; next_steps?: string[]; blockers?: string[]} | null
   claims: unknown[]
@@ -28,6 +30,7 @@ export interface WorkspaceState {
   operations: {id: string; kind: string; status: string; details: {task_id?: string; after_revision?: string}}[]
 }
 export interface ProjectChanges {
+  environment?: CloudBinding | null
   task_id: string; expected_source_revision: string; expected_artifact_revision: string
   source_changed_since_execution: boolean; diff: string
   changes: {path: string; change: string}[]

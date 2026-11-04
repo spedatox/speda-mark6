@@ -25,6 +25,7 @@ import { useT } from '../lib/i18n'
 import { useProfile } from './Sidebar'
 import { SkeletonList } from './Skeleton'
 import ProjectWorkspace, { ProjectFolderPicker } from './ProjectWorkspace'
+import { CloudProjectForm } from './CloudProjects'
 
 /* ── Shared micro-styles ──────────────────────────────────────────────────── */
 const label: React.CSSProperties = {
@@ -318,6 +319,7 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
   const [description, setDescription] = useState(project.description)
   const [instructions, setInstructions] = useState(project.instructions)
   const [saved, setSaved] = useState(false)
+  const [cloudReady, setCloudReady] = useState(!project.cloud)
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [files, setFiles] = useState<ProjectFile[] | null>(null)
   const [uploading, setUploading] = useState<string[]>([])
@@ -404,7 +406,7 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
             userSelect: 'text',
           }}
         />
-        <Btn onClick={onNewChat} tint={tint}>
+        <Btn onClick={onNewChat} tint={tint} disabled={project.archived || !cloudReady}>
           <Glyph d={Ico.plus} size={12} /> {t.projects.newChatHere}
         </Btn>
         <IconBtn title={t.projects.delete} onClick={remove} danger>
@@ -412,7 +414,7 @@ function ProjectDetail({ config, project, accent, locale, onBack, onChanged, onO
         </IconBtn>
       </div>
 
-      <ProjectWorkspace key={`${config.agentId}:${project.id}`} config={config} projectId={project.id} locale={locale} />
+      <ProjectWorkspace key={`${config.agentId}:${project.id}`} config={config} projectId={project.id} project={project} locale={locale} onCloudReady={setCloudReady} />
 
       {uploadError && <p role="alert">{uploadError}</p>}
       {/* Instructions */}
@@ -572,6 +574,7 @@ export default function ProjectsView({
     if (initialProjectId != null) setOpenId(initialProjectId)
   }, [initialProjectId])
   const [creating, setCreating] = useState(false)
+  const [creatingCloud, setCreatingCloud] = useState(false)
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -704,14 +707,17 @@ export default function ProjectsView({
             <Btn onClick={() => setShowArchived(v => !v)} tint={showArchived ? 'var(--hb-amber)' : undefined}>
               {t.projects.showArchived}
             </Btn>
-            <Btn onClick={() => setCreating(v => !v)} tint="var(--hb-cyan-bright)">
+            <Btn onClick={() => { setCreatingCloud(false); setCreating(v => !v) }} tint="var(--hb-cyan-bright)">
               <Glyph d={Ico.plus} size={12} /> {t.projects.newProject}
             </Btn>
+            <Btn onClick={() => { setCreating(false); setCreatingCloud(v => !v) }}>{locale === 'tr' ? 'Bulut projesi' : 'New cloud project'}</Btn>
             <IconBtn title={t.projects.back} onClick={onClose}>
               <Glyph d={Ico.x} size={13} width={2.4} />
             </IconBtn>
           </div>
 
+          {creatingCloud && <CloudProjectForm config={config} onCancel={() => setCreatingCloud(false)}
+            onPrepared={id => { setCreatingCloud(false); setOpenId(id); void reload(); announce() }} />}
           {creating && <NewProjectForm config={config} locale={locale} onCancel={() => setCreating(false)} onCreate={create} />}
 
           {loadError && <p role="alert">{loadError}</p>}

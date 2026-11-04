@@ -14,6 +14,7 @@ import { useLiveSteering, mayClearSteeringDraft } from '@client/lib/useLiveSteer
 import ProjectWorkspace, { ProjectFolderPicker } from '@client/components/ProjectWorkspace'
 import { projectRequest } from '@client/lib/projectWorkspace'
 import { useProjectNavigation } from '@client/lib/useProjectNavigation'
+import { CloudProjectPanel } from '@client/components/CloudProjects'
 
 const execution = 'a'.repeat(32), step = 'b'.repeat(32)
 const config = { apiBase: 'https://worker.test', apiKey: 'fixture', agentId: 'optimus' }
@@ -81,6 +82,38 @@ test('project permission and configuration failures remain visible', async()=>{
     globalThis.fetch=async()=>Response.json({detail:'Project folder is not configured'},{status:503})
     await assert.rejects(projectRequest(config,'/folders'),/not configured/)
   } finally {globalThis.fetch=saved}
+})
+
+test('cloud environment publication is explicit and bound to the reviewed revision', async t => {
+  const saved = globalThis.fetch
+  const posted: unknown[] = []
+  const review = { id: 'e'.repeat(32), review_hash: 'c'.repeat(64), repository: 'example/repository',
+    branch: 'main', status: 'ready', commit: 'd'.repeat(40), check: 'git --version', project_id: 42 }
+  globalThis.fetch = async (_url, init) => {
+    if (init?.method === 'POST') {
+      posted.push(JSON.parse(String(init.body)))
+      review.status = 'published'
+      return Response.json(review)
+    }
+    return Response.json({ environments: [review], pull_requests: [] })
+  }
+  const selections: (string|null)[] = []
+  let view: Renderer.ReactTestRenderer
+  await act(async () => {
+    view = Renderer.create(<CloudProjectPanel config={config} project={{ id:42 } as any} refresh={0}
+      onPublished={id => selections.push(id)} />)
+    await delay()
+  })
+  t.after(async () => { await act(async () => view.unmount()); globalThis.fetch = saved })
+  assert.equal(posted.length, 0)
+  assert.equal(selections.at(-1), null)
+  await act(async () => {
+    const button = view.root.findAllByType('button').find(node => node.props.children === 'Publish environment')!
+    button.props.onClick()
+    await delay()
+  })
+  assert.deepEqual(posted, [{ environment_id: review.id, review_hash: review.review_hash }])
+  assert.equal(selections.at(-1), review.id)
 })
 
 test('reopening the app restores the authorized project chat and retains its binding', async t=>{

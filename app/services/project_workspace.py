@@ -71,6 +71,8 @@ class ProjectWorkspace:
 
     async def view(self, db, row):
         native = await db.get(Project, row.native_id)
+        cloud = await db.scalar(select(ProjectOperation.id).where(ProjectOperation.project_id == row.native_id,
+            ProjectOperation.kind == 'cloud_environment').limit(1))
         sessions = list(await db.scalars(select(Session).join(Room, Room.session_id == Session.id)
             .outerjoin(ClientSession, ClientSession.session_id == Session.id).where(
                 Room.project_id == row.native_id, Room.user_id == row.user_id,
@@ -81,7 +83,7 @@ class ProjectWorkspace:
         activity = max([row.updated_at, *[s.started_at.replace(tzinfo=None) for s in sessions]])
         return {key: getattr(row, key) for key in ('id', 'agent_id', 'name', 'description',
             'instructions', 'icon', 'color', 'pinned', 'archived', 'version')} | {
-            'workshop_project_id': row.native_id, 'cwd': native.path, 'host_id': native.host_id,
+            'workshop_project_id': row.native_id, 'cwd': native.path, 'host_id': native.host_id, 'cloud': bool(cloud),
             'created_at': row.created_at.isoformat() + 'Z', 'updated_at': row.updated_at.isoformat() + 'Z',
             'last_activity_at': activity.isoformat() + 'Z', 'chat_count': len(sessions), 'file_count': count}
 
@@ -159,6 +161,13 @@ class ProjectWorkspace:
         """Bounded code reads through the same snapshot inventory as execution."""
         native = await self.projects.owned(context.user_id, context.project_id)
         root = Path(native.path)
+        if not task_id:
+            pinned = (getattr(context, 'extra', {}).get('project_context') or {}).get('cloud_environment')
+            if not pinned:
+                async with self.sessions() as db:
+                    pinned = await self.projects.cloud.binding(db, native.id, allow_draft=True)
+            if pinned:
+                root = await self.projects.cloud.source(pinned)
         if task_id:
             async with self.sessions() as db:
                 task = await db.get(ProjectTask, task_id)
@@ -281,7 +290,10 @@ class ProjectWorkspace:
     async def state(self, owner, agent, identity):
         native_id = await self.resolve(owner, agent, identity)
         native = await self.projects.owned(owner, native_id)
-        revision, manifest = await asyncio.to_thread(inventory, native.path)
+        async with self.sessions() as db:
+            environment = await self.projects.cloud.binding(db, native_id, allow_draft=True)
+        source = await self.projects.cloud.source(environment) if environment else Path(native.path)
+        revision, manifest = await asyncio.to_thread(inventory, source)
         workshop = await asyncio.to_thread(self.projects.workshop.inspect, native.legacy_id)
         async with self.sessions() as db:
             tasks = list(await db.scalars(select(ProjectTask).where(ProjectTask.project_id == native_id,
@@ -292,6 +304,7 @@ class ProjectWorkspace:
                 ProjectOperation.kind.in_(['integrate','rollback'])).order_by(ProjectOperation.id.desc()).limit(50)))
         return {'project_id': identity, 'cwd': native.path, 'host_id': native.host_id,
             'execution_enabled': self.projects.enabled,
+            'environment': environment,
             'source_revision': revision, 'files': [r[0] for r in manifest[:1000]],
             'files_omitted': max(0, len(manifest)-1000), 'checkpoint': workshop.get('checkpoint'),
             'workshop_revision': workshop['revision'], 'claims': workshop.get('active_runs', []),
@@ -300,7 +313,8 @@ class ProjectWorkspace:
                 else t.status, 'stored_status': t.status, 'result': t.result,
                 'base_revision': t.base_revision} for t in tasks],
             'operations': [{'id': o.id, 'kind': o.kind, 'status': o.status, 'details': o.details} for o in operations],
-            'git': await self.git_status(native.path)}
+            'git': {'available': False, 'status': '', 'truncated': False} if environment
+            else await self.git_status(native.path)}
 
     @staticmethod
     async def git_status(path):
@@ -339,7 +353,9 @@ class ProjectWorkspace:
         artifact = self.projects.state / 'artifacts' / task.id
         if Path((task.result or {}).get('workspace', '')).resolve() != artifact.resolve():
             raise CoordinationError('artifact_changed', 'Artifact location differs from its execution', 409)
-        before, old_rows = await asyncio.to_thread(inventory, native.path)
+        environment = (task.result or {}).get('cloud_environment')
+        source = await self.projects.cloud.source(environment) if environment else Path(native.path)
+        before, old_rows = await asyncio.to_thread(inventory, source)
         after, new_rows = await asyncio.to_thread(inventory, artifact)
         if after != task.result.get('revision'):
             raise CoordinationError('artifact_changed', 'Artifact content changed', 409)
@@ -347,14 +363,16 @@ class ProjectWorkspace:
         changes = [{'path':n, 'change':'delete' if n not in new else 'add' if n not in old else 'modify',
             'before':old.get(n), 'after':new.get(n)} for n in sorted(old.keys() | new.keys()) if old.get(n) != new.get(n)]
         from app.services.project_release import release_diff
-        diff = await asyncio.to_thread(release_diff, Path(native.path), artifact, changes)
+        diff = await asyncio.to_thread(release_diff, source, artifact, changes)
         return {'task_id':task.id, 'expected_source_revision':before, 'expected_artifact_revision':after,
             'base_revision':task.base_revision,
             'source_changed_since_execution':before != task.result.get('canonical_source_revision', task.base_revision),
-            'changes':changes, 'diff':diff}
+            'changes':changes, 'diff':diff, 'environment':environment}
 
     async def integrate(self, owner, agent, identity, body):
         review = await self.changes(owner, agent, identity, body.task_id)
+        if review['environment']:
+            raise CoordinationError('cloud_pr_required', 'Open a pull request for changes from a cloud environment', 409)
         if review['source_changed_since_execution']:
             raise CoordinationError('source_changed', 'Folder changed since this task started; reconcile changes in a new task before applying', 409)
         from app.services.project_lifecycle import ProjectLifecycle

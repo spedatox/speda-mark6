@@ -173,6 +173,7 @@ data class Project(
     val lastActivityAt: String = "",
     val chatCount: Int = 0,
     val fileCount: Int = 0,
+    val cloud: Boolean = false,
 )
 
 /** One document in a project's knowledge base. The backend stores the EXTRACTED

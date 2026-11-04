@@ -127,6 +127,9 @@ class ClientCompatibility:
             raise CoordinationError("budget_paused", "Configure and unpause the coordination budget before paid work")
         await self.coordinator.preflight_shared_spending(owner, aid, body, images=bool(body.attachments))
         project_id=await self.selected_project(owner,body,presentation_id)
+        if project_id and self.coordinator.projects:
+            async with self.sessions() as db:
+                await self.coordinator.projects.cloud.binding(db, project_id)
         from app.services.room_attachments import Attachments, prepare_client_attachment
         prepared = []
         replay_id = None

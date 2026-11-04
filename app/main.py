@@ -172,6 +172,7 @@ async def lifespan(app: FastAPI):
     from app.services.projects import Projects
     projects = Projects(AsyncSessionLocal, coordinator, settings)
     coordinator.projects = projects
+    await projects.cloud.recover()
     from app.services.project_release import ProjectRelease
     await ProjectRelease(projects).recover()
     from app.services.worker_control import WorkerControl
@@ -285,6 +286,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.warning('startup_recovery_failed',exc_info=False)
     await chat_turns.shutdown()
+    await projects.cloud.shutdown()
     await coordinator.shutdown()
     await telegram.close()
     await indexer.aclose()
@@ -344,6 +346,8 @@ def create_app() -> FastAPI:
     app.include_router(client_compat_router)
     from app.routers.project_workspace import router as project_workspace_router
     app.include_router(project_workspace_router)
+    from app.routers.cloud_projects import router as cloud_projects_router
+    app.include_router(cloud_projects_router)
     from app.routers.mcp import router as mcp_router
     app.include_router(mcp_router)
     from app.routers.connections import router as connections_router

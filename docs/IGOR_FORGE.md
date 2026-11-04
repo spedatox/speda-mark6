@@ -1,9 +1,32 @@
 # IGOR and FORGE: conversational engineering and security
 
-Implemented locally, 27 October 2026. This extends renovated Mark VI, leaving
-the original `first` and `final` applications unchanged. It supersedes the older
-statements in ORCHESTRATION.md and LEGION.md that FORGE must wait for a supervisor
-contribution to finish before execution begins.
+The IGOR and Forge integration supersedes the earlier requirement for Forge to
+wait until a supervisor contribution finishes before starting a task.
+
+## Cloud projects
+
+In Heartbreaker or SPEDA Go, open **Projects → New cloud project** and enter a
+GitHub repository and branch. Forge prepares the repository on the execution
+host and runs the environment check in the configured coder image. The project
+screen shows the commit, image ID, and check output before publication.
+
+Publishing makes that revision available for new chats. Each task gets a
+separate checkout, with the pinned source and image recorded on its result.
+Independent chats can start work in parallel. A follow-up that names a saved
+task uses its artifact and original environment revision. Preparing a new
+revision keeps existing tasks and artifacts available for review.
+
+The environment check runs on a disposable copy. Put reusable tools and
+dependencies in the trusted prebuilt image. The check and coding Cells have
+networking disabled. GitHub clone and publication run on the host using a
+configured repository-scoped credential when required. The credential is kept
+out of the coding Cells.
+
+Review a completed task's file changes and choose **Open draft pull request**.
+The host records the operation before pushing a task branch, then opens a draft
+against the environment's base branch. A lost acknowledgement leaves the operation
+available for reconciliation by its exact commit. This flow uses the existing
+project task and operation journals, including their restart and budget rules.
 
 ## Authority and working execution path
 

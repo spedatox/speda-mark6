@@ -70,6 +70,8 @@ class ProjectLifecycle:
             task = await db.get(ProjectTask, body.task_id)
             if not task or task.project_id != project_id or task.status != "succeeded" or not task.result:
                 raise CoordinationError("artifact_unavailable", "Only a completed artifact from this project can be integrated")
+            if task.result.get('cloud_environment'):
+                raise CoordinationError('cloud_pr_required', 'Open a pull request for changes from a cloud environment', 409)
         artifact = Path(task.result["workspace"])
         expected_path = self.projects.state / "artifacts" / task.id
         if artifact.resolve() != expected_path.resolve() or task.result.get("revision") != body.expected_artifact_revision:
