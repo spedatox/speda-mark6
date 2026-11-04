@@ -135,6 +135,54 @@ async def test_hisar_corrupt_original_never_publishes(memory):
     assert not (await LibraryService(indexer).search(memory.context(), "Original")).results
 
 
+async def test_deployed_hisar_routes_authenticate_and_retry_on_the_new_queue(memory):
+    import httpx
+    from app.main import create_app
+    from app.models.iacon import IaconWork
+    from app.services.iacon_budget import MaintenanceBudget
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.iacon_worker import Orion
+    from app.services.library_controls import LibraryControls
+    from sqlalchemy import select
+
+    hisar = Catalog()
+    doc, revision = hisar.add("Course", "Original calculus notes.")
+    budget = MaintenanceBudget(memory.sessions, None)
+    orion = Orion(Catalogue(memory.store), budget, None, None)
+    indexer = LibraryIndexer(hisar, memory.sessions, enqueue=orion.enqueue)
+    orion.library_indexer = indexer
+    app = create_app()
+    app.state.library = LibraryService(indexer)
+    app.state.library_controls = LibraryControls(indexer, budget)
+    app.state.orion = orion
+    await orion.enqueue(user_id=1, kind="interpret", unique_key="unrelated", payload={})
+    hisar.bad_bytes = True
+    api_key = {"X-API-Key": "test-only-key"}
+    scheduler = {"X-N8N-Secret": "test-only-n8n"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://igor") as client:
+        assert (await client.get("/library/settings", headers=scheduler)).status_code == 401
+        assert (await client.get("/library/settings", headers=api_key)).status_code == 401
+        client.headers.update({**api_key, **scheduler})
+        assert (await client.get("/library/settings")).json()["connected"]
+        progress = {"document_ids": [doc]}
+        accepted = await client.post("/library/reconcile?full=true")
+        assert accepted.json()["queued"] == 1
+        assert (await client.post("/library/progress", json=progress)).json()["records"][0]["state"] == "failed"
+
+        # Hisar records a retry event before posting to the same reconcile route.
+        hisar.bad_bytes = False
+        hisar.events.append({"sequence": 2, "event_type": "index_requested", "document_id": doc})
+        assert (await client.post("/library/reconcile")).json()["queued"] == 1
+        ready = (await client.post("/library/progress", json=progress)).json()["records"][0]
+        assert (ready["state"], ready["revision_id"], ready["passages"]) == ("ready_keyword", revision, 1)
+        assert hisar.receipts[-1] == (doc, revision, "ready_keyword")
+        match = (await app.state.library.search(memory.context(), "calculus")).results[0]
+        assert (await client.get(f"/library/sources/{match.citation_id}")).json()["content"] == "Original calculus notes."
+
+    async with memory.sessions() as db:
+        assert await db.scalar(select(IaconWork.status).where(IaconWork.kind == "interpret")) == "pending"
+
+
 def test_native_document_extractors_keep_tables_formulas_and_pdf_review():
     import io
     from docx import Document

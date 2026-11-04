@@ -19,7 +19,7 @@ def context():
         db=None, timezone=settings.owner_timezone, agent_id="orion", task_role="background")
 
 
-def scheduler(request):
+def scheduler(request: Request):
     from app.config import settings
     if not settings.n8n_secret or not hmac.compare_digest(request.headers.get("X-N8N-Secret", ""), settings.n8n_secret):
         raise HTTPException(401, "Invalid scheduler secret")

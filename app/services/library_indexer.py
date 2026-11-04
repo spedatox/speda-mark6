@@ -115,24 +115,10 @@ class LibraryIndexer:
             return queued
         for revision in record.get("revisions", []):
             generation_id = self.generation_id(revision["id"])
+            retry_active = retry and revision["id"] == doc["active_revision_id"]
             async with self.sessions() as db:
                 generation = await db.get(LibraryIndexGeneration, generation_id)
-                if generation and generation.status == "processing":
-                    continue
-                if generation and retry and revision["id"] == doc["active_revision_id"]:
-                    from app.models.iacon import IaconWork as BackgroundJob
-                    running = await db.scalar(select(BackgroundJob.id).where(
-                        BackgroundJob.user_id == self.owner_user_id,
-                        BackgroundJob.kind.in_(("library_index", "library_embed")), BackgroundJob.status == "running",
-                        BackgroundJob.payload["source_id"].as_string() == self.source_id,
-                        BackgroundJob.payload["revision_id"].as_string() == revision["id"],
-                    ).limit(1))
-                    if running is not None:
-                        continue
-                    generation.status = "pending"
-                    generation.progress = {"stage": "queued"}
-                    await db.commit()
-                if generation and generation.status in {"ready_keyword", "ready_ocr", "needs_review"}:
+                if generation and not retry_active and generation.status in {"ready_keyword", "ready_ocr", "needs_review"}:
                     if generation.status in {"ready_keyword", "ready_ocr"}:
                         queued += await self._queue_embeddings(doc["id"], revision["id"])
                     continue
@@ -146,7 +132,8 @@ class LibraryIndexer:
             job = await enqueue(kind="library_index", unique_key=generation_id,
                                 user_id=self.owner_user_id,
                                 payload={"document_id": doc["id"], "revision_id": revision["id"],
-                                         "source_id": self.source_id, "extractor_fingerprint": self.fingerprint})
+                                         "source_id": self.source_id, "extractor_fingerprint": self.fingerprint},
+                                **({"retry": True} if retry_active else {}))
             queued += int(job is not None)
         return queued
 

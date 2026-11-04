@@ -64,6 +64,14 @@ POST `/iacon/hall-of-records/sync` on the library synchronization schedule. Both
 requests carry the API and scheduler headers. The old `/trigger/orion` endpoint
 now enters this governed worker, not an unrestricted agent audit.
 
+Existing Hisar deployments can keep using Igor's `/library/reconcile`,
+`/library/settings` and `/library/progress` endpoints with both headers.
+Reconcile replays Hisar's durable events and starts bounded document indexing
+through the Iacon queue, without starting conversation maintenance. Older
+`/library/sources/{id}` citation links still check Hisar access on every read.
+Settings report keyword search availability; OCR and paid embeddings are not
+enabled by this compatibility layer.
+
 Configure the three `IACON_TELEGRAM_*` values in `.env`, and enable
 `telegram_enabled` in the persisted policy. The bot's Telegram trigger in n8n
 forwards the original update JSON to `/iacon/telegram/update`; callback-query

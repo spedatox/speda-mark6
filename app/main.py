@@ -147,6 +147,7 @@ async def lifespan(app: FastAPI):
     from app.services.hisar_library_client import client_from_settings
     from app.services.library_indexer import LibraryIndexer
     from app.services.library import LibraryService
+    from app.services.library_controls import LibraryControls
     from app.skills.iacon import IaconProposeSkill
     catalogue = Catalogue(memory_store)
     budget = MaintenanceBudget(AsyncSessionLocal, client)
@@ -248,6 +249,7 @@ async def lifespan(app: FastAPI):
     app.state.orion = preparer
     app.state.iacon_telegram = telegram
     app.state.library = library
+    app.state.library_controls = LibraryControls(indexer, budget)
     app.state.profiles = profiles
     app.state.coordinator = coordinator
     app.state.coordination_budget = coordination_budget
@@ -329,7 +331,7 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-N8N-Secret", "X-Chat-Format"])
 
     # Routers
-    from app.routers import admin, agents, chat, health, trigger, models, iacon
+    from app.routers import admin, agents, chat, health, trigger, models, iacon, library
 
     app.include_router(health.router)
     app.include_router(chat.router)
@@ -340,6 +342,7 @@ def create_app() -> FastAPI:
     app.include_router(configuration_router)
     app.include_router(models.router)
     app.include_router(iacon.router)
+    app.include_router(library.router)
     from app.integration import include_routes
     include_routes(app)
     from app.routers.client_compat import router as client_compat_router

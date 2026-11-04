@@ -22,10 +22,11 @@ class Orion:
         self.lock = asyncio.Lock()
         self.library_indexer = None
 
-    async def enqueue(self, *, user_id, kind, unique_key, payload, db=None):
+    async def enqueue(self, *, user_id, kind, unique_key, payload, db=None, retry=False):
         if db is None:
             async with self.sessions() as own, own.begin():
-                return await self.enqueue(user_id=user_id, kind=kind, unique_key=unique_key, payload=payload, db=own)
+                return await self.enqueue(user_id=user_id, kind=kind, unique_key=unique_key, payload=payload,
+                                          db=own, retry=retry)
         insert = sqlite_insert if db.bind.dialect.name == "sqlite" else pg_insert
         key = kind + ":" + unique_key
         result = await db.execute(insert(IaconWork).values(id=uuid4().hex, user_id=user_id,
@@ -37,6 +38,18 @@ class Orion:
                 IaconWork.work_key == key))).scalar_one()
             if prior.payload != payload:
                 raise Conflict("Work key was reused for a different payload")
+            if retry and kind == "library_index":
+                now = datetime.now(timezone.utc)
+                changed = await db.execute(update(IaconWork).where(
+                    IaconWork.id == prior.id, IaconWork.status.in_(("held", "quarantined", "done")),
+                ).values(status="pending", error=None, result=None, claim=None, available_at=now, updated_at=now))
+                if changed.rowcount:
+                    from app.models.library import LibraryIndexGeneration
+                    await db.execute(update(LibraryIndexGeneration).where(
+                        LibraryIndexGeneration.id == unique_key,
+                        LibraryIndexGeneration.status.not_in(("ready_keyword", "ready_ocr")),
+                    ).values(status="pending", progress={"stage": "queued"}, failure_details=None))
+                    return key
         return key if result.rowcount else None
 
     async def intake(self, user_id):
@@ -82,15 +95,17 @@ class Orion:
                 raise Conflict("Work changed during resolution")
             return {"status": "discarded" if body.action == "discard" else "pending"}
 
-    async def drain(self, context, *, limit=None):
-        if not self.enabled or self.lock.locked():
+    async def drain(self, context, *, limit=None, library_only=False):
+        if (not self.enabled and not library_only) or self.lock.locked():
             return {"status": "disabled_or_busy", "processed": 0}
         _, policy = await self.budget.policy(context.user_id)
         if policy.paused:
             return {"status": "paused", "processed": 0}
         outcomes = []
         async with self.lock:
-            await self.intake(context.user_id)
+            if not library_only:
+                await self.intake(context.user_id)
+            scope = (IaconWork.kind == "library_index",) if library_only else ()
             deadline = monotonic() + policy.run_seconds
             for _ in range(min(limit or policy.units_per_run, policy.units_per_run)):
                 if monotonic() >= deadline:
@@ -100,10 +115,10 @@ class Orion:
                 async with self.sessions() as db, db.begin():
                     # Expired leases resume exact saved responses; unknown calls remain held.
                     await db.execute(update(IaconWork).where(IaconWork.user_id == context.user_id,
-                        IaconWork.status == "running", IaconWork.available_at < now
+                        IaconWork.status == "running", IaconWork.available_at < now, *scope
                     ).values(status="pending", claim=None))
                     job = (await db.execute(select(IaconWork).where(IaconWork.user_id == context.user_id,
-                        IaconWork.status == "pending", IaconWork.available_at <= now
+                        IaconWork.status == "pending", IaconWork.available_at <= now, *scope
                     ).order_by(case((IaconWork.kind.in_(["library_index", "refresh"]), 0), else_=1),
                                IaconWork.available_at, IaconWork.id).limit(1))).scalar_one_or_none()
                     if not job:
@@ -129,7 +144,9 @@ class Orion:
                     await db.execute(update(IaconWork).where(IaconWork.id == job.id, IaconWork.claim == claim
                     ).values(status=status, result=result, error=error, claim=None,
                              available_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)))
-                    if status in {"held", "quarantined"} or (result or {}).get("status") == "rejected":
+                    if job.kind != "library_index" and (
+                        status in {"held", "quarantined"} or (result or {}).get("status") == "rejected"
+                    ):
                         source_ids = ([job.payload["source_id"]] if "source_id" in job.payload else
                                       [e["source_id"] for e in job.payload.get("command", {}).get("evidence", [])])
                         sources = (await db.execute(select(MemoryChange).where(
