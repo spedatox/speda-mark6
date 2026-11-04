@@ -11,7 +11,7 @@ class MemoryLookupSkill(Skill):
     description = (
         "Retrieve a bounded batch of source-linked personal memory missing from the supplied context. "
         "Use it for a specific person, past event, or exact source detail needed to answer the owner. "
-        "Only one lookup is allowed per turn, including when requesting tools in parallel. "
+        "Only one lookup is allowed per turn, including when requesting tools in parallel. If used, answer from available evidence and state any gaps. "
         "Returns attributed evidence, ambiguity and incomplete-coverage status within one shared turn budget."
     )
     input_schema = {"type": "object", "properties": {
@@ -39,9 +39,6 @@ class MemoryLookupSkill(Skill):
         return context.memory_budget.lookup_batches < 1
 
     async def execute(self, args, context):
-        if not self.offered(context):
-            return json.dumps({"status": "budget_exhausted",
-                "reason": "This turn used its lookup. Answer from the evidence already available and state any gaps."})
         query = args.get("query", "")
         ids = args.get("source_ids", [])
         if not isinstance(query, str) or len(query) > 2000 or not isinstance(ids, list) or len(ids) > 8 or any(type(i) is not int for i in ids):
