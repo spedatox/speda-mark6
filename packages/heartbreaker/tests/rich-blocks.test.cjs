@@ -124,6 +124,11 @@ test('native practice and simulation follow the Android fixture contract', () =>
   const practice = parseNativeArtifact(JSON.stringify(fixtures.practice))
   assert.equal(practice.kind, 'practice')
   assert.ok(answerMatches(' 2\n', practice.items[0].answer))
+  assert.equal(practice.items[0].choice, undefined)
+  assert.equal(practice.items[1].choice.answerIndex, 1)
+  assert.equal(practice.items[1].answer, 'Remainder')
+  assert.equal(parseNativeArtifact(JSON.stringify(fixtures.practice).replace('"answerIndex":1', '"answerIndex":3')), null)
+  assert.equal(parseNativeArtifact(JSON.stringify(fixtures.practice).replace('"Product"', '" Remainder "')), null)
   assert.equal(answerMatches('A  B', 'A B'), false)
   assert.equal(answerMatches('a', 'A'), false)
   const explore = parseNativeArtifact(JSON.stringify(fixtures.explore))
@@ -132,4 +137,14 @@ test('native practice and simulation follow the Android fixture contract', () =>
   }
   fixtures.explore.cases.at(-1).through = 100
   assert.equal(parseNativeArtifact(JSON.stringify(fixtures.explore)), null)
+})
+
+test('Mark VI SVG kit resolves renderer tokens for the exact agent example', () => {
+  const example = fs.readFileSync(path.join(__dirname, '../../../app/profiles/markvi-diagram.svg'), 'utf8')
+  const doc = buildWidgetDocument(example, { '--hb-cyan-bright': '#abcdef' }, true)
+  assert.match(doc, /--hb-cyan-bright:#abcdef/)
+  assert.match(doc, /svg\.mkvi-diagram \.mkvi-decision\s*\{[^}]+stroke: var\(--hb-cyan-bright\)/)
+  assert.doesNotMatch(doc, /__(?:PANEL|TEXT|MUTED|ACCENT|GOOD|BAD)__/)
+  const classes = [...example.matchAll(/class="(mkvi-[\w-]+)"/g)].map(([, name]) => name)
+  for (const name of new Set(classes)) assert.ok(doc.includes('.' + name), name)
 })

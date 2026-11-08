@@ -1,5 +1,6 @@
 """Profile-owned presentation policy, applied only by the orchestrator's builder."""
 import hashlib
+from pathlib import Path
 
 
 CANVAS_GUIDANCE = r"""
@@ -94,11 +95,12 @@ with a single JSON object. The client supplies the entire interface, labels and
 behavior. Supply the content in the user's language. Do not include HTML, CSS,
 JS, expressions to evaluate, or Markdown in these JSON fields.
 
-Practice format:
-{"kind":"practice","description":"Predict the output before running the code.","items":[{"prompt":"What does this print?","code":"System.out.println(12 / 5);","answer":"2","explanation":"Both operands are integers, so the fractional part is discarded."}]}
-Use 1–8 items. `code` is optional. Use a literal short answer, with exact case
-and internal spacing, and explain why it is correct. The card reveals the
-solution only after the learner checks an answer or explicitly asks to reveal it.
+Practice Quiz format. Mix multiple-choice and typed-answer items as useful:
+{"kind":"practice","description":"Trace the code before answering.","items":[{"type":"text","prompt":"What does this print?","code":"System.out.println(12 / 5);","answer":"2","explanation":"Integer division truncates the fractional part."},{"type":"choice","prompt":"What does % return?","options":["Quotient","Remainder","Product"],"answerIndex":1,"explanation":"The % operator returns the remainder."}]}
+Use 1–8 items. `code` is optional. Typed answers are literal, including case and
+internal spacing. Multiple choice uses 2–6 distinct options, one correct answer
+and a zero-based `answerIndex`. Use plausible distractors and vary the position
+of the correct option. Explain why each answer is correct.
 
 Explore format:
 {"kind":"explore","description":"Move the score to test which branch wins.","parameter":{"label":"Score","min":-10,"max":110,"initial":79,"unit":"pts"},"cases":[{"through":-1,"label":"Invalid","detail":"The score is below zero."},{"through":89,"label":"Below A","detail":"The score is valid and below 90."},{"through":100,"label":"A","detail":"The score is at least 90 and at most 100."},{"through":110,"label":"Invalid","detail":"The score is above 100."}]}
@@ -110,13 +112,40 @@ Use sandboxed HTML only for custom interactions outside these formats, and SVG
 for spatial diagrams that need authored geometry.
 """
 
-CANVAS_REVISION = hashlib.sha256((CANVAS_GUIDANCE + ULTRON_TUTORING + NATIVE_ARTIFACTS).encode()).hexdigest()
+MARK_VI_SVG = r"""
+### Mark VI SVG design pack
+For an SVG diagram, use a `svg | Title` fence and put `class="mkvi-diagram"`
+on the root. The renderer supplies the active agent colors and typography.
+Use the supplied classes with plain SVG geometry. Do not hardcode colors,
+font sizes, backgrounds, styles or scripts for the pack.
+Use a compact viewBox around the artwork, typically 720 by 360–440. Leave
+24–32 units of margin, including around connector heads and text. Use
+`mkvi-kicker`, `mkvi-heading` and `mkvi-divider` for hierarchy. Use
+`mkvi-node` for steps, `mkvi-decision` on a diamond, and `mkvi-accept`
+or `mkvi-reject` for distinct outcomes. Use `mkvi-link` and `mkvi-arrow`
+on connectors, `mkvi-branch` for branch labels, `mkvi-label` for node labels,
+and `mkvi-note` for short secondary text. Put titles and descriptions in
+SVG title and desc elements. Use explicit text positions, short lines and
+orthogonal connectors with clear arrowheads. Keep branches separated, make
+the reading direction obvious, and fit labels comfortably inside their nodes.
+Split sprawling diagrams across panels. Use the native timeline, chart or
+table for ordered events, data series or comparisons.
+"""
+
+MARK_VI_SVG_EXAMPLE = r"""
+Example geometry and hierarchy. Adapt the content and layout to the question:
+```svg | Prime check input guard
+""" + Path(__file__).with_name('markvi-diagram.svg').read_text(encoding='utf-8') + "```\n"
+
+CANVAS_REVISION = hashlib.sha256(
+    (CANVAS_GUIDANCE + ULTRON_TUTORING + NATIVE_ARTIFACTS + MARK_VI_SVG + MARK_VI_SVG_EXAMPLE).encode()
+).hexdigest()
 
 
 def canvas_guidance(variables, *, tutoring=False):
-    native = NATIVE_ARTIFACTS if variables.get('native_artifacts') else ''
+    native = NATIVE_ARTIFACTS + MARK_VI_SVG if variables.get('native_artifacts') else ''
     if not variables.get('canvas'):
         return native
     limit = max(1, min(32, int(variables.get('canvas_max_panels', 24))))
     return (CANVAS_GUIDANCE + f'\nStage at most {limit} authored panels in this turn.\n'
-            + (ULTRON_TUTORING if tutoring else '') + native)
+            + (ULTRON_TUTORING if tutoring else '') + native + (MARK_VI_SVG_EXAMPLE if native else ''))

@@ -990,9 +990,9 @@ const tr: Dict = {
     telegram: 'TELEGRAM',
   },
   artifact: {
-    practice: 'Alıştırma', explore: 'Simülasyon', questions: 'Sorular', question: 'Soru', solved: 'çözüldü',
-    yourAnswer: 'Tahminin', enterAnswer: 'Cevabını yaz', check: 'Cevabı kontrol et', correct: 'Doğru',
-    retry: 'Bir tahmin daha yap.', reveal: 'Çözümü göster', solution: 'Çözüm', reset: 'Sıfırla',
+    practice: 'Alıştırma Testi', explore: 'Simülasyon', questions: 'Sorular', question: 'Soru', solved: 'çözüldü',
+    yourAnswer: 'Cevabın', chooseAnswer: 'Bir cevap seç', enterAnswer: 'Cevabını yaz', check: 'Cevabı kontrol et', correct: 'Doğru',
+    retry: 'Başka bir cevap dene.', reveal: 'Çözümü göster', solution: 'Çözüm', reset: 'Sıfırla',
     next: 'Sonraki soru', activeOutcome: 'Anlık sonuç', outcomes: 'Sonuç aralıkları', invalid: 'Bileşen kaynağı',
   },
   connectionSetup: {

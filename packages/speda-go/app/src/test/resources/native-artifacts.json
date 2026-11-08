@@ -3,7 +3,8 @@
     "kind": "practice",
     "description": "Predict the exact output.",
     "items": [
-      {"prompt": "What is printed?", "code": "System.out.println(12 / 5);", "answer": "2", "explanation": "Integer division truncates the fraction."}
+      {"prompt": "What is printed?", "code": "System.out.println(12 / 5);", "answer": "2", "explanation": "Integer division truncates the fraction."},
+      {"type": "choice", "prompt": "What does % return?", "options": ["Quotient", "Remainder", "Product"], "answerIndex": 1, "explanation": "The % operator returns the remainder."}
     ]
   },
   "explore": {

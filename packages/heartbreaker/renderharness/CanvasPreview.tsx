@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import VoiceCanvas from '../src/renderer/src/components/VoiceCanvas'
 import MovableVoiceOrb from '../src/renderer/src/components/MovableVoiceOrb'
 import { splitPanels, type VoicePanel } from '../src/renderer/src/lib/voicePanels'
+import primeDiagram from '../../../app/profiles/markvi-diagram.svg?raw'
 
 const fence = (kind: string, body: string) => `\`\`\`${kind}\n${body}\n\`\`\``
 const silence = () => 0
@@ -25,7 +26,8 @@ export default function CanvasPreview({ fixtures, onClose }: { fixtures: [string
     items: [
       { prompt: 'What does Java print?', code: 'int a = 12, b = 5;\nSystem.out.println(a / b + " " + a % b);', answer: '2 2',
         explanation: 'Integer division gives the quotient 2. The remainder is 12 − 5 × 2, which is also 2.' },
-      { prompt: 'How many times does the loop run?', code: 'int n = 505, count = 0;\nwhile (n > 0) { count++; n /= 10; }', answer: '3',
+      { type: 'choice', prompt: 'How many times does the loop run?', code: 'int n = 505, count = 0;\nwhile (n > 0) { count++; n /= 10; }',
+        options: ['2 passes', '3 passes', '4 passes', 'It never terminates'], answerIndex: 1,
         explanation: 'Each pass drops one digit. The values are 505, 50, 5, then 0.' },
       { prompt: 'What does the final print show?', code: 'int x = 0;\nwhile (x < 3) x += 2;\nSystem.out.println(x);', answer: '4',
         explanation: 'The loop enters with 0 and 2. After the second pass, 4 fails the condition.' },
@@ -45,13 +47,13 @@ export default function CanvasPreview({ fixtures, onClose }: { fixtures: [string
     ],
   }))
   const source = [practice, explore,
+    fence('svg | Prime check input guard', primeDiagram),
     fence('timeline | Tuesday timeline', '09:00 — Workplace Application I\n16:20 — Appointment at Etlik Hospital'),
     fixtures[2][1], fixtures[0][1], fence('chart | Attendance overview', JSON.stringify({ type: 'bar', xKey: 'course', series: [{ key: 'hours', label: 'Hours' }], data: [
     { course: 'Logistics', hours: 3 }, { course: 'Marketing Principles', hours: 7 }, { course: 'Data Structures', hours: 9 }, { course: 'Workplace Application', hours: 16 },
   ] })), fixtures[3][1], fixtures[1][1],
     fence('stat | Focus', 'THIS WEEK\nFriday morning\nAttend Marketing'),
     fence('stat | Coursework', 'MARKETING / MAR411\nTwo courses\nKeep the full names readable'),
-    fence('svg | Tall diagram', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 830"><path d="M130 40V800" stroke="#36abca"/><text x="130" y="38" text-anchor="middle" font-size="24" fill="#dbe6ec">Start</text><text x="130" y="810" text-anchor="middle" font-size="24" fill="#dbe6ec">End</text></svg>'),
     fence('card | Appointment details', 'Oncology — Internal Medicine\nTime: 16:20\nLocation: Varlık, Halil Sezai Erkut Cd. No:5, Yenimahalle\nNote: Full address remains readable.'),
   ].join('\n\n')
   const panels: VoicePanel[] = [

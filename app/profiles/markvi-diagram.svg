@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="mkvi-diagram" viewBox="0 0 720 400" role="img" aria-labelledby="title desc">
+  <title id="title">Prime check input guard</title>
+  <desc id="desc">If n is one or less, return false. Otherwise continue to divisor checks.</desc>
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path class="mkvi-arrow" d="M0 0 L10 5 L0 10 Z"/>
+    </marker>
+  </defs>
+  <text class="mkvi-kicker" x="32" y="35">ALGORITHM / FIRST DECISION</text>
+  <text class="mkvi-heading" x="32" y="72">Prime check: input guard</text>
+  <path class="mkvi-divider" d="M32 94 H688"/>
+  <path class="mkvi-link" d="M257 200 H181 V284" marker-end="url(#tip)"/>
+  <path class="mkvi-link" d="M463 200 H539 V284" marker-end="url(#tip)"/>
+  <polygon class="mkvi-decision" points="360,112 514,178 360,244 206,178"/>
+  <text class="mkvi-label" x="360" y="174" text-anchor="middle">n ≤ 1?</text>
+  <text class="mkvi-note" x="360" y="201" text-anchor="middle">Before the loop</text>
+  <text class="mkvi-branch" x="142" y="242" text-anchor="middle">YES</text>
+  <text class="mkvi-branch" x="575" y="242" text-anchor="middle">NO</text>
+  <rect class="mkvi-reject" x="34" y="292" width="294" height="80" rx="12"/>
+  <rect class="mkvi-accept" x="392" y="292" width="294" height="80" rx="12"/>
+  <text class="mkvi-label" x="181" y="325" text-anchor="middle">Return false</text>
+  <text class="mkvi-note" x="181" y="352" text-anchor="middle">Primes are greater than 1</text>
+  <text class="mkvi-label" x="539" y="325" text-anchor="middle">Continue</text>
+  <text class="mkvi-note" x="539" y="352" text-anchor="middle">Test divisors up to √n</text>
+</svg>

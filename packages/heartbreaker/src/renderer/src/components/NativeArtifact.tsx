@@ -5,7 +5,7 @@ import { answerMatches, parseNativeArtifact, type Explore, type Practice } from 
 import { useRenderSurface } from '../lib/renderSurface'
 import CodeBlock from './CodeBlock'
 
-type Attempt = { text: string; result?: 'correct' | 'retry' | 'revealed' }
+type Attempt = { response: string | number; result?: 'correct' | 'retry' | 'revealed' }
 
 function PracticeLab({ spec }: { spec: Practice }) {
   const t = useT().artifact
@@ -13,10 +13,13 @@ function PracticeLab({ spec }: { spec: Practice }) {
   const [attempts, setAttempts] = useState<Record<number, Attempt>>({})
   const field = useId()
   const item = spec.items[index]
-  const attempt = attempts[index] ?? { text: '' }
+  const attempt = attempts[index]
   const solved = Object.values(attempts).filter(value => value.result === 'correct').length
   const update = (value: Attempt) => setAttempts(previous => ({ ...previous, [index]: value }))
-  const shown = attempt.result === 'correct' || attempt.result === 'revealed'
+  const shown = attempt?.result === 'correct' || attempt?.result === 'revealed'
+  const typed = typeof attempt?.response === 'string' ? attempt.response : ''
+  const chosen = typeof attempt?.response === 'number' ? attempt.response : null
+  const canCheck = item.choice ? chosen !== null : !!typed.trim()
   return <>
     <div className="hb-lab-progress">
       <div className="hb-lab-steps" role="group" aria-label={t.questions}>
@@ -29,23 +32,31 @@ function PracticeLab({ spec }: { spec: Practice }) {
     <div className="hb-lab-work">
       <h4>{item.prompt}</h4>
       {item.code && <pre className="hb-lab-code" tabIndex={0}><code>{item.code}</code></pre>}
-      <form className="hb-lab-answer" onSubmit={event => {
+      <form className="hb-lab-answer" data-choice={!!item.choice} onSubmit={event => {
         event.preventDefault()
-        if (attempt.text.trim()) update({ ...attempt, result: answerMatches(attempt.text, item.answer) ? 'correct' : 'retry' })
+        if (!attempt || !canCheck) return
+        const correct = item.choice ? chosen === item.choice.answerIndex : answerMatches(typed, item.answer)
+        update({ ...attempt, result: correct ? 'correct' : 'retry' })
       }}>
-        <div><label htmlFor={field}>{t.yourAnswer}</label>
-          <textarea id={field} rows={1} maxLength={240} value={attempt.text} placeholder={t.enterAnswer}
-            onChange={event => update({ text: event.target.value })} /></div>
-        <button type="submit" className="hb-lab-primary" disabled={!attempt.text.trim()}>{t.check}</button>
+        {item.choice ? <fieldset className="hb-quiz-choices">
+          <legend>{t.chooseAnswer}</legend>
+          <div>{item.choice.options.map((option, i) => <label key={i} className="hb-quiz-option">
+            <input type="radio" name={field} checked={chosen === i} onChange={() => update({ response: i })} />
+            <span className="hb-quiz-option-key" aria-hidden>{String.fromCharCode(65 + i)}</span><span>{option}</span>
+          </label>)}</div>
+        </fieldset> : <div><label htmlFor={field}>{t.yourAnswer}</label>
+          <textarea id={field} rows={1} maxLength={240} value={typed} placeholder={t.enterAnswer}
+            onChange={event => update({ response: event.target.value })} /></div>}
+        <button type="submit" className="hb-lab-primary" disabled={!canCheck}>{t.check}</button>
       </form>
       <div aria-live="polite">
-        {attempt.result === 'retry' && <div className="hb-lab-result" data-result="retry">
+        {attempt?.result === 'retry' && <div className="hb-lab-result" data-result="retry">
           <span>{t.retry}</span>
           <button type="button" onClick={() => update({ ...attempt, result: 'revealed' })}>{t.reveal}</button>
         </div>}
         {shown && <div className="hb-lab-result" data-result={attempt.result}>
           <strong>{attempt.result === 'correct' ? t.correct : t.solution}</strong>
-          <code>{item.answer}</code>
+          {item.choice ? <span>{item.answer}</span> : <code>{item.answer}</code>}
           <p>{item.explanation}</p>
         </div>}
       </div>

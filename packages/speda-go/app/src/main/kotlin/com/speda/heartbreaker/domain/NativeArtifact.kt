@@ -10,7 +10,8 @@ import kotlinx.serialization.json.doubleOrNull
 sealed interface ArtifactSpec {
     val description: String
 
-    data class Exercise(val prompt: String, val code: String?, val answer: String, val explanation: String)
+    data class Choice(val options: List<String>, val answerIndex: Int)
+    data class Exercise(val prompt: String, val code: String?, val answer: String, val explanation: String, val choice: Choice?)
     data class Practice(override val description: String, val items: List<Exercise>) : ArtifactSpec
     data class Parameter(val label: String, val min: Int, val max: Int, val initial: Int, val unit: String?)
     data class Outcome(val through: Int, val label: String, val detail: String)
@@ -37,10 +38,25 @@ fun parseNativeArtifact(raw: String): ArtifactSpec? {
             ArtifactSpec.Practice(description, items.map { element ->
                 val item = element as? JsonObject ?: return null
                 val code = if ("code" in item) item.text("code", 4000) ?: return null else null
+                val choice = when (item.text("type", 12)) {
+                    "choice" -> {
+                        val options = (item["options"] as? JsonArray)?.takeIf { it.size in 2..6 } ?: return null
+                        val labels = options.map { option ->
+                            (option as? JsonPrimitive)?.takeIf { it.isString }?.content
+                                ?.takeIf { it.isNotBlank() && it.length <= 180 } ?: return null
+                        }
+                        if (labels.map { it.trim() }.distinct().size != labels.size) return null
+                        val correct = item.integer("answerIndex")?.takeIf { it in labels.indices } ?: return null
+                        ArtifactSpec.Choice(labels, correct)
+                    }
+                    "text" -> null
+                    null -> if ("type" !in item) null else return null
+                    else -> return null
+                }
                 ArtifactSpec.Exercise(
                     item.text("prompt", 320) ?: return null, code,
-                    item.text("answer", 240) ?: return null,
-                    item.text("explanation", 1000) ?: return null,
+                    choice?.let { it.options[it.answerIndex] } ?: item.text("answer", 240) ?: return null,
+                    item.text("explanation", 1000) ?: return null, choice,
                 )
             })
         }

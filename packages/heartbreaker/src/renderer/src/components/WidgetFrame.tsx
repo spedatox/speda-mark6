@@ -11,6 +11,8 @@ const FIT = ZOOM_STEPS.indexOf(1)
 export default function WidgetFrame({ language, children }: { language: string; children: string }) {
   const { canvas } = useRenderSurface()
   const vector = language === 'svg' || /^<svg[\s>]/i.test(children.trimStart())
+  const rootClasses = vector ? /^<svg\b[^>]*\sclass\s*=\s*["']([^"']*)/i.exec(children.trimStart())?.[1] : undefined
+  const markViDiagram = rootClasses?.split(/\s+/).includes('mkvi-diagram') ?? false
   const inspect = vector || canvas
   const [height, setHeight] = useState(180)
   const [ratio, setRatio] = useState(1.6)
@@ -36,11 +38,23 @@ export default function WidgetFrame({ language, children }: { language: string; 
   const hostUrl = useMemo(() => new URL(`${import.meta.env.BASE_URL}widget-host.html`, window.location.href).href, [])
 
   useEffect(() => {
-    if (!host.current) return
-    const style = getComputedStyle(host.current)
-    const next = Object.fromEntries(Object.entries(WIDGET_THEME_DEFAULTS).map(([key, fallback]) => [key, style.getPropertyValue(key).trim() || fallback]))
-    setTheme(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next)
-  }, [children])
+    const element = host.current
+    if (!element) return
+    const readPalette = () => {
+      const style = getComputedStyle(element)
+      const next = Object.fromEntries(Object.entries(WIDGET_THEME_DEFAULTS).map(([key, fallback]) => [key, style.getPropertyValue(key).trim() || fallback]))
+      setTheme(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next)
+    }
+    readPalette()
+    if (!markViDiagram) return
+    let settled: ReturnType<typeof setTimeout>
+    const observer = new MutationObserver(() => {
+      clearTimeout(settled)
+      settled = setTimeout(readPalette, 140)
+    })
+    observer.observe(window.document.documentElement, { attributes: true, attributeFilter: ['style'] })
+    return () => { observer.disconnect(); clearTimeout(settled) }
+  }, [children, markViDiagram])
 
   useLayoutEffect(() => {
     const element = preview.current
@@ -119,7 +133,7 @@ export default function WidgetFrame({ language, children }: { language: string; 
   const fitWidth = Math.max(1, Math.min(viewport.width, viewport.height * ratio))
   const vectorWidth = fitWidth * scale, vectorHeight = vectorWidth / ratio
   const hints = CONTROL_HINTS.filter((_, index) => (controls & (1 << index)) !== 0)
-  const label = vector ? 'Visualization' : controls ? 'Interactive' : 'Preview'
+  const label = markViDiagram ? 'Mark VI diagram' : vector ? 'Visualization' : controls ? 'Interactive' : 'Preview'
   return <div ref={host} className="hb-inline-widget" data-source={showCode}>
     <div className="hb-widget-toolbar">
       <div className="hb-widget-description">

@@ -26,17 +26,20 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.caverock.androidsvg.SVG
+import com.caverock.androidsvg.RenderOptions
 import com.speda.heartbreaker.designsystem.theme.LocalHbPalette
 import com.speda.heartbreaker.i18n.LocalStrings
 import kotlin.math.roundToInt
@@ -57,7 +60,7 @@ fun SvgBlock(raw: String, modifier: Modifier = Modifier) {
     val t = LocalStrings.current
     val svg = remember(raw) { runCatching { SVG.getFromString(raw) }.getOrNull() }
     when {
-        svg != null -> SvgSurface(svg, modifier)
+        svg != null -> SvgSurface(svg, modifier, themed = "mkvi-diagram" in raw)
         // A fence still streaming (no closing tag yet) shows the quiet skeleton,
         // not a scary parse error that vanishes a frame later.
         looksLikeStreamingSvg(raw) -> Materializing(t.proseKind.diagram, modifier)
@@ -67,9 +70,26 @@ fun SvgBlock(raw: String, modifier: Modifier = Modifier) {
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun SvgSurface(svg: SVG, modifier: Modifier) {
+private fun SvgSurface(svg: SVG, modifier: Modifier, themed: Boolean) {
     val palette = LocalHbPalette.current
     val labels = LocalStrings.current.proseKind
+    val description = remember(svg) {
+        listOfNotNull(svg.documentTitle, svg.documentDescription).filter { it.isNotBlank() }.joinToString(". ")
+    }
+    val assets = LocalContext.current.assets
+    val diagram = remember(assets, palette, themed) {
+        if (!themed) null else {
+            val css = assets.open("markvi-diagram.css").bufferedReader().use { it.readText() }
+            val colors = mapOf(
+                "PANEL" to palette.petrol, "TEXT" to palette.text, "MUTED" to palette.textDim,
+                "ACCENT" to palette.accentBright, "GOOD" to palette.green, "BAD" to palette.red,
+            )
+            val resolved = Regex("__([A-Z]+)__").replace(css) { match ->
+                "#" + (colors.getValue(match.groupValues[1]).toArgb() and 0xffffff).toString(16).padStart(6, '0')
+            }
+            RenderOptions.create().css(resolved)
+        }
+    }
     var zoom by remember(svg) { mutableFloatStateOf(1f) }
     var offset by remember(svg) { mutableStateOf(Offset.Zero) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
@@ -116,6 +136,7 @@ private fun SvgSurface(svg: SVG, modifier: Modifier) {
                 .heightIn(max = 460.dp)
                 .aspectRatio(ratio)
                 .clipToBounds()
+                .semantics { contentDescription = description.ifBlank { labels.diagram } }
                 .onSizeChanged {
                     viewport = it
                     move(zoom, offset)
@@ -126,7 +147,9 @@ private fun SvgSurface(svg: SVG, modifier: Modifier) {
             val h = size.height.toInt()
             if (w <= 0 || h <= 0) return@Canvas
             // renderToPicture handles the viewBox → target-size scale for us.
-            val picture = runCatching { svg.renderToPicture(w, h) }.getOrNull() ?: return@Canvas
+            val picture = runCatching {
+                if (diagram == null) svg.renderToPicture(w, h) else svg.renderToPicture(w, h, diagram)
+            }.getOrNull() ?: return@Canvas
             drawIntoCanvas {
                 val canvas = it.nativeCanvas
                 canvas.save()

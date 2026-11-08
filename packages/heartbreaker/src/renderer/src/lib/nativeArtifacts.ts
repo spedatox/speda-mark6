@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-export interface ExerciseItem { prompt: string; code?: string; answer: string; explanation: string }
+export interface ExerciseItem {
+  prompt: string
+  code?: string
+  answer: string
+  explanation: string
+  choice?: { options: string[]; answerIndex: number }
+}
 export interface Practice { kind: 'practice'; description: string; items: ExerciseItem[] }
 export interface Explore {
   kind: 'explore'
@@ -24,9 +30,19 @@ export function parseNativeArtifact(raw: string): Practice | Explore | null {
     if (!Array.isArray(input.items) || input.items.length < 1 || input.items.length > 8) return null
     const items: ExerciseItem[] = []
     for (const item of input.items) {
-      if (!record(item) || !text(item.prompt, 320) || !text(item.answer, 240) || !text(item.explanation, 1000)
+      if (!record(item) || !text(item.prompt, 320) || !text(item.explanation, 1000)
           || (item.code !== undefined && !text(item.code, 4000))) return null
-      items.push({ prompt: item.prompt, code: item.code, answer: item.answer, explanation: item.explanation })
+      const question = { prompt: item.prompt, code: item.code, explanation: item.explanation }
+      if (item.type === 'choice') {
+        const { options, answerIndex } = item
+        if (!Array.isArray(options) || options.length < 2 || options.length > 6 ||
+            !options.every(option => text(option, 180)) || new Set(options.map(option => option.trim())).size !== options.length ||
+            !integer(answerIndex) || answerIndex < 0 || answerIndex >= options.length) return null
+        items.push({ ...question, answer: options[answerIndex], choice: { options, answerIndex } })
+      } else {
+        if ((item.type !== undefined && item.type !== 'text') || !text(item.answer, 240)) return null
+        items.push({ ...question, answer: item.answer })
+      }
     }
     return { kind: 'practice', description: input.description, items }
   }

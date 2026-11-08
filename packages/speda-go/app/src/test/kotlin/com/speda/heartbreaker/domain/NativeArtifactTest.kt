@@ -19,7 +19,13 @@ class NativeArtifactTest {
 
     @Test fun bothClientsUseTheSamePracticeAndInclusiveBoundaries() {
         val practice = parseNativeArtifact(fixtures["practice"].toString()) as ArtifactSpec.Practice
-        assertTrue(artifactAnswerMatches(" 2\n", practice.items.single().answer))
+        assertTrue(artifactAnswerMatches(" 2\n", practice.items.first().answer))
+        assertNull(practice.items.first().choice)
+        val choice = checkNotNull(practice.items[1].choice)
+        assertEquals(1, choice.answerIndex)
+        assertEquals("Remainder", practice.items[1].answer)
+        assertNull(parseNativeArtifact(fixtures["practice"].toString().replace("\"answerIndex\":1", "\"answerIndex\":3")))
+        assertNull(parseNativeArtifact(fixtures["practice"].toString().replace("\"Product\"", "\" Remainder \"")))
         assertFalse(artifactAnswerMatches("A  B", "A B"))
         assertFalse(artifactAnswerMatches("a", "A"))
         val explore = parseNativeArtifact(fixtures["explore"].toString()) as ArtifactSpec.Explore

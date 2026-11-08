@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import controlsCss from '../../../../../speda-go/app/src/main/assets/artifact-controls.css?raw'
 import controlsScript from '../../../../../speda-go/app/src/main/assets/artifact-controls.js?raw'
+import diagramCss from '../../../../../speda-go/app/src/main/assets/markvi-diagram.css?raw'
+
+const diagramTokens: Record<string, string> = {
+  PANEL: '--hb-petrol', TEXT: '--hb-text', MUTED: '--hb-text-dim',
+  ACCENT: '--hb-cyan-bright', GOOD: '--hb-green', BAD: '--hb-red',
+}
+const diagramStyles = diagramCss.replace(/__([A-Z]+)__/g, (_, name) => `var(${diagramTokens[name]})`)
 
 export const WIDGET_THEME_DEFAULTS: Record<string, string> = {
   '--hb-text': '#dbe6ec', '--hb-text-dim': '#98adb8', '--hb-text-faint': '#7e929d',
   '--hb-cyan': '#36abca', '--hb-cyan-bright': '#74cfe3', '--hb-accent-rgb': '54,171,202',
   '--bg-primary': '#0d1419', '--bg-sidebar': '#151f26', '--border': 'rgba(219,230,236,.14)',
+  '--hb-petrol': '#16252d', '--hb-green': '#4fa377', '--hb-red': '#c84a3a',
 }
 
 export function buildWidgetDocument(raw: string, theme: Record<string, string> = {}, vector = false): string {
@@ -19,6 +27,7 @@ body{display:flow-root;font:14px/1.55 'Segoe UI',sans-serif;color:var(--hb-text)
 body>svg{display:block;width:100%;height:auto}img,canvas{max-width:100%}a{color:var(--accent)}
 html[data-hb-vector],html[data-hb-vector]>body{width:100%;height:100%;overflow:hidden}
 ${controlsCss}
+${vector ? diagramStyles : ''}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>`
   const observer = `<script>(function(){

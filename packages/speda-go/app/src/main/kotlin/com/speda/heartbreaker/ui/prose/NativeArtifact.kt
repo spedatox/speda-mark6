@@ -12,12 +12,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -32,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -74,7 +79,7 @@ fun NativeArtifact(raw: String, title: String) {
 }
 
 private enum class Result { CORRECT, RETRY, REVEALED }
-private data class Attempt(val text: String = "", val result: Result? = null)
+private data class Attempt(val text: String = "", val selected: Int? = null, val result: Result? = null)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -107,16 +112,40 @@ private fun PracticeLab(spec: ArtifactSpec.Practice) {
             .border(1.dp, palette.edge, RoundedCornerShape(8.dp)).horizontalScroll(rememberScrollState()).padding(10.dp),
             color = palette.text, fontFamily = FontFamily.Monospace, fontSize = 13.sp, softWrap = false)
     }
-    OutlinedTextField(
-        value = attempt.text, onValueChange = { if (it.length <= 240) attempts[index] = Attempt(it) },
-        modifier = Modifier.fillMaxWidth(), label = { Text(t.prediction) }, maxLines = 4,
-    )
+    val choice = item.choice
+    if (choice == null) {
+        OutlinedTextField(
+            value = attempt.text, onValueChange = { if (it.length <= 240) attempts[index] = Attempt(text = it) },
+            modifier = Modifier.fillMaxWidth(), label = { Text(t.prediction) }, maxLines = 4,
+        )
+    } else {
+        Text(t.chooseAnswer, style = HbType.label, color = palette.textDim)
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            choice.options.forEachIndexed { i, option ->
+                val selected = attempt.selected == i
+                val shape = RoundedCornerShape(8.dp)
+                Row(
+                    Modifier.fillMaxWidth().border(1.dp, if (selected) palette.accent else palette.edge, shape)
+                        .background(if (selected) palette.accent.copy(alpha = .12f) else palette.base, shape)
+                        .selectable(selected = selected, onClick = { attempts[index] = Attempt(selected = i) }, role = Role.RadioButton)
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    RadioButton(selected, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = palette.accentBright))
+                    Text("${'A' + i}", color = palette.accentBright, fontFamily = FontFamily.Monospace)
+                    Text(option, Modifier.weight(1f), color = palette.text, style = HbType.read)
+                }
+            }
+        }
+    }
     Button(
         onClick = {
-            val result = if (artifactAnswerMatches(attempt.text, item.answer)) Result.CORRECT else Result.RETRY
+            val correct = if (choice != null) attempt.selected == choice.answerIndex else artifactAnswerMatches(attempt.text, item.answer)
+            val result = if (correct) Result.CORRECT else Result.RETRY
             attempts[index] = attempt.copy(result = result)
         },
-        enabled = attempt.text.isNotBlank(),
+        enabled = if (choice != null) attempt.selected != null else attempt.text.isNotBlank(),
         colors = ButtonDefaults.buttonColors(containerColor = palette.accent.copy(alpha = .20f), contentColor = palette.accentBright),
     ) { Text(t.checkAnswer) }
     when (attempt.result) {
@@ -130,7 +159,7 @@ private fun PracticeLab(spec: ArtifactSpec.Practice) {
             Column(Modifier.fillMaxWidth().background(color.copy(alpha = .08f), RoundedCornerShape(8.dp))
                 .padding(10.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (correct) t.correctAnswer else t.solution, color = color, fontWeight = FontWeight.SemiBold)
-                Text(item.answer, color = palette.text, fontFamily = FontFamily.Monospace)
+                Text(item.answer, color = palette.text, fontFamily = if (choice == null) FontFamily.Monospace else null)
                 Text(item.explanation, color = palette.textDim, style = HbType.read)
             }
         }

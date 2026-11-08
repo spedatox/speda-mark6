@@ -812,6 +812,7 @@ data class AppStrings(
         val question: String,
         val solved: String,
         val prediction: String,
+        val chooseAnswer: String,
         val checkAnswer: String,
         val correctAnswer: String,
         val tryAgain: String,

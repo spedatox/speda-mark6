@@ -79,6 +79,9 @@ async def test_real_turn_gets_ultron_canvas_brief_and_next_chat_turn_does_not(me
     assert 'CANVAS MODE IS ACTIVE' in call['system']
     assert '### Ultron: visual tutoring' in call['system']
     assert 'Native Mark VI artifacts' in call['system']
+    assert '"answerIndex":1' in call['system']
+    assert 'Mark VI SVG design pack' in call['system']
+    assert 'class="mkvi-diagram"' in call['system']
     assert 'This reply will be spoken' in json.dumps(call['messages'])
     assert 'canvas presentation is deferred' not in json.dumps(call['messages'])
     assert first['run_id'] not in bits.coordinator._surfaces
