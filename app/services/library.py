@@ -12,7 +12,7 @@ import uuid
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import bindparam, func, or_, select, text
+from sqlalchemy import bindparam, func, select, text
 
 from app.core.context import AgentContext
 from app.models.library import LibraryDocument, LibraryRevision, LibraryIndexGeneration, LibraryPassage, LibraryCitation, LibraryEmbedding
@@ -20,6 +20,7 @@ from app.schemas.library import (
     LibraryListResult, LibraryListResponse, LibrarySearchResult, LibrarySearchResponse, LibraryReadResponse,
 )
 from app.services.lexical import build_match_query, fold
+from app.services.postgres_search import PostgresLibrarySearch, pin_search_snapshot
 
 
 class LibraryService:
@@ -29,6 +30,7 @@ class LibraryService:
         self.sessions = indexer.sessions
         self.n8n_secret = n8n_secret
         self.drain_lock = asyncio.Lock()
+        self.postgres_search = PostgresLibrarySearch()
 
     def _owner(self, context):
         if context.user_id != self.indexer.owner_user_id:
@@ -88,20 +90,10 @@ class LibraryService:
                 ))
         return LibraryListResponse(documents=results, has_more=offset + limit < len(records))
 
-    async def _evidence(self, db, passage, doc, rev, *, score=0, historical=False):
+    def _evidence(self, passage, doc, rev, *, score=0, historical=False):
         # Deterministic receipts make read-only retrieval idempotent under parallel calls.
         digest = hashlib.sha256(passage.content.encode()).hexdigest()
         citation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.indexer.source_id}:{passage.id}:{digest}"))
-        # A concurrent read can create the same citation; conflict-safe insert is portable.
-        if db.bind.dialect.name == "sqlite":
-            from sqlalchemy.dialects.sqlite import insert
-        elif db.bind.dialect.name == "postgresql":
-            from sqlalchemy.dialects.postgresql import insert
-        else:
-            raise HTTPException(503, "Unsupported citation store")
-        await db.execute(insert(LibraryCitation).values(
-            id=citation_id, passage_id=passage.id, excerpt_hash=digest,
-        ).on_conflict_do_nothing(index_elements=["id"]))
         return LibrarySearchResult(
             passage_id=passage.id, document_title=doc["title"], document_type=doc["type"],
             document_id=doc["id"], revision_id=rev.id, content=passage.content, page=passage.page,
@@ -110,6 +102,17 @@ class LibraryService:
             citation_url=f"/iacon/hall-of-records/sources/{citation_id}", historical=historical,
             needs_review=passage.needs_review,
         )
+
+    async def _cite(self, db, results):
+        if results:
+            # A concurrent read can create the same citation.
+            from app.services.coordination_budget import insert_for
+            await db.execute(insert_for(db, LibraryCitation).values([
+                {"id": row.citation_id, "passage_id": row.passage_id,
+                 "excerpt_hash": hashlib.sha256(row.content.encode()).hexdigest()}
+                for row in results
+            ]).on_conflict_do_nothing(index_elements=["id"]))
+        await db.commit()
 
     async def search(self, context, query_text, doc_ids=None, *, category=None, doc_type=None,
                      on_date=None, revision_id=None, limit=8):
@@ -125,6 +128,9 @@ class LibraryService:
         warnings = []
         eligible = {}
         async with self.sessions() as db:
+            postgres = db.bind.dialect.name == "postgresql"
+            if postgres:
+                await pin_search_snapshot(db)
             for record in records:
                 doc = record["document"]
                 rid = revision_id or doc["active_revision_id"]
@@ -154,8 +160,9 @@ class LibraryService:
                 return LibrarySearchResponse(status="unavailable" if warnings else "no_matches",
                                              query_date=query_date, warnings=warnings)
             generations = [self.indexer.generation_id(rid) for rid in eligible]
-            scores = {}
-            if db.bind.dialect.name == "sqlite":
+            if postgres:
+                rows = await self.postgres_search.rank(db, match, eligible, generations, min(32, limit * 4))
+            else:
                 statement = text(
                     "SELECT passage_id, bm25(library_passages_fts,0,1,2,0,0,0) AS rank "
                     "FROM library_passages_fts WHERE library_passages_fts MATCH :match "
@@ -164,23 +171,11 @@ class LibraryService:
                 ).bindparams(bindparam("revisions", expanding=True), bindparam("generations", expanding=True))
                 rows = (await db.execute(statement, {"match": match, "revisions": list(eligible),
                                                     "generations": generations, "limit": min(32, limit * 4)})).all()
-                passage_ids = [r[0] for r in rows]
-                scores = {r[0]: -float(r[1]) for r in rows}
-                passages = list((await db.scalars(select(LibraryPassage).where(
-                    LibraryPassage.id.in_(passage_ids),
-                ))).all())
-                passages.sort(key=lambda p: passage_ids.index(p.id))
-                mode = "keyword_bm25"
-            else:
-                # Honest bounded literal fallback; vector retrieval is not claimed.
-                terms = [t.rstrip("*") for t in match.split(" OR ")][:12]
-                passages = list((await db.scalars(select(LibraryPassage).where(
-                    LibraryPassage.revision_id.in_(eligible),
-                    LibraryPassage.generation_id.in_(generations),
-                    or_(*(LibraryPassage.content.ilike(f"%{t}%", escape="\\") for t in terms)),
-                ).order_by(LibraryPassage.id).limit(limit))).all())
-                mode = "literal_fallback"
-                warnings.append("BM25 is unavailable on this database; literal search only")
+            scores = {identity: -float(rank) for identity, rank in rows}
+            found = await db.scalars(select(LibraryPassage).where(LibraryPassage.id.in_(scores)))
+            by_id = {passage.id: passage for passage in found}
+            passages = [by_id[identity] for identity in scores if identity in by_id]
+            mode = "keyword_bm25"
             if self.indexer.embedder is not None:
                 ranked = await self._semantic(db, query_text, eligible, generations, warnings)
                 if ranked is not None:
@@ -201,9 +196,12 @@ class LibraryService:
             results = []
             for passage in passages:
                 doc, rev = eligible[passage.revision_id]
-                results.append(await self._evidence(db, passage, doc, rev, score=scores.get(passage.id, 0),
-                                                   historical=rev.id != doc["active_revision_id"]))
-            await db.commit()
+                results.append(self._evidence(passage, doc, rev, score=scores.get(passage.id, 0),
+                                              historical=rev.id != doc["active_revision_id"]))
+            if postgres:
+                # Start receipt writes after closing the read-only snapshot.
+                await db.rollback()
+            await self._cite(db, results)
         return LibrarySearchResponse(status="success" if results else "no_matches",
                                      query_date=query_date, search_mode=mode, results=results, warnings=warnings)
 
@@ -272,9 +270,9 @@ class LibraryService:
                 query = query.where(LibraryPassage.page == page)
             passages = list((await db.scalars(query.order_by(LibraryPassage.position, LibraryPassage.id)
                                               .offset(offset).limit(limit+1))).all())
-            results = [await self._evidence(db, p, doc, rev, historical=rid != doc["active_revision_id"])
+            results = [self._evidence(p, doc, rev, historical=rid != doc["active_revision_id"])
                        for p in passages[:limit]]
-            await db.commit()
+            await self._cite(db, results)
         return LibraryReadResponse(document_id=document_id, revision_id=rid, status="success" if results else "no_matches",
                                    passages=[r.content for r in results], citation_ids=[r.citation_id for r in results],
                                    results=results, next_offset=offset+limit if len(passages) > limit else None,

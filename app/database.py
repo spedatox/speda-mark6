@@ -71,6 +71,9 @@ async def init_db() -> None:
             await init_indexes(conn)
             from app.services.solus.guards import install_guards
             await conn.run_sync(install_guards)
+        elif engine.dialect.name == "postgresql":
+            from app.services.postgres_search import install_postgres_search
+            await install_postgres_search(conn)
 
 
 async def close_db() -> None:

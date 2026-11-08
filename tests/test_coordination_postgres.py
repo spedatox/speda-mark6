@@ -77,6 +77,8 @@ async def memory():
     try:
         async with engine.begin() as db:
             await db.run_sync(Base.metadata.create_all)
+            from app.services.postgres_search import install_postgres_search
+            await install_postgres_search(db)
         async with sessions() as db, db.begin():
             db.add_all([User(id=1, name="Owner", timezone="Europe/Istanbul"),
                         User(id=2, name="Other owner", timezone="UTC")])

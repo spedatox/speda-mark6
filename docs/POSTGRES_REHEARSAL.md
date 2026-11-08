@@ -10,10 +10,15 @@ Seventeen cases yielded 27 outputs across automatic memory, deliberate recall, c
 
 | Ranking path | Same ranked evidence and text | Same serialized payload | Exact full output |
 | --- | ---: | ---: | ---: |
-| Current PostgreSQL fallback | 14 of 27 | 9 of 27 | 9 of 27 |
+| Original PostgreSQL fallback | 14 of 27 | 9 of 27 | 9 of 27 |
 | Frozen SQLite ranking control with PostgreSQL evidence | 27 of 27 | 26 of 27 | 20 of 27 |
+| PostgreSQL-backed BM25 | 27 of 27 | 27 of 27 | 27 of 27 |
 
-The PostgreSQL fallback lost baseline evidence in 13 outputs. All three history and all four course outputs matched exactly, including the six-record course index, the exact MIS 231 document and denial for another owner. The frozen control matched the evidence and its ranking in all cases. Seven outputs differed in omission diagnostics, including one serialized payload. The control uses the frozen SQLite ranker to isolate search differences from storage differences.
+The original PostgreSQL fallback lost baseline evidence in 13 outputs. The replacement keeps the same BM25 tokenizer and scoring in a disposable, in-memory FTS5 projection. PostgreSQL transactions record per-row search versions alongside changes. The ranker reads those versions and the authoritative evidence from one repeatable-read snapshot, then updates only the changed index entries. Owner and edition scope apply before the ranking limit. Tied review dates use the original serving-unit ID as a stable tiebreaker.
+
+All three history and all four course outputs matched exactly, including the six-record course index, the exact MIS 231 document and denial for another owner. All 68 Hall keyword probes on the same snapshot matched passage IDs, order and scores for individual editions and the whole index. Integration tests exercise current and historical editions, access revocation, updated titles and concurrent citation creation.
+
+Thirty automatic recall probes ran in groups of two, three and four at the existing deadline. PostgreSQL completed all 30 and matched the SQLite payload in every case where SQLite completed. SQLite hit five deadlines in this sample.
 
 ## Reproducing the gate
 
@@ -21,7 +26,7 @@ Run the commands from the repository root with a private snapshot and an empty l
 
 ```text
 python -m scripts.rehearse_postgres source.sqlite3 active-copy.json
-python -m scripts.compare_postgres_recall source.sqlite3 cases.json native.json --require-parity
+python -m scripts.compare_postgres_recall source.sqlite3 cases.json postgres-bm25.json --require-parity
 python -m scripts.compare_postgres_recall source.sqlite3 cases.json ranking-control.json --sqlite-ranking-control
 ```
 
@@ -29,7 +34,6 @@ The cases file contains a JSON array. Each case has a `label` and a `mode` of `p
 
 ## Conditions for cutover
 
-- Preserve SQLite's matching, ranked evidence and user-visible qualifiers under PostgreSQL, including when new evidence arrives or access is revoked. The frozen ranking control applies only to frozen snapshots.
-- Rehearse live Hall of Records access, edition selection, search ranking and citations. PostgreSQL currently uses a literal fallback for Hall ranking.
+- Repeat recall, Hall edition, citation and authority checks on the final snapshot before switching traffic. The frozen ranking control applies only to frozen snapshots.
 - Verify concurrent agents, queue recovery and shared budgets on the migrated schema. Port and test the Solus database guards and the production backup, deploy and rollback controller against PostgreSQL.
 - Use a fresh snapshot and reconcile the final write delta during a quiesced switch. Retain verified backups and test rollback with writes made after the switch.

@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     from app.skills.memory_lookup import MemoryLookupSkill
 
     memory_store = MemoryStore(AsyncSessionLocal)
+    await memory_store.warm_search()
     memory_runtime = MemoryRuntime(memory_store)
 
     # Tier 2 — MCP Servers

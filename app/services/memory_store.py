@@ -10,13 +10,14 @@ import hashlib
 import re
 import unicodedata
 
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.memory_serving import MemoryChange, MemoryServingState, MemoryServingUnit
 from app.models.iacon import IaconSourceRetirement
 from app.schemas.memory_runtime import EvidenceSection
+from app.services.postgres_search import PostgresMemorySearch, pin_search_snapshot
 
 
 def fold(value: str) -> str:
@@ -100,12 +101,15 @@ class MemoryStore:
         self.catalog: OrderedDict = OrderedDict()
         self.source_cache: OrderedDict = OrderedDict()
         self.source_cache_bytes = 0
+        self.postgres_search = PostgresMemorySearch()
 
     @asynccontextmanager
     async def reader(self, deadline=None):
         async with self.sessions() as db:
             driver = None
-            if deadline is not None and db.bind.dialect.name == "sqlite":
+            if db.bind.dialect.name == "postgresql":
+                await pin_search_snapshot(db)
+            elif deadline is not None and db.bind.dialect.name == "sqlite":
                 connection = await db.connection()
                 raw = await connection.get_raw_connection()
                 driver = raw.driver_connection
@@ -115,6 +119,12 @@ class MemoryStore:
             finally:
                 if driver is not None:
                     await driver.set_progress_handler(None, 0)
+
+    async def warm_search(self):
+        async with self.reader() as db:
+            if db.bind.dialect.name == "postgresql":
+                await self.postgres_search.rank(db, MemoryChange, "sources", 0, '"warm"', 1, False)
+                await self.postgres_search.rank(db, MemoryServingUnit, "units", 0, '"warm"', 1, False)
 
     async def epoch(self, context, deadline=None) -> int:
         async with self.reader(deadline) as db:
@@ -267,7 +277,8 @@ class MemoryStore:
                     IaconRecord.kind == "state", IaconRecord.status == "accepted",
                     IaconRecord.payload["closed_on"].as_string().is_(None)
                 ).order_by(case((IaconRecord.payload["salience"].as_string() == "high", 0), else_=1),
-                           IaconRecord.payload["review_on"].as_string()).limit(3))).scalars().all()
+                           IaconRecord.payload["review_on"].as_string().nulls_first(),
+                           MemoryServingUnit.id).limit(3))).scalars().all()
             recent_ids = set()
             if person_ids:
                 units += (await db.execute(select(MemoryServingUnit).where(
@@ -358,8 +369,8 @@ class MemoryStore:
                     "sources": sources, "candidate_limit_reached": len(hits) >= limit}
 
     async def _search(self, db, model, target, user_id, terms, limit, recent=False):
+        query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms[:20])
         if db.bind.dialect.name == "sqlite":
-            query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms[:20])
             statement = select(model).from_statement(text(
                 f"SELECT t.* FROM memory_{target}_fts f JOIN {model.__tablename__} t ON t.id=f.rowid "
                 f"WHERE memory_{target}_fts MATCH :query AND t.user_id=:user_id "
@@ -368,11 +379,12 @@ class MemoryStore:
                 ("ORDER BY t.created_at DESC,t.id DESC LIMIT :limit" if recent else f"ORDER BY bm25(memory_{target}_fts),t.id DESC LIMIT :limit")))
             return (await db.execute(statement, {"query": query, "user_id": user_id,
                                                  "limit": limit})).scalars().all()
-        filters = [model.user_id == user_id,
-                   or_(*(model.routing_text.contains(t, autoescape=True) for t in terms[:20]))]
-        if target == "sources":
-            filters.append(model.revoked.is_(False))
-        return (await db.execute(select(model).where(*filters).order_by(model.id.desc()).limit(limit))).scalars().all()
+        ranked = await self.postgres_search.rank(db, model, target, user_id, query, limit, recent)
+        if not ranked:
+            return []
+        rows = await db.scalars(select(model).where(model.user_id == user_id, model.id.in_(ranked)))
+        by_id = {row.id: row for row in rows}
+        return [by_id[identity] for identity in ranked]
 
 
 

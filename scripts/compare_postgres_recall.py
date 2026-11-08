@@ -69,6 +69,7 @@ class Replay:
             automatic = await self.runtime.prepare(ctx)
             lookup = await self.runtime.lookup(ctx, case["query"], source_ids=case.get("source_ids", []))
             values = {"automatic": packet_result(automatic), "lookup": packet_result(lookup)}
+            timings = {"automatic": automatic.elapsed_ms, "lookup": lookup.elapsed_ms}
         else:
             async with self.sessions() as db:
                 if case["mode"] == "history":
@@ -79,7 +80,8 @@ class Replay:
                     values = {"course": json.loads(await self.courses.execute(case.get("args", {}), ctx))}
                 else:
                     raise ValueError("Unknown replay mode")
-        return values, round((monotonic() - started) * 1000, 3)
+            timings = {case["mode"]: (monotonic() - started) * 1000}
+        return values, timings
 
     async def check(self, case):
         try:
@@ -87,7 +89,7 @@ class Replay:
         except Exception as error:
             surface = case["mode"]
             surfaces = ("automatic", "lookup") if surface == "personal" else (surface,)
-            return {key: {"status": "error", "error_type": type(error).__name__} for key in surfaces}, None
+            return {key: {"status": "error", "error_type": type(error).__name__} for key in surfaces}, {}
 
 
 def handles(result):
@@ -109,6 +111,8 @@ async def compare(snapshot, url, cases, *, sqlite_ranking_control=False):
     candidate = Replay(postgres, frozen_ranking=baseline.store if sqlite_ranking_control else None)
     summary = []
     try:
+        if not sqlite_ranking_control:
+            await candidate.store.warm_search()
         for case in cases:
             before, sqlite_ms = await baseline.check(case)
             after, postgres_ms = await candidate.check(case)
@@ -129,13 +133,14 @@ async def compare(snapshot, url, cases, *, sqlite_ranking_control=False):
                                              if expected.get(field) != actual.get(field)),
                     "exact_result_matches": expected == actual and expected.get("status") not in {
                         "error", "unavailable", "deadline"},
-                    "sqlite_case_ms": sqlite_ms, "postgres_case_ms": postgres_ms,
+                    "sqlite_ms": round(sqlite_ms[key], 3) if key in sqlite_ms else None,
+                    "postgres_ms": round(postgres_ms[key], 3) if key in postgres_ms else None,
                 })
     finally:
         await sqlite.dispose()
         await postgres.dispose()
     return {"replay_results": summary,
-            "candidate_ranking": "frozen SQLite control" if sqlite_ranking_control else "native fallback",
+            "candidate_ranking": "frozen SQLite control" if sqlite_ranking_control else "PostgreSQL-backed BM25",
             "exact_matches": sum(item["exact_result_matches"] for item in summary),
             "compared_results": len(summary),
             "cutover_ready": False,
