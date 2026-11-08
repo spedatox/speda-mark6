@@ -82,6 +82,13 @@ def atomic(path, text):
         Path(name).unlink(missing_ok=True)
 
 
+def container_database(container):
+    values = json.loads(subprocess.check_output([
+        'docker', 'inspect', container, '--format', '{{json .Config.Env}}',
+    ], timeout=20))
+    return urlsplit(next(value.partition('=')[2] for value in values if value.startswith('DATABASE_URL=')))
+
+
 class Deployment:
     def __init__(self, config):
         self.config = config
@@ -92,8 +99,8 @@ class Deployment:
         for path in config['compose_files']:
             self.compose += ['-f', path]
 
-    def run(self, argv):
-        result = subprocess.run(argv, text=True, capture_output=True, timeout=180)
+    def run(self, argv, *, timeout=180):
+        result = subprocess.run(argv, text=True, capture_output=True, timeout=timeout)
         self.sequence += 1
         if self.logdir:
             (self.logdir / f'command-{self.sequence}.log').write_text(result.stdout + result.stderr)
@@ -128,6 +135,10 @@ class Deployment:
                 if table in existing:
                     total += db.execute(f'SELECT count(*) FROM "{table}" WHERE "{column}" IN ({",".join("?" for _ in states)})', states).fetchone()[0]
             return total == 0
+
+    def check_backend(self):
+        if container_database(self.config['app_container']).scheme != 'sqlite+aiosqlite':
+            raise RuntimeError('The running database does not match the SQLite deployment configuration')
 
     def wait_idle(self):
         deadline = time.monotonic() + 150
@@ -213,42 +224,55 @@ class Deployment:
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         with (self.root / 'deployment.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.check_backend()
             return self.locked_deploy(Path(upload), value)
+
+    def prepare_database(self, image, old):
+        backup = self.logdir / 'before.db'
+        snapshot_report = snapshot(self.config['database'], backup)
+        scratch = self.logdir / 'rehearsal'
+        scratch.mkdir()
+        shutil.copy2(backup, scratch / 'speda.db')
+        migration = self.migration(image, scratch, backup)
+        self.rehearse(image, scratch)
+        self.rehearse(old, scratch)
+        if not verify(backup, scratch / 'speda.db')['preserved']:
+            raise RuntimeError('Schema rehearsal altered existing rows')
+        self.migration(image, Path(self.config['database']).parent, backup)
+        if not verify(backup, self.config['database'])['preserved']:
+            raise DataPreservationFailure('Existing rows changed; writers remain stopped for reconciliation')
+        return snapshot_report, migration
 
     def locked_deploy(self, upload, release):
         app, n8n = self.config['app_container'], self.config['n8n_container']
         old = self.run(['docker', 'inspect', app, '--format', '{{.Image}}'])
         self.logdir = self.root / (release['commit'][:12] + '-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + uuid4().hex[:8])
         self.logdir.mkdir(mode=0o700)
-        release = self.load_image(upload, release)
-        # A deploy must never re-enable the watchdog the owner stopped.
-        if self.run(['systemctl', 'show', 'orion-spark.service', '-p', 'ActiveState', '--value']) not in {'inactive', 'failed'}:
-            raise RuntimeError('Orion Spark must remain stopped; inspect its unexpected activation')
-        self.wait_idle()
-        n8n_running = self.running(n8n)
-        env_path = Path(self.config['deploy_env']); previous_env = env_path.read_text()
-        (self.logdir / 'deploy.env').write_text(previous_env)
         proxy = None; stopped = False; changed = False; healthy = False
+        spark = 'orion-spark.service'
+        inhibit = self.root / 'orion-spark.inhibit'
+        inherited_inhibit = inhibit.exists()
+        spark_active = self.run(['systemctl', 'show', spark, '-p', 'ActiveState', '--value']) not in {'inactive', 'failed'}
+        resume_spark = spark_active or (inherited_inhibit and self.run(
+            ['systemctl', 'show', spark, '-p', 'UnitFileState', '--value']) == 'enabled')
+        app_stop_requested = False
         try:
+            inhibit.touch()
+            if spark_active:
+                self.run(['systemctl', 'stop', spark])
+            release = self.load_image(upload, release)
+            self.wait_idle()
+            n8n_running = self.running(n8n)
+            env_path = Path(self.config['deploy_env']); previous_env = env_path.read_text()
+            (self.logdir / 'deploy.env').write_text(previous_env)
             proxy = self.logdir / 'proxy-original.json'
             self.gate()
             if n8n_running: self.run(['docker', 'stop', '-t', '45', n8n])
             self.wait_idle()
+            app_stop_requested = True
             self.run(['docker', 'stop', '-t', '60', app]); stopped = True
-            backup = self.logdir / 'before.db'
-            snapshot_report = snapshot(self.config['database'], backup)
             shutil.copytree(self.config['state_dir'], self.logdir / 'state-before')
-            scratch = self.logdir / 'rehearsal'; scratch.mkdir()
-            shutil.copy2(backup, scratch / 'speda.db')
-            migration = self.migration(release['image_id'], scratch, backup)
-            self.rehearse(release['image_id'], scratch)
-            # Prove the retained image boots against the additive schema too.
-            self.rehearse(old, scratch)
-            if not verify(backup, scratch / 'speda.db')['preserved']:
-                raise RuntimeError('Schema rehearsal altered existing rows')
-            self.migration(release['image_id'], Path(self.config['database']).parent, backup)
-            if not verify(backup, self.config['database'])['preserved']:
-                raise DataPreservationFailure('Existing rows changed; writers remain stopped for reconciliation')
+            snapshot_report, migration = self.prepare_database(release['image_id'], old)
             atomic(env_path, image_env(previous_env, release['image_id'])); changed = True
             self.run(self.compose + ['up', '-d', '--no-deps', '--no-build', 'app'])
             self.health(app); self.authenticated_check()
@@ -256,8 +280,9 @@ class Deployment:
             if actual != release['image_id']: raise RuntimeError('Running image mismatch')
             healthy = True
             result = {**release, 'previous_image_id': old, 'database_replaced': False,
+                'database_backend': 'postgresql' if self.config.get('postgres') else 'sqlite',
                 'private_config_retained': True, 'snapshot': snapshot_report, 'migration': migration,
-                'rollback_compatibility_rehearsed': True, 'orion_spark_started': False,
+                'rollback_compatibility_rehearsed': True, 'orion_spark_paused': spark_active,
                 'deployed_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
             atomic(self.root / 'current.json', json.dumps(result, indent=2) + '\n')
             (self.logdir / 'success.json').write_text(json.dumps(result, indent=2))
@@ -278,10 +303,14 @@ class Deployment:
                     if n8n_running: self.run(['docker', 'start', n8n])
                 finally:
                     self.proxy(proxy)
+            if healthy or (not app_stop_requested and not inherited_inhibit):
+                inhibit.unlink(missing_ok=True)
+                if resume_spark:
+                    self.run(['systemctl', 'start', spark])
         with urlopen(self.config['public_url'].rstrip('/') + '/health/ready', timeout=20) as response:
             if response.status != 200: raise RuntimeError('Public readiness failed after release')
         print(json.dumps({'commit': release['commit'], 'image_id': release['image_id'],
-            'deployed': True, 'data_and_private_configuration_retained': True, 'orion_spark_started': False}))
+            'deployed': True, 'data_and_private_configuration_retained': True, 'orion_spark_resumed': resume_spark}))
         return result
 
 
@@ -294,4 +323,8 @@ if __name__ == '__main__':
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
     os.umask(0o077)
     config = json.loads(Path('/opt/speda-operations/cicd/config.json').read_text())
-    Deployment(config).deploy(args.upload)
+    if config.get('postgres'):
+        from scripts.deploy_postgres import PostgresDeployment
+        PostgresDeployment(config).deploy(args.upload)
+    else:
+        Deployment(config).deploy(args.upload)

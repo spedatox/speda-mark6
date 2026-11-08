@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sqlite3
 from unittest.mock import patch
+from urllib.parse import urlsplit
 import pytest
 from scripts.deploy_production import Deployment, image_env, manifest, verify_loaded_image
 
@@ -134,6 +135,23 @@ def test_live_workers_and_paid_calls_hold_deployment(host):
         db.execute('CREATE TABLE global_spending_calls(id TEXT,status TEXT)')
         db.execute("INSERT INTO global_spending_calls VALUES('active','started')")
     assert not driver.idle()
+
+
+def test_release_driver_refuses_mismatched_runtime_database(host):
+    from scripts.deploy_postgres import PostgresDeployment
+
+    host['postgres'] = {'container': 'postgres', 'database': 'speda'}
+    with patch('scripts.deploy_production.container_database',
+               return_value=urlsplit('postgresql+asyncpg://owner@postgres/speda')):
+        with pytest.raises(RuntimeError, match='SQLite deployment configuration'):
+            Deployment(host).check_backend()
+    with patch('scripts.deploy_postgres.container_database',
+               return_value=urlsplit('sqlite+aiosqlite:////data/speda.db')):
+        with pytest.raises(RuntimeError, match='PostgreSQL deployment configuration'):
+            PostgresDeployment(host).check_backend()
+    with patch('scripts.deploy_postgres.container_database',
+               return_value=urlsplit('postgresql+asyncpg://owner@postgres/speda')):
+        PostgresDeployment(host).check_backend()
 
 
 def test_proxy_gate_changes_only_the_owned_hostname(host):

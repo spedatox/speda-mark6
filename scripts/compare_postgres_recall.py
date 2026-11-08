@@ -115,6 +115,12 @@ async def compare(snapshot, url, cases, *, sqlite_ranking_control=False):
             await candidate.store.warm_search()
         for case in cases:
             before, sqlite_ms = await baseline.check(case)
+            retries = 0
+            # A missed SQLite deadline can also change the following lookup's
+            # evidence deduplication. Replay the whole case with a fresh turn.
+            while retries < 2 and any(item.get("status") == "deadline" for item in before.values()):
+                retries += 1
+                before, sqlite_ms = await baseline.check(case)
             after, postgres_ms = await candidate.check(case)
             for key, expected in before.items():
                 actual = after[key]
@@ -133,6 +139,7 @@ async def compare(snapshot, url, cases, *, sqlite_ranking_control=False):
                                              if expected.get(field) != actual.get(field)),
                     "exact_result_matches": expected == actual and expected.get("status") not in {
                         "error", "unavailable", "deadline"},
+                    "sqlite_deadline_retries": retries,
                     "sqlite_ms": round(sqlite_ms[key], 3) if key in sqlite_ms else None,
                     "postgres_ms": round(postgres_ms[key], 3) if key in postgres_ms else None,
                 })

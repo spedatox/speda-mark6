@@ -1,6 +1,6 @@
 # PostgreSQL migration rehearsal
 
-Production remains on SQLite. A consistent snapshot passed SQLite's integrity check. The private rehearsal copied the 111 active ORM tables into an empty PostgreSQL 16 database and verified all 288,543 rows by typed content fingerprints, including original IDs, message JSON, attachments and memory evidence. The full SQLite snapshot retains 43 legacy tables and seven legacy session fields alongside the active data. Keep that snapshot as an archive and reconcile all later production writes before a future cutover.
+The initial rehearsal used a consistent production SQLite snapshot that passed SQLite's integrity check. It copied the 111 active ORM tables into an empty PostgreSQL 16 database and verified all 288,543 rows by typed content fingerprints, including original IDs, message JSON, attachments and memory evidence. The full SQLite snapshot retains 43 legacy tables and seven legacy session fields alongside the active data.
 
 The import required a 64-bit type for attendance timestamps and reversible encoding for zero bytes in PostgreSQL memory text. Conversation search also projects actual JSON zero-byte escapes to a safe separator before extracting text. Its excerpts still come from the original message. Both SQLite and PostgreSQL history tests cover original-text retention and literal escape handling.
 
@@ -32,8 +32,10 @@ python -m scripts.compare_postgres_recall source.sqlite3 cases.json ranking-cont
 
 The cases file contains a JSON array. Each case has a `label` and a `mode` of `personal`, `history`, or `course`. Personal and history cases supply a `query`. Course cases can supply `args` with a course code and term. A case can specify an agent, owner, or timezone.
 
-## Conditions for cutover
+## Production cutover
 
-- Repeat recall, Hall edition, citation and authority checks on the final snapshot before switching traffic. The frozen ranking control applies only to frozen snapshots.
-- Verify concurrent agents, queue recovery and shared budgets on the migrated schema. Port and test the Solus database guards and the production backup, deploy and rollback controller against PostgreSQL.
-- Use a fresh snapshot and reconcile the final write delta during a quiesced switch. Retain verified backups and test rollback with writes made after the switch.
+The host-owned `scripts.cutover_postgres` prepares a private PostgreSQL service and rehearses the verified application image on a disposable copy. The actual switch takes the production deployment lock, gates ingress, stops writers and captures a fresh SQLite backup. It verifies all active row contents, refreshes PostgreSQL planner statistics, and repeats recall and Hall ranking on the same frozen dataset.
+
+Before reopening traffic, the host restores a PostgreSQL dump to an isolated container, checks row fingerprints, and verifies an authenticated synthetic memory write survives a restart there. It checks existing Hall citations through the running application and retains the SQLite archive, PostgreSQL dump, and pre-cutover state and configuration.
+
+Subsequent CI releases use PostgreSQL backups and verify restore, existing-row preservation, and compatibility with both the candidate and retained images. Code rollback uses the current database. A return to SQLite after production writes requires reconciling those writes with the retained archive.
