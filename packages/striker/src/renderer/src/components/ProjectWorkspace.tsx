@@ -129,9 +129,10 @@ export default function ProjectWorkspace({config, projectId, project, onCloudRea
     {error && <p role="alert">{error}</p>}
     {!state && !error && <p>{t.loading}</p>}
     {project?.cloud && <CloudProjectPanel config={config} project={project} refresh={cloudRefresh}
-      onPublished={id => {
+      onPublished={(id, checkpoint) => {
         onCloudReady?.(id !== null)
-        if (id !== published.current) { published.current = id; setEpoch(n => n+1) }
+        const revision = checkpoint ? `${id}:${checkpoint}` : id
+        if (revision !== published.current) { published.current = revision; setEpoch(n => n+1) }
       }} />}
     {state && <>
       <p style={{overflowWrap:'anywhere', userSelect:'text'}}>{state.environment ? `${state.environment.repository} · ${state.environment.branch} · ${state.environment.commit.slice(0, 12)}` : `${state.host_id}: ${state.cwd}`}</p>

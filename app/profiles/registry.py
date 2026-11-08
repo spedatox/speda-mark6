@@ -44,7 +44,7 @@ class ProfileRegistry:
         roster = (
             ("speda", "SPEDA", "J.A.R.V.I.S. (MCU)", "Personal assistant; coordinates the room", {"Task", "project_delegate"}),
             ("ultron", "Ultron", "Ultron (MCU)", "Academic life, coursework and study", {"Task", "read_course_memory"}),
-            ("optimus", "Optimus", "Optimus Prime (Transformers Prime)", "Engineering; leads Autobots", {"Task", "project_delegate"}),
+            ("optimus", "Optimus", "Optimus Prime (Transformers Prime)", "Engineering; leads Autobots", {"Task", "project_delegate", "start_github_project"}),
             ("friday", "Friday", "F.R.I.D.A.Y. (MCU)", "Research, OSINT and web monitoring", {"Task"}),
             ("atomix", "Atomix", "Atomix (Ben 10)", "Health, training and wellbeing", {"Task"}),
             ("scourge", "Scourge", "Scourge (Transformers: Rise of the Beasts)", "Security; leads Decepticons", {"Task", "project_delegate"}),

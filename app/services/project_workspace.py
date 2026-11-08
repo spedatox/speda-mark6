@@ -161,8 +161,12 @@ class ProjectWorkspace:
         """Bounded code reads through the same snapshot inventory as execution."""
         native = await self.projects.owned(context.user_id, context.project_id)
         root = Path(native.path)
+        project = getattr(context, 'extra', {}).get('project_context') or {}
+        checkpoint = project.get('cloud_checkpoint') if not task_id else None
+        if checkpoint:
+            task_id = checkpoint['task_id']
         if not task_id:
-            pinned = (getattr(context, 'extra', {}).get('project_context') or {}).get('cloud_environment')
+            pinned = project.get('cloud_environment')
             if not pinned:
                 async with self.sessions() as db:
                     pinned = await self.projects.cloud.binding(db, native.id, allow_draft=True)
@@ -178,6 +182,8 @@ class ProjectWorkspace:
             root = self.projects.state / 'artifacts' / task_id
         def read():
             revision, rows = inventory(root)
+            if checkpoint and revision != checkpoint['artifact_revision']:
+                raise CoordinationError('stale_artifact', 'The published checkpoint artifact changed after verification')
             if not path:
                 return {'revision':revision, 'files':[r[0] for r in rows[:1000]], 'omitted':max(0,len(rows)-1000)}
             if path not in {r[0] for r in rows}:

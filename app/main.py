@@ -232,8 +232,9 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     await registry.register_skill(CollaborationSkill())
     await registry.register_skill(DecisionSkill())
     await registry.register_skill(ProjectStatusSkill())
-    from app.skills.collaboration import ProjectReadSkill
+    from app.skills.collaboration import ProjectReadSkill, StartGitHubProjectSkill
     await registry.register_skill(ProjectReadSkill())
+    await registry.register_skill(StartGitHubProjectSkill())
     await registry.register_skill(ProjectDelegateSkill())
     await registry.register_skill(ProjectReviewSkill())
     await registry.register_skill(ProjectReleaseSkill())

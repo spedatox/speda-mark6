@@ -325,6 +325,9 @@ class Coordinator:
                 # Pin private project instructions/documents per speaker for this run.
                 run.policy = {**run.policy, 'cloud_environment': environment, 'project_contexts': {
                     persona: await workspace.context(owner, persona, room.project_id) for persona in profiles}}
+                if environment and environment.get('target'):
+                    run.policy = {**run.policy, 'cloud_checkpoints': await self.projects.cloud.latest_checkpoints(
+                        db, room.project_id, environment['id'], profiles)}
             await db.flush()
             if not room.active_run:
                 room.active_run = run.id
@@ -649,6 +652,8 @@ class Coordinator:
         if stored.get('cloud_environment') and context.extra['project_context']:
             context.extra['project_context'] = {**context.extra['project_context'],
                 'cloud_environment': stored['cloud_environment']}
+            if checkpoint := stored.get('cloud_checkpoints', {}).get(step.agent_id):
+                context.extra['project_context']['cloud_checkpoint'] = checkpoint
         context.extra['room_state'] = {"lead": room.lead, "members": [
             {"agent_id": aid, "name": run.profiles[aid]["name"]} for aid in room.members],
             "your_agent_id": step.agent_id, "exchange": step.mode,

@@ -406,31 +406,57 @@ private fun CloudEnvironmentForm(
     var repo by remember { mutableStateOf(previous?.text("repository").orEmpty()) }
     var branch by remember { mutableStateOf(previous?.text("branch") ?: "main") }
     var check by remember { mutableStateOf(previous?.text("check") ?: "git --version") }
+    var mode by remember { mutableStateOf("existing") }
+    var task by remember { mutableStateOf("") }
+    var allowPublic by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    val requestId = remember(name, repo, branch, check) { UUID.randomUUID().toString() }
+    val requestId = remember(name, repo, branch, check, mode, task, allowPublic) { UUID.randomUUID().toString() }
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (project == null && config.agentId == "optimus") {
+            listOf("existing" to "Use existing repository", "prototype" to "Create private prototype",
+                "fork" to "Fork into Optimus’s account").forEach { (value, label) ->
+                PillButton(label, if (mode == value) palette.accentBright else palette.iconDim) { mode = value }
+            }
+        }
         if (project == null) Field(name, { name = it }, "Project name", Modifier.fillMaxWidth())
-        Field(repo, { repo = it }, "GitHub owner/repository", Modifier.fillMaxWidth())
-        Field(branch, { branch = it }, "Base branch", Modifier.fillMaxWidth())
-        Field(check, { check = it }, "Environment check", Modifier.fillMaxWidth(), singleLine = false)
+        if (mode != "prototype") Field(repo, { repo = it }, "GitHub owner/repository", Modifier.fillMaxWidth())
+        if (mode == "existing") {
+            Field(branch, { branch = it }, "Base branch", Modifier.fillMaxWidth())
+            Field(check, { check = it }, "Environment check", Modifier.fillMaxWidth(), singleLine = false)
+        } else {
+            Field(task, { task = it }, "First task", Modifier.fillMaxWidth(), singleLine = false)
+            if (mode == "fork") {
+                PillButton(if (allowPublic) "Public checkpoints allowed" else "Allow public checkpoints",
+                    if (allowPublic) palette.accentBright else palette.iconDim) { allowPublic = !allowPublic }
+            }
+        }
         if (error.isNotBlank()) HbText(error, style = HbType.read, color = palette.amber)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("Cancel", palette.iconDim, onCancel)
-            PillButton(if (busy) "Preparing…" else "Prepare environment", palette.accentBright) {
-                if (!busy && name.isNotBlank() && repo.isNotBlank() && branch.isNotBlank() && check.isNotBlank()) {
+            PillButton(if (busy) "Preparing…" else if (mode == "existing") "Prepare environment" else "Start project", palette.accentBright) {
+                val valid = name.isNotBlank() && (mode == "prototype" || repo.isNotBlank()) &&
+                    (mode != "existing" || branch.isNotBlank() && check.isNotBlank())
+                if (!busy && valid) {
                     busy = true
                     error = ""
                     scope.launch {
                         try {
-                            val path = project?.let { "/${it.id}/cloud/environments" } ?: "/cloud/environments"
+                            val path = if (mode != "existing") "/cloud/github-workspaces" else
+                                project?.let { "/${it.id}/cloud/environments" } ?: "/cloud/environments"
                             val result = api.projectRequest(config, path, buildJsonObject {
                                 put("request_id", requestId)
                                 put("agent_id", config.agentId)
                                 put("name", name.trim())
-                                put("repository", repo.trim())
-                                put("branch", branch.trim())
-                                put("check", check)
+                                if (mode != "prototype") put("repository", repo.trim())
+                                if (mode == "existing") {
+                                    put("branch", branch.trim())
+                                    put("check", check)
+                                } else {
+                                    put("mode", mode)
+                                    put("task", task.trim())
+                                    if (mode == "fork") put("allow_public", allowPublic)
+                                }
                             })
                             onPrepared(result.text("project_id").toInt())
                         } catch (exception: kotlinx.coroutines.CancellationException) {
@@ -464,13 +490,23 @@ private fun CloudProjectDetail(config: AppConfig, api: IgorApi, project: Project
 
     LaunchedEffect(config, project.id, refresh) {
         try {
+            workspace = api.projectRequest(config, "$base/workspace")
+            var lastCheckpoint = ""
+            var wasPublished = false
             do {
                 val result = api.projectRequest(config, "$base/cloud")
                 cloud = result
                 val environments = result.objects("environments")
-                onPublished(environments.any { it.text("status") == "published" })
-                workspace = api.projectRequest(config, "$base/workspace")
-                val active = environments.any { it.text("status") == "preparing" } ||
+                val published = environments.any { it.text("status") == "published" }
+                onPublished(published)
+                val checkpoint = result.objects("checkpoints").firstOrNull()
+                val checkpointVersion = checkpoint?.let { "${it.text("id")}:${it.text("status")}" }.orEmpty()
+                if (published != wasPublished || checkpointVersion != lastCheckpoint) {
+                    workspace = api.projectRequest(config, "$base/workspace")
+                    wasPublished = published
+                    lastCheckpoint = checkpointVersion
+                }
+                val active = environments.any { it.text("status") == "preparing" || it.text("mode").isNotEmpty() } ||
                     result.objects("pull_requests").any { it.text("status") == "executing" }
                 if (active) delay(2000)
             } while (active)
@@ -510,6 +546,24 @@ private fun CloudProjectDetail(config: AppConfig, api: IgorApi, project: Project
             val output = (environment["check_result"] as? JsonObject)?.text("output").orEmpty()
             if (output.isNotBlank()) HbText(output, style = HbType.read, color = palette.textDim)
             if (environment.text("error").isNotBlank()) HbText(environment.text("error"), style = HbType.read, color = palette.amber)
+            val repoUrl = (environment["target"] as? JsonObject)?.text("url").orEmpty()
+            if (repoUrl.startsWith("https://github.com/")) {
+                PillButton(if (environment.text("mode") == "fork") "Open GitHub fork" else "Open GitHub repository",
+                    palette.accentBright) { uriHandler.openUri(repoUrl) }
+            }
+            if (environment.text("initial_session_id").isNotEmpty()) {
+                HbText("The first task is in this project’s chats.", style = HbType.read, color = palette.textDim)
+            }
+            listOf("task_error", "share_error", "setup_error").map { environment.text(it) }
+                .filter { it.isNotBlank() }.forEach { HbText(it, style = HbType.read, color = palette.amber) }
+            if (environment.text("status") == "reconciling" && environment.text("phase") == "repository_requested") {
+                PillButton("Check GitHub repository", palette.iconDim) {
+                    action {
+                        api.projectRequest(config, "$base/cloud/environments/${environment.text("id")}/reconcile", buildJsonObject {})
+                        refresh += 1
+                    }
+                }
+            }
             if (environment.text("status") == "ready") {
                 PillButton("Publish environment", palette.accentBright) {
                     action {
@@ -529,8 +583,28 @@ private fun CloudProjectDetail(config: AppConfig, api: IgorApi, project: Project
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton("Prepare new revision", palette.accentBright) { preparing = true }
+                if (environments.none { it.text("mode").isNotEmpty() }) {
+                    PillButton("Prepare new revision", palette.accentBright) { preparing = true }
+                }
                 PillButton("Refresh", palette.iconDim) { refresh += 1 }
+            }
+        }
+        for (checkpoint in cloud?.objects("checkpoints").orEmpty()) {
+            val url = checkpoint.text("url")
+            val commit = checkpoint.text("commit")
+            if (url.startsWith("https://github.com/")) {
+                PillButton("Checkpoint ${commit.take(8)}", palette.accentBright) { uriHandler.openUri(url) }
+            } else {
+                HbText("${checkpoint.text("title")} · ${checkpoint.text("status")}", style = HbType.read, color = palette.textDim)
+            }
+            if (checkpoint.text("error").isNotBlank()) HbText(checkpoint.text("error"), style = HbType.read, color = palette.amber)
+            if (checkpoint.text("status") in setOf("reconciling", "failed")) {
+                PillButton(if (commit.isNotEmpty()) "Check GitHub result" else "Retry checkpoint", palette.iconDim) {
+                    action {
+                        api.projectRequest(config, "$base/cloud/checkpoints/${checkpoint.text("id")}/reconcile", buildJsonObject {})
+                        refresh += 1
+                    }
+                }
             }
         }
         for (task in workspace?.objects("tasks").orEmpty()) {
