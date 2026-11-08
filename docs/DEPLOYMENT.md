@@ -146,3 +146,19 @@ The private `rollback-before-opening.sh` refuses rollback once `traffic-opened`
 exists. Production writes are now open: reconcile all new writes before restoring
 the legacy dataset. Keep both database generations and private configuration
 snapshots. The release record is `deployment-validation-2026-11-03.json`.
+
+## Damage Control Protocol
+
+Set `DAMAGE_CONTROL_ENABLED=true` and configure the SPEDA Telegram bot. The backend
+captures agent failures, interruptions, recognized tool errors, agent-reported
+anomalies, application warnings/errors and selected container lifecycle failures.
+Turn-ending incidents take priority. The configured background model receives
+structured incident facts under the global spending policy. Reports go to the
+paired private owner chat through the SPEDA bot.
+
+The local journal is `$SPEDA_DATA_DIR/damage-control/incidents.sqlite3`. On backend
+restart it recovers unfinished executions and queues their reports. Reports use
+recorded facts if model analysis is unavailable. Telegram uploads without a
+verified acknowledgement remain `unknown` for inspection. A missing owner link
+holds the report until pairing is available. Set `DAMAGE_CONTROL_ENABLED=false`
+and restart to disable capture and delivery.

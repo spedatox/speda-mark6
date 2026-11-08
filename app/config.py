@@ -196,6 +196,7 @@ class Settings(BaseSettings):
     telegram_bot_tokens: str = "{}"  # Exact agent-id -> token mapping.
     telegram_webhook_secret: str = ""
     telegram_owner_id: int = 0
+    damage_control_enabled: bool = False
     azure_speech_key: str = ""
     azure_speech_region: str = "westeurope"
     elevenlabs_api_key: str = ""

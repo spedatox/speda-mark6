@@ -462,9 +462,13 @@ class Projects:
             self.signals.pop(task_id, None)
 
     async def _run_task(self, task_id):
+        from app.services.damage_control import exception_facts
+
         signal = self.signals.setdefault(task_id, asyncio.Event())
         source_claim = f"source-{task_id}"
         claimed, returned, task = False, False, None
+        protocol = getattr(getattr(self.coordinator, "orchestrator", None), "incidents", None)
+        incident = None
         try:
             async with self.sessions() as db:
                 task = await db.get(ProjectTask, task_id)
@@ -526,6 +530,9 @@ class Projects:
                 task_role="worker", effective_policy=replace(effective, fallbacks=()), room_id=room.id,
                 run_id=run.id, step_id=task.id, project_id=project.id, coordination=self.coordinator,
                 budget_handle=self.coordinator.budget, output_token_cap=policy_data["output_tokens"])
+            if protocol:
+                ctx.extra["incident_worker_role"] = task.role
+                incident = protocol.begin(ctx)
             async with write_session(self.sessions) as db:
                 await db.execute(update(ProjectTask).where(ProjectTask.id == task.id)
                     .values(status="running", workspace=str(target), base_revision=revision))
@@ -572,8 +579,12 @@ class Projects:
             async with asyncio.timeout(max(0, run.deadline - time.time())):
                 from app.services.task_inbox import TaskInbox
                 kwargs = {"inbox": TaskInbox(ctx, self.sessions)} if self.executor is execute else {}
+                if protocol and self.executor is execute:
+                    from app.services.forge_adapter import ForgeIncidentProvider
+                    from forge.warden.toolsource import BuiltinToolProvider
+                    kwargs["tool_providers"] = [BuiltinToolProvider(), ForgeIncidentProvider(protocol, ctx)]
                 result = await self.executor(spec, model=ForgeModel(ctx), emit=emit, signal=signal,
-                    settings=runtime_settings, effect_gate=ForgeEffects(self.sessions, ctx), **kwargs)
+                    settings=runtime_settings, effect_gate=ForgeEffects(self.sessions, ctx, protocol), **kwargs)
             returned = True  # execute() returns only after verified Cell teardown.
             async with self.sessions() as db:
                 uncertain = await db.scalar(select(ToolExecutionReceipt.id).where(
@@ -615,7 +626,17 @@ class Projects:
                 await self.coordinator.emit(run.id, "checkpoint_conflict", "system",
                     {**worker_metadata(task), "project_id": project.id,
                      "reason": "Newer checkpoint retained; result recorded separately"})
+            if protocol:
+                event = {"failed": "forge_execution_failed", "cancelled": "forge_execution_interrupted"}.get(result.status)
+                protocol.finish(incident, event)
         except BaseException as exc:
+            if protocol:
+                event = "forge_execution_interrupted" if isinstance(exc, asyncio.CancelledError) else "forge_execution_error"
+                if incident:
+                    protocol.finish(incident, event, **exception_facts(exc))
+                else:
+                    protocol.capture({"event": event, "job_id": task_id, "ended_turn": True,
+                                      **exception_facts(exc)})
             # An interrupted/unknown Cell keeps both claims. Never infer teardown
             # from a dead executor or from expiry of its lease.
             if claimed:

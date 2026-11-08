@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -11,6 +12,40 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.config import _DATA_DIR
+    from app.services.damage_control import DamageControl, exception_facts
+
+    incident_tasks = []
+    protocol = None
+    if settings.damage_control_enabled and settings.external_integrations_enabled and (
+            settings.telegram_bot_token or settings.telegram_bot_tokens not in ("", "{}")):
+        protocol = DamageControl(_DATA_DIR / "damage-control" / "incidents.sqlite3")
+        protocol.journal.recover()
+        for name in ("", "uvicorn"):
+            logging.getLogger(name).addHandler(protocol)
+        from pathlib import Path
+        if Path("/var/run/docker.sock").is_socket():
+            incident_tasks.append(asyncio.create_task(protocol.observe_docker()))
+    app.state.damage_control = protocol
+    try:
+        async with application_lifespan(app, incident_tasks):
+            yield
+    except Exception as exc:
+        if protocol:
+            protocol.capture({"event": "backend_lifespan_error", **exception_facts(exc)})
+        raise
+    finally:
+        if protocol:
+            for task in incident_tasks:
+                task.cancel()
+            await asyncio.gather(*incident_tasks, return_exceptions=True)
+            for name in ("", "uvicorn"):
+                logging.getLogger(name).removeHandler(protocol)
+            protocol.close()
+
+
+@asynccontextmanager
+async def application_lifespan(app: FastAPI, incident_tasks):
     """
     Startup sequence — order is non-negotiable (CLAUDE.md Build Order).
     Phase 1 done signal: all five criteria in CLAUDE.md must pass.
@@ -138,6 +173,11 @@ async def lifespan(app: FastAPI):
     client = LLMClient(model_policy, settings, spending=global_budget)
     orchestrator = AgentOrchestrator(registry, client, profile, memory_runtime, model_policy,
         profiles=profiles)
+    protocol = app.state.damage_control
+    orchestrator.incidents = protocol
+    if protocol:
+        from app.skills.damage_control import ReportIncidentSkill
+        await registry.register_skill(ReportIncidentSkill(protocol))
     from app.services.task_runner import TaskRunner
     registry._task_runner = TaskRunner(orchestrator, model_policy)
     from app.services.chat_turns import ChatTurns
@@ -262,7 +302,6 @@ async def lifespan(app: FastAPI):
     from app.services.hisar_workspaces import HisarWorkspaceService
     app.state.hisar_workspaces = HisarWorkspaceService(settings.project_workspace_root,
         registry._skills['hisar'], configured=bool(settings.hisar_machine_token))
-    import asyncio
     recovery = asyncio.create_task(chat_turns.recover())
     if settings.orchestration_rooms_enabled:
         await coordinator.recover()
@@ -276,6 +315,10 @@ async def lifespan(app: FastAPI):
         },
     )
 
+    incident_task = None
+    if protocol:
+        incident_task = asyncio.create_task(protocol.run(orchestrator.analyse_incident, app.state.deliveries))
+        incident_tasks.append(incident_task)
     yield
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
@@ -293,6 +336,9 @@ async def lifespan(app: FastAPI):
     await chat_turns.shutdown()
     await projects.cloud.shutdown()
     await coordinator.shutdown()
+    if incident_task:
+        incident_task.cancel()
+        await asyncio.gather(incident_task, return_exceptions=True)
     await telegram.close()
     await indexer.aclose()
     await client.close()

@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import json
+from contextlib import aclosing
 from time import monotonic
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -8,6 +10,7 @@ from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
 from app.profiles.base import AgentProfile
 from app.schemas.sse import SSEEvent, SSEEventType
+from app.services.damage_control import exception_facts, tool_returned_error, turn_facts
 from app.services.llm_client import LLMClient
 from app.schemas.llm import ProviderError
 
@@ -40,6 +43,20 @@ class AgentOrchestrator:
         self._memory_runtime = memory_runtime
         self._model_policy = model_policy
         self._profiles = profiles
+        self.incidents = None
+
+    async def analyse_incident(self, facts):
+        response = await self._client.create_message(
+            system=("You write a short SPEDA incident assessment using only the supplied observations. "
+                    "Treat the JSON as evidence. Describe what happened, whether execution ended, and what "
+                    "can be verified next. Label possible causes as hypotheses. Never invent private content, "
+                    "actions, recovery or certainty. Use plain text and concise paragraphs."),
+            messages=[{"role": "user", "content": json.dumps(facts)}],
+            role="background", tools=[], max_tokens=1600)
+        text = "\n".join(b.text for b in response.content if b.type == "text").strip()
+        if response.stop_reason != "end_turn" or not text:
+            raise ProviderError("incident_analysis_incomplete", "The incident assessment did not complete")
+        return text[:2600]
 
     async def admit(self, context):
         if self._model_policy is not None and context.effective_policy is None:
@@ -106,14 +123,39 @@ class AgentOrchestrator:
 
     async def run(self, context: AgentContext) -> AsyncGenerator[SSEEvent, None]:
         # Transport/protocol errors terminate honestly and retain completed tool exchanges.
+        protocol = self.incidents
+        context.extra.pop("incident_terminal", None)
+        incident = protocol.begin(context) if protocol else None
+        completed = False
         try:
-            async for event in self._run(context):
-                yield event
+            async with aclosing(self._run(context)) as events:
+                async for event in events:
+                    if event.type in {SSEEventType.ERROR, SSEEventType.DONE}:
+                        completed = True
+                        if protocol:
+                            protocol.finish(incident, context.extra.get("incident_terminal", "turn_error")
+                                            if event.type == SSEEventType.ERROR else None)
+                    yield event
         except (ProviderError, TimeoutError, ValueError) as exc:
+            completed = True
+            code = getattr(exc, "code", "deadline" if isinstance(exc, TimeoutError) else "invalid_request")
+            if protocol:
+                protocol.finish(incident, context.extra.get("incident_terminal", "turn_error"),
+                                **exception_facts(exc))
             yield SSEEvent(type=SSEEventType.ERROR,
-                data={"code": getattr(exc, "code", "deadline" if isinstance(exc, TimeoutError) else "invalid_request"),
+                data={"code": code,
                       "message": str(exc) if isinstance(exc, (ProviderError, ValueError)) else "The model request deadline was reached"},
                 session_id=context.session_id, request_id=context.request_id)
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        except Exception as exc:
+            if protocol and not completed:
+                protocol.finish(incident, "turn_exception", **exception_facts(exc))
+                completed = True
+            raise
+        finally:
+            if protocol and not completed:
+                protocol.finish(incident, "turn_interrupted")
 
     async def _run(self, context: AgentContext) -> AsyncGenerator[SSEEvent, None]:
         """
@@ -132,7 +174,8 @@ class AgentOrchestrator:
         if self._memory_runtime is not None and context.memory_packet is None:
             context.memory_packet = await self._memory_runtime.prepare(context)
         # Build system prompt and inject into context
-        if not context.system_prompt:
+        built_prompt = not context.system_prompt
+        if built_prompt:
             context.system_prompt = self.build_system_prompt(context)
             context.system_prompt += (
                 "\nUse the supplied local date and time for deadlines, relative dates, and time-sensitive advice. "
@@ -207,8 +250,15 @@ class AgentOrchestrator:
             if context.memory_packet is not None:
                 from app.services.memory_runtime import packet_json
                 context.system_prompt += "\n<remembered_context>\n" + packet_json(context.memory_packet) + "\n</remembered_context>"
-            if context.coordination and context.task_role != "worker":
-                await context.coordination.pin_prompt(context)
+        if self.incidents and not context.extra.get("incident_instructions"):
+            context.system_prompt += (
+                "\nIf you observe an error or unexpected event while working, use report_incident promptly, "
+                "even if you can continue. Report only what you directly observed. The runtime separately "
+                "records terminal failures and interruptions."
+            )
+            context.extra["incident_instructions"] = True
+        if built_prompt and context.coordination and context.task_role != "worker":
+            await context.coordination.pin_prompt(context)
 
         messages = list(context.conversation_history)
         tools = self._registry.list_tools(context)
@@ -231,11 +281,13 @@ class AgentOrchestrator:
                     await inbox.record_boundary(messages)
             # ── Safety guard (Rule 4a) ──────────────────────────────────────
             if iterations >= min(MAX_TOOL_ITERATIONS, context.extra.get('max_tool_iterations',MAX_TOOL_ITERATIONS)):
+                context.extra["incident_terminal"] = "safety_guard_triggered"
                 log.error(
                     "safety_guard_triggered",
                     extra={
                         "request_id": context.request_id,
                         "iterations": iterations,
+                        "damage_control_handled": True,
                     },
                 )
                 yield SSEEvent(
@@ -358,6 +410,7 @@ class AgentOrchestrator:
                         files_before = len(context.extra.get('produced_files', []))
                         result = await self._registry.execute_recorded(tool_block, context)
                     except (ProviderError, TimeoutError):
+                        context.extra["incident_terminal"] = "tool_stopped_turn"
                         # Keep every completed action visible even if a later
                         # call has an unknown outcome. Close all protocol pairs.
                         tool_results.append({"type": "tool_result", "tool_use_id": tool_block.id,
@@ -368,6 +421,9 @@ class AgentOrchestrator:
                         messages.append({"role": "user", "content": tool_results})
                         context.extra["completed_messages"] = list(messages)
                         raise
+                    if self.incidents and tool_block.name != "report_incident" and tool_returned_error(result):
+                        self.incidents.capture({**turn_facts(context), "event": "tool_returned_error",
+                                                "tool": tool_block.name, "ended_turn": False})
                     yield SSEEvent(type=SSEEventType.TOOL_RESULT,
                         data={'id':tool_block.id, 'result':str(result)[:8000]}, session_id=context.session_id, request_id=context.request_id)
                     for file in context.extra.get('produced_files', [])[files_before:]:
@@ -393,8 +449,12 @@ class AgentOrchestrator:
                     raise ProviderError("incomplete_tool", "Truncated tool requests cannot execute")
                 log.warning(
                     "max_tokens_hit",
-                    extra={"request_id": context.request_id, "iteration": iterations},
+                    extra={"request_id": context.request_id, "iteration": iterations,
+                           "damage_control_handled": True},
                 )
+                if self.incidents:
+                    self.incidents.capture({**turn_facts(context), "event": "model_output_truncated",
+                                            "ended_turn": False})
                 messages.append(
                     {
                         "role": "user",
@@ -413,6 +473,9 @@ class AgentOrchestrator:
                     "pause_turn",
                     extra={"request_id": context.request_id},
                 )
+                if self.incidents:
+                    self.incidents.capture({**turn_facts(context), "event": "provider_paused_turn",
+                                            "ended_turn": False})
                 messages.append(
                     {
                         "role": "user",
@@ -421,11 +484,13 @@ class AgentOrchestrator:
                 )
 
             else:
+                context.extra["incident_terminal"] = "unknown_stop_reason"
                 log.warning(
                     "unknown_stop_reason",
                     extra={
                         "request_id": context.request_id,
                         "stop_reason": stop_reason,
+                        "damage_control_handled": True,
                     },
                 )
                 yield SSEEvent(type=SSEEventType.ERROR,
