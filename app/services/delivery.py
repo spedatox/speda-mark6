@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
 from sqlalchemy import select,update
+from app.database import write_session
 from app.models.delivery import Delivery,TelegramLink
 from app.models.academic import Device
 from app.services.coordination_budget import digest,insert_for,CoordinationError
@@ -116,7 +117,7 @@ class Deliveries:
         return {'processed':len(ids)}
 
     async def send(self,owner,identity):
-        async with self.sessions() as db,db.begin():
+        async with write_session(self.sessions) as db:
             await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.user_id==owner).values(updated_at=Delivery.updated_at))
             row=await db.get(Delivery,identity)
             if not row or row.user_id!=owner: raise CoordinationError('not_found','Delivery unavailable',404)
@@ -174,13 +175,13 @@ class Deliveries:
         except BaseException as exc:
             # Cancellation after claim is also uncertain; no reset to pending.
             async def hold():
-                async with self.sessions() as db,db.begin():
+                async with write_session(self.sessions) as db:
                     await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.status=='sending').values(
                         status='unknown',detail='Transport acknowledgement unavailable. Inspect before any new send.',updated_at=datetime.utcnow()))
             await asyncio.shield(hold())
             if not isinstance(exc,Exception): raise
         else:
-            async with self.sessions() as db,db.begin():
+            async with write_session(self.sessions) as db:
                 await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.status=='sending').values(
                     status=status,remote_id=remote_id,updated_at=datetime.utcnow()))
         async with self.sessions() as db: return self.view(await db.get(Delivery,identity))
