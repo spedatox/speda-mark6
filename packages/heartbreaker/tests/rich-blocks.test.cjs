@@ -8,7 +8,10 @@ const ts = require('typescript')
 function load(name) {
   const exports = {}
   const source = fs.readFileSync(path.join(__dirname, '../src/renderer/src/lib', name + '.ts'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports })
+  const requireRaw = specifier => ({
+    default: fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/lib', specifier.replace(/\?raw$/, '')), 'utf8'),
+  })
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: requireRaw })
   return exports
 }
 const { normalizeCodeFences, parseTable, parseTimeline, recoverRichBlock, remarkRichBlocks } = load('richBlocks')
@@ -76,4 +79,41 @@ test('widget host isolates executable content and resize channels', () => {
   assert.doesNotMatch(host + component, /allow-same-origin|allow-forms|dangerouslySetInnerHTML/)
   const policy = fs.readFileSync(path.join(__dirname, '../src/renderer/index.html'), 'utf8')
   assert.match(policy, /script-src 'self';/)
+})
+
+test('vector preview includes drawn content outside the authored viewBox', () => {
+  const source = buildWidgetDocument('<svg viewBox="0 0 400 150"></svg>', {}, true)
+  const attributes = {}
+  const svg = {
+    viewBox: { baseVal: { x: 0, y: 0, width: 400, height: 150 } },
+    getBBox: () => ({ x: -25, y: 15, width: 510, height: 160 }),
+    setAttribute: (key, value) => { attributes[key] = value },
+    style: { setProperty() {} },
+  }
+  const messages = []
+  vm.runInNewContext(source.match(/<script>([\s\S]+)<\/script>/)[1], {
+    document: {
+      body: { querySelector: () => svg, style: {} },
+      documentElement: { dataset: {} },
+      fonts: { ready: { then() {} } },
+    },
+    parent: { postMessage: message => messages.push(message) },
+    setTimeout: run => run(),
+    getComputedStyle: () => ({ zoom: '1' }),
+    addEventListener() {},
+    MutationObserver: class { observe() {} },
+  })
+  const [x, y, width, height] = attributes.viewBox.split(' ').map(Number)
+  assert.ok(x < -25 && y + height > 175 && x + width > 485)
+  assert.equal(attributes.preserveAspectRatio, 'xMidYMid meet')
+  assert.equal(messages[0].ratio, width / height)
+})
+
+test('interactive hints describe only visible, enabled controls', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../../speda-go/app/src/main/assets/artifact-controls.js'), 'utf8')
+  const visible = { matches: () => false, getClientRects: () => [1], visibility: 'visible' }
+  const groups = [[visible], [{ ...visible, matches: () => true }], [], [visible], [{ ...visible, visibility: 'hidden' }]]
+  const context = { getComputedStyle: control => control }
+  vm.runInNewContext(source, context)
+  assert.equal(context.artifactControls({ querySelectorAll: () => groups.shift() }), 1 | 8)
 })

@@ -798,6 +798,15 @@ data class AppStrings(
         val diagram: String,
         val svg: String,
         val desktopOnlyNotice: String,
+        val interactive: String,
+        val dragSlider: String,
+        val enterValue: String,
+        val chooseOption: String,
+        val useButtons: String,
+        val openDetails: String,
+        val fitDiagram: String,
+        val zoomIn: String,
+        val zoomOut: String,
     )
 
     data class Aircraft(

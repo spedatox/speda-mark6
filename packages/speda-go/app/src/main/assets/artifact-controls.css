@@ -1,0 +1,46 @@
+/* Default presentation for authored HTML on desktop and Android. */
+:where(body[data-hb-widget]) { padding: 14px; }
+:where(input, select, textarea, button, summary) { font: inherit; color: inherit; }
+:where(input:not([type]), input[type=text], input[type=number], input[type=search],
+       input[type=email], input[type=password], select, textarea) {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+:where(input, textarea)::placeholder { color: var(--text-muted); }
+:where(button, input[type=button], input[type=submit], input[type=reset]) {
+  min-height: 36px;
+  padding: 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-sidebar));
+  color: var(--accent-hover);
+  font-weight: 600;
+  cursor: pointer;
+}
+:where(button, input[type=button], input[type=submit], input[type=reset]):enabled:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, var(--bg-sidebar));
+}
+:where(button, input, select, textarea):disabled { opacity: .55; cursor: default; }
+:where(input[type=range], input[type=checkbox], input[type=radio]) { accent-color: var(--accent); cursor: pointer; }
+:where(input[type=range]) { display: block; width: 100%; max-width: 100%; min-height: 30px; margin: 6px 0 10px; }
+:where(summary) { color: var(--accent-hover); cursor: pointer; }
+:where(input, select, textarea, button, summary, [contenteditable=true]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:where(label) { color: var(--text-secondary); }
+:where(output, [role=status], [role=alert]) { color: var(--accent-hover); font-variant-numeric: tabular-nums; }
+:where(pre) {
+  max-width: 100%;
+  overflow: auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}

@@ -341,6 +341,7 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
   return (
     <div
       className={canvas ? 'hb-canvas-body' : framed ? 'hb-holo' : undefined}
+      data-artifact={canvas && panel.kind === 'widget' || undefined}
       style={{
         // On the BOARD a window has a size and its body fills it, scrolling if
         // the content overruns. In FLOW — the chat transcript, where the same

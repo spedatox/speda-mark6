@@ -25,7 +25,9 @@ export default function CanvasPreview({ fixtures, onClose }: { fixtures: [string
   ] })), fixtures[3][1], fixtures[1][1],
     fence('stat | Focus', 'THIS WEEK\nFriday morning\nAttend Marketing'),
     fence('stat | Coursework', 'MARKETING / MAR411\nTwo courses\nKeep the full names readable'),
-    fence('svg | Tuesday timeline', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 190"><path d="M40 90H1060" stroke="#36abca"/><text x="40" y="60" font-size="14" fill="#dbe6ec">09:00 — Workplace Application I</text><text x="520" y="130" font-size="14" fill="#dbe6ec">16:20 — Appointment at Etlik Hospital</text><circle cx="520" cy="90" r="5" fill="#36abca"/></svg>'),
+    fence('svg | Tuesday timeline', '<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="190" viewBox="0 0 1100 190"><path d="M40 90H1060" stroke="#36abca"/><text x="40" y="60" font-size="24" fill="#dbe6ec">09:00 — Workplace Application I</text><text id="overflow-label" x="940" y="202" font-size="24" fill="#dbe6ec">16:20 — Appointment at Etlik Hospital</text><circle cx="940" cy="90" r="5" fill="#36abca"/></svg>'),
+    fence('svg | Tall diagram', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 830"><path d="M130 40V800" stroke="#36abca"/><text x="130" y="38" text-anchor="middle" font-size="24" fill="#dbe6ec">Start</text><text x="130" y="810" text-anchor="middle" font-size="24" fill="#dbe6ec">End</text></svg>'),
+    fence('html | Predict the output', '<pre>int a = 12, b = 5;\nSystem.out.println(a / b);</pre><label for="prediction">Prediction</label> <input id="prediction" placeholder="Enter your answer"> <button id="check">Check</button><p id="result" role="status"></p><script>check.onclick=()=>result.textContent=prediction.value==="2"?"Correct":"Try again"</script>'),
     fence('card | Appointment details', 'Oncology — Internal Medicine\nTime: 16:20\nLocation: Varlık, Halil Sezai Erkut Cd. No:5, Yenimahalle\nNote: Full address remains readable.'),
   ].join('\n\n')
   const panels: VoicePanel[] = [

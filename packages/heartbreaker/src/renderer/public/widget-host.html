@@ -3,16 +3,20 @@
 <!-- A separately navigated document has its own CSP. The chat keeps script-src
      'self'; only these opaque, sandboxed widget frames can run authored scripts. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-src 'self' about:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
-<style>html,body{margin:0;background:transparent;overflow:hidden}iframe{display:block;width:100%;height:100vh;border:0;background:transparent}</style>
+<style>html,body{margin:0;background:transparent;overflow:hidden;color-scheme:dark}iframe{display:block;width:100%;height:100vh;border:0;background:transparent}</style>
 </head><body><iframe title="Interactive content" sandbox="allow-scripts"></iframe>
 <script>
 const frame=document.querySelector('iframe');let channel='';
 addEventListener('message',event=>{
   if(event.source===parent&&event.data?.type==='speda-widget-init'&&typeof event.data.document==='string'){
+    if(event.data.channel===channel)return;
     channel=event.data.channel;frame.srcdoc=event.data.document;return;
   }
+  if(event.source===parent&&event.data?.type==='speda-widget-scale'&&event.data.channel===channel){
+    frame.contentWindow.postMessage({type:'widget-scale',scale:event.data.scale},'*');return;
+  }
   if(event.source!==frame.contentWindow||!channel)return;
-  if(event.data?.type==='widget-height'&&Number.isFinite(event.data.height))parent.postMessage({type:'speda-widget-resize',channel,height:event.data.height},'*');
+  if(event.data?.type==='widget-height'&&Number.isFinite(event.data.height))parent.postMessage({type:'speda-widget-resize',channel,height:event.data.height,ratio:event.data.ratio,controls:event.data.controls},'*');
   if(event.data?.type==='widget-error')parent.postMessage({type:'speda-widget-error',channel,message:String(event.data.message).slice(0,200)},'*');
 });
 </script></body></html>
