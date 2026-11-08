@@ -164,8 +164,9 @@ export async function* streamChat(
   })
 
   if (!res.ok) {
-    const text = await res.text().catch(() => `HTTP ${res.status}`)
-    throw new Error(text)
+    const body = await res.json().catch(() => null)
+    const detail = typeof body?.detail === 'string' ? body.detail : body?.detail?.[0]?.msg
+    throw new Error(typeof detail === 'string' ? detail : `HTTP ${res.status}`)
   }
 
   const reader = res.body!.getReader()

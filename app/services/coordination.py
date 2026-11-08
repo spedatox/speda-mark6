@@ -733,7 +733,9 @@ class Coordinator:
             if pending:
                 await self.emit(run_id, "delta", step.agent_id, {"text": pending}, step.id)
         if error is not None:
-            raise CoordinationError("step_failed", str(error))
+            if isinstance(error, dict):
+                raise ProviderError(error["code"], error["message"])
+            raise ProviderError("step_failed", str(error))
         return "".join(chunks)
 
     async def _heartbeat(self, run_id):
@@ -910,7 +912,10 @@ class Coordinator:
                     room = await self.owned_room(db, run.user_id, run.room_id, lock=True)
                     if room.active_run == run.id:
                         room.active_run = None
-                    await self.event(db, room, "run_stopped", "system", {"status": run.status, "reason": reason}, run.id)
+                    failure = {"status": run.status, "reason": reason}
+                    if isinstance(exc, ProviderError):
+                        failure["error_code"] = exc.code
+                    await self.event(db, room, "run_stopped", "system", failure, run.id)
                     trigger = run.policy.get('trigger_payload', {})
                     mail_watch = trigger.get('type') == 'mail_watch'
                     if (self.deliveries and run.policy.get('output_mode') == 'push' and not run.cancelled

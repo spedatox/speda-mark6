@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import select, update, case
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from app.database import write_session
 from app.models.iacon import IaconWork, IaconCall, IaconFollowup, IaconSourceRetirement
 from app.models.memory_serving import MemoryChange
 from app.schemas.iacon import Command
@@ -53,7 +54,7 @@ class Orion:
         return key if result.rowcount else None
 
     async def intake(self, user_id):
-        async with self.sessions() as db, db.begin():
+        async with write_session(self.sessions) as db:
             sources = (await db.execute(select(MemoryChange).where(MemoryChange.user_id == user_id,
                 MemoryChange.source_role == "owner", MemoryChange.revoked.is_(False),
                 MemoryChange.id.not_in(select(IaconSourceRetirement.source_id).where(

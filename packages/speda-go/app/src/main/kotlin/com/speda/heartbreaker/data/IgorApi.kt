@@ -222,9 +222,16 @@ class IgorApi(
                     // agent, which is a real error the owner needs to see.
                     if (attach && response.code == 404) throw AttachGone()
                     val errorSource = response.body?.source()
-                    errorSource?.request(301)
-                    val text = errorSource?.buffer?.let { it.readUtf8(minOf(it.size, 300L)) }.orEmpty()
-                    throw ApiFailure(if (text.isNotBlank()) text.take(300) else "HTTP ${response.code}", response.code == 408 || response.code == 429 || response.code >= 500)
+                    errorSource?.request(4096)
+                    val text = errorSource?.buffer?.let { it.readUtf8(minOf(it.size, 4096L)) }.orEmpty()
+                    val detail = runCatching {
+                        when (val value = json.parseToJsonElement(text).jsonObject["detail"]) {
+                            is JsonPrimitive -> value.contentOrNull
+                            is JsonArray -> (value.firstOrNull() as? JsonObject)?.get("msg")?.jsonPrimitive?.contentOrNull
+                            else -> null
+                        }
+                    }.getOrNull()
+                    throw ApiFailure(detail ?: "HTTP ${response.code}", response.code == 408 || response.code == 429 || response.code >= 500)
                 }
                 val source = response.body?.source() ?: return@use
                 val decoder = SseDecoder()

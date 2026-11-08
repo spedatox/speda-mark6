@@ -888,6 +888,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
         } else if (event.type === 'file') {
           dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
         } else if (event.type === 'done') {
+          if (settled) continue
           markThinkingDone()  // safety net — a turn that only ever thought out loud
           finalizeFlush()  // drain any buffered text before finalizing
           // Speak the trailing fragment — a reply often ends without terminal
@@ -1202,6 +1203,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           } else if (event.type === 'file') {
             dispatch({ type: 'ADD_FILE', payload: { id: assistantId, file: event.data as import('../lib/types').FileMeta } })
           } else if (event.type === 'done') {
+            if (settled) continue
             markThinkingDone()
             if (handle != null) cancelAnimationFrame(handle)
             flush()

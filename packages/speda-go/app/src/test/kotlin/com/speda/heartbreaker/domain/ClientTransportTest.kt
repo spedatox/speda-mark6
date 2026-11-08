@@ -86,6 +86,16 @@ class ClientTransportTest {
         }
     }
 
+    @Test fun chat_upload_rejection_displays_only_the_server_message() {
+        server({ 422 to """{"detail":[{"msg":"Attachment exceeds 10 MiB","input":"private attachment"}]}""" }) { api, config, _ ->
+            val error = assertThrows(ApiFailure::class.java) { runBlocking {
+                api.streamChat("Read the slides", null, config).toList()
+            } }
+            assertEquals("Attachment exceeds 10 MiB", error.message)
+            assertFalse(error.retryable)
+        }
+    }
+
     @Test fun membership_conflict_is_never_reported_as_success_or_automatically_replayed() {
         server({ 409 to "{\"detail\":\"stale version\"}" }) { api, config, requests ->
             assertThrows(ApiFailure::class.java) { runBlocking {

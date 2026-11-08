@@ -973,6 +973,7 @@ class ChatViewModel(
                         // would ever be raised. Falling through to the else is
                         // the correct behaviour, not an omission.
                         "done" -> {
+                            if (settled) return@collect
                             markThinkingDone() // safety net — a turn that only ever thought out loud
                             flush(); settled = true
                             // Flush the last part-sentence, then let playback
@@ -990,8 +991,10 @@ class ChatViewModel(
                             flush(); settled = true
                             // Nothing half-spoken survives a failed turn.
                             stopSpeaking()
-                            dispatch(ChatAction.ErrorMessage(assistantId, strOf(event.data) ?: strings.chatMain.turnFailed))
-                            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, strOf(event.data) ?: strings.chatMain.turnFailed))
+                            val message = strOf((event.data as? JsonObject)?.get("message"))
+                                ?: strOf(event.data) ?: strings.chatMain.turnFailed
+                            dispatch(ChatAction.ErrorMessage(assistantId, message))
+                            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, message))
                         }
                     }
                 }

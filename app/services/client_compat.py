@@ -293,7 +293,8 @@ class ClientCompatibility:
                         projected=self.coordinator.workers.envelope(event,snapshot)
                         if projected:yield encode('subagent',projected)
                 elif kind == "run_stopped":
-                    yield encode("error", {"message": payload.get("reason", payload["status"]), "code": payload["status"]})
+                    yield encode("error", {"message": payload.get("reason", payload["status"]),
+                        "code": payload.get("error_code", payload["status"])})
                     yield encode("done", {"status": payload["status"]})
                     return
                 elif kind == "round_finished":

@@ -12,6 +12,72 @@ from app.services.coordination_budget import CoordinationError
 from tests.test_coordination import setup, reply
 
 
+async def test_chat_accepts_large_powerpoint_and_redacts_invalid_attachment_input(memory):
+    import base64
+    import io
+    from random import Random
+
+    from httpx import ASGITransport, AsyncClient
+    from PIL import Image
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    from app.main import create_app
+
+    pixels = Random(32).randbytes(1600 * 1600 * 3)
+    picture = io.BytesIO()
+    Image.frombytes("RGB", (1600, 1600), pixels).save(picture, format="PNG")
+    picture.seek(0)
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "Chapter 4 lecture"
+    slide.shapes.add_picture(picture, Inches(1), Inches(2), width=Inches(2))
+    output = io.BytesIO()
+    presentation.save(output)
+    assert 7_300_000 < output.tell() < 10 * 1024**2
+    body = {"message": "Read the slides", "documents": [{
+        "name": "Chapter 4.pptx", "size": output.tell(),
+        "data": base64.b64encode(output.getvalue()).decode("ascii"),
+    }]}
+
+    bits = await setup(memory, [reply("I read the lecture.")])
+    app = create_app()
+    app.state.client_compat = ClientCompatibility(bits.coordinator)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test",
+                               headers={"X-API-Key": "test-only-key", "X-Chat-Format": "room-v1"}) as http:
+            ok = await http.post("/chat/ultron", json=body)
+            assert ok.status_code == 200 and "I read the lecture." in ok.text
+            assert "Chapter 4 lecture" in json.dumps(bits.client.calls[0]["messages"])
+
+            body["documents"][0]["size"] = 10 * 1024**2 + 1
+            rejected = await http.post("/chat/ultron", json=body)
+            assert rejected.status_code == 422
+            assert rejected.json() == {"code": "attachment_size", "detail": "Attachment exceeds 10 MiB"}
+
+            body["documents"][0]["size"] = 1
+            body["documents"][0]["data"] = {"private": "attachment data"}
+            invalid = await http.post("/chat/ultron", json=body)
+            assert invalid.status_code == 422 and "attachment data" not in invalid.text
+            assert len(bits.client.calls) == 1
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_chat_stream_preserves_the_safe_failure_reason(memory):
+    from app.schemas.llm import ProviderError
+
+    bits = await setup(memory, [ProviderError("not_connected", "Vendor account needs authentication")])
+    adapter = ClientCompatibility(bits.coordinator)
+    try:
+        result = await adapter.start(1, "speda", ClientChat(message="Check my messages"))
+        frames = [json.loads(f[6:]) async for f in adapter.stream(1, result["request_id"], structured=True)]
+        error = next(frame["data"] for frame in frames if frame["type"] == "error")
+        assert error == {"message": "Vendor account needs authentication", "code": "not_connected"}
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_imported_history_sorts_by_original_date_before_allocated_id(memory):
     from datetime import datetime
     bits = await setup(memory, [])

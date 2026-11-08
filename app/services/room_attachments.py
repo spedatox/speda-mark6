@@ -6,22 +6,26 @@ from pathlib import PurePath
 from uuid import uuid4
 from sqlalchemy import select, func
 from app.models.coordination import RoomAttachment
+from app.schemas.client_compat import MAX_CHAT_DOCUMENT_BYTES, MAX_CHAT_IMAGE_BYTES
 from app.services.library_extract import extract_document_bytes, ExtractionError
 from app.services.coordination_budget import CoordinationError
 
 
-def decode_attachment(encoded):
+def decode_attachment(encoded, max_bytes):
     try:
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, TypeError) as exc:
         raise CoordinationError('attachment_encoding', 'Attachment is not valid base64', 422) from exc
-    if not data or len(data) > 2 * 1024**2:
-        raise CoordinationError('attachment_size', 'Attachments must contain at most 2 MiB', 422)
+    if not data:
+        raise CoordinationError('attachment_size', 'The attachment is empty', 422)
+    if len(data) > max_bytes:
+        raise CoordinationError('attachment_size', f'Attachment exceeds {max_bytes // 1024**2} MiB', 422)
     return data
 
 
 def prepare_client_attachment(attachment, *, image=False):
-    data = decode_attachment(attachment.data)
+    max_bytes = MAX_CHAT_IMAGE_BYTES if image else MAX_CHAT_DOCUMENT_BYTES
+    data = decode_attachment(attachment.data, max_bytes)
     if image:
         from PIL import Image
         try:
@@ -38,12 +42,20 @@ def prepare_client_attachment(attachment, *, image=False):
     name = attachment.name.replace('\\', '/').split('/')[-1]
     suffix = PurePath(name).suffix.lower()
     mime = {'.pdf':'application/pdf', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv':'text/csv'}.get(suffix, 'text/plain')
     try:
-        parts = extract_document_bytes(data, mime, max_bytes=2 * 1024**2, max_pages=20, max_characters=32000)
+        parts = extract_document_bytes(data, mime, max_bytes=max_bytes, max_pages=20,
+            max_characters=2_000_000 if suffix == '.pptx' else 32000)
     except ExtractionError as exc:
         raise CoordinationError('attachment_extraction', str(exc), 422) from exc
-    return {'name': name, 'mime': mime, 'original': data, 'extracted': '\n\n'.join(p.content for p in parts)}
+    text = '\n\n'.join(p.content for p in parts)
+    if suffix == '.pptx':
+        encoded = text.encode('utf-8')
+        if len(encoded) > 32000:
+            text = encoded[:32000].decode('utf-8', errors='ignore') + '\n\n[Additional slide text omitted.]'
+        text = '[PowerPoint slide text. Images and diagrams were not inspected.]\n\n' + text
+    return {'name': name, 'mime': mime, 'original': data, 'extracted': text}
 
 
 class Attachments:

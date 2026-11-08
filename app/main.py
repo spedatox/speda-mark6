@@ -376,10 +376,25 @@ def create_app() -> FastAPI:
             return FileResponse(Path(__file__).parent / "static" / "rooms.html",
                 headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
     from app.services.coordination_budget import CoordinationError
+    from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
     @app.exception_handler(CoordinationError)
     async def coordination_error(request, exc):
         return JSONResponse(status_code=exc.status, content={"code": exc.code, "detail": str(exc)})
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        from app.schemas.client_compat import MAX_CHAT_DOCUMENT_BYTES, MAX_CHAT_IMAGE_BYTES
+        errors = []
+        for error in exc.errors()[:20]:
+            loc, kind = error["loc"], error["type"]
+            if kind in {"string_too_long", "less_than_equal"} and len(loc) == 4 and loc[0] == "body":
+                limit = {"documents": MAX_CHAT_DOCUMENT_BYTES, "attachments": MAX_CHAT_IMAGE_BYTES}.get(loc[1])
+                if limit is not None and loc[-1] in {"size", "data"}:
+                    return JSONResponse(status_code=422, content={"code": "attachment_size",
+                        "detail": f"Attachment exceeds {limit // 1024**2} MiB"})
+            errors.append({"loc": loc, "type": kind, "msg": error["msg"]})
+        return JSONResponse(status_code=422, content={"detail": errors})
     from app.profiles.registry import UnknownPersona
     @app.exception_handler(UnknownPersona)
     async def persona_error(request, exc):

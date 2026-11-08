@@ -5,6 +5,9 @@ from app.schemas.llm import ThinkingRequest
 from app.core.surface import ClientContext
 from typing import Literal
 
+MAX_CHAT_IMAGE_BYTES = 2 * 1024**2
+MAX_CHAT_DOCUMENT_BYTES = 10 * 1024**2
+
 
 class ImageAttachment(BaseModel):
     media_type: Literal['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -14,8 +17,8 @@ class ImageAttachment(BaseModel):
 class DocumentAttachment(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     media_type: str = Field(default='', max_length=255)
-    data: str = Field(min_length=1, max_length=2800000)
-    size: int = Field(default=0, ge=0, le=2097152)
+    data: str = Field(min_length=1, max_length=4 * ((MAX_CHAT_DOCUMENT_BYTES + 2) // 3))
+    size: int = Field(default=0, ge=0, le=MAX_CHAT_DOCUMENT_BYTES)
 
 
 class ClientChat(BaseModel):

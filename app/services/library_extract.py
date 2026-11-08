@@ -102,7 +102,8 @@ def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 *
         else:
             passages.extend(ExtractedPassage(c) for c in chunk_text(text))
     elif mime_type in {"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}:
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       "application/vnd.openxmlformats-officedocument.presentationml.presentation"}:
         passages = extract_office(blob, mime_type, max_characters=max_characters)
     elif mime_type in {"image/png", "image/jpeg"} and ocr is not None:
         text = ocr.image(blob, mime_type)
@@ -153,7 +154,10 @@ def extract_office(blob, mime_type, *, max_characters):
                     raise ExtractionError("Word document contains unsupported text boxes or revision markup")
             if any(m.filename in {"word/footnotes.xml", "word/endnotes.xml"} for m in members):
                 raise ExtractionError("Word notes require owner review")
-        if mime_type.endswith("wordprocessingml.document"):
+        if mime_type.endswith("presentationml.presentation"):
+            from app.services.attachments import _extract_pptx
+            add(_extract_pptx(blob), "Slide text")
+        elif mime_type.endswith("wordprocessingml.document"):
             from docx import Document
             from docx.table import Table
             from docx.text.paragraph import Paragraph
