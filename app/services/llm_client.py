@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import logging
 from urllib.parse import quote
 
 import httpx
@@ -10,6 +11,8 @@ import anthropic
 from app.schemas.llm import ProviderError
 from app.services.llm_protocol import decode, request_body
 from app.services.model_policy import parse_model_ref
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -116,6 +119,8 @@ class LLMClient:
                             "rejected" if exc.code.startswith("http_") else "unknown"))
                     if not exc.retryable or attempt == len(candidates):
                         raise
+                    logger.warning("provider_fallback_after_error",
+                                   extra={"agent": agent_id, "role": role, "error_code": exc.code})
                     continue
                 except BaseException:
                     await selected_stream.close()

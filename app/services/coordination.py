@@ -1033,6 +1033,7 @@ class Coordinator:
     async def recover(self):
         """Claim loss is not execution resumption. The n8n drain can call this too."""
         recovered = 0
+        interrupted_runs = []
         async with write_session(self.sessions) as db:
             rows = (await db.execute(select(CoordinationRun).where(
                 CoordinationRun.status.in_(["running", "waiting_tasks"]),
@@ -1047,11 +1048,15 @@ class Coordinator:
                     LegionExecution.status.in_(['admitted','running','queued','cancel_requested'])).values(status='reconciling',
                     result='Executor lease lost; inspect saved outcomes. This worker was not restarted.'))
                 recovered += 1
+                interrupted_runs.append(run.id)
                 if room.active_run == run.id:
                     room.active_run = None
                 await self.event(db, room, "run_stopped", "system",
                     {"status": "reconciling", "reason": "Executor lease lost; verify effects and Cells before resuming"}, run.id)
             queued = list((await db.execute(select(CoordinationRun.id).where(CoordinationRun.status == "queued"))).scalars())
+        if protocol := getattr(self.orchestrator, "incidents", None):
+            for run_id in interrupted_runs:
+                protocol.capture({"event": "coordination_lease_lost", "run_id": run_id, "ended_turn": True})
         for run_id in queued:
             self.launch(run_id)
         async with self.sessions() as db:

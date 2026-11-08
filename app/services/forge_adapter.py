@@ -9,7 +9,39 @@ from app.models.coordination import WorkerCheck, ProjectTask, TaskInput
 from uuid import uuid4
 from app.services.coordination_budget import CoordinationError, digest
 from forge.model.base import TextDelta, ToolUseRequest, UsageReport, TurnEnd
-from forge.warden.tool import ToolResult
+from forge.warden.tool import Tool, ToolResult
+from app.skills.damage_control import IncidentObservation, ReportIncidentSkill
+from app.services.damage_control import turn_facts
+
+
+class ForgeIncidentTool(Tool):
+    name = ReportIncidentSkill.name
+    description = ReportIncidentSkill.description
+    Args = IncidentObservation
+
+    def __init__(self, protocol, context):
+        self.skill = ReportIncidentSkill(protocol)
+        self.context = context
+
+    def check_permissions(self, args, ctx):
+        from forge.warden.permissions import ALLOW
+        return ALLOW
+
+    async def call(self, args, ctx):
+        return ToolResult(await self.skill.execute(args.model_dump(), self.context))
+
+
+class ForgeIncidentProvider:
+    name = "damage_control"
+
+    def __init__(self, protocol, context):
+        self.tool = ForgeIncidentTool(protocol, context)
+
+    async def provide(self, cfg, request):
+        return {self.tool.name: self.tool}
+
+    async def close(self):
+        pass
 
 
 class ForgeModel:
@@ -61,8 +93,9 @@ class ForgeModel:
 
 class ForgeEffects:
     """Mandatory pre-effect journal, outside Forge's best-effort observers."""
-    def __init__(self, sessions, context):
+    def __init__(self, sessions, context, protocol=None):
         self.sessions, self.context = sessions, context
+        self.protocol = protocol
 
     async def cell_lifecycle(self, status, backend, handle, workspace):
         async with self.sessions() as db, db.begin():
@@ -109,6 +142,9 @@ class ForgeEffects:
                 db.add(WorkerCheck(id=check_id, task_id=task.id, call_id=call.id,
                     before_revision=revision, command=call.input))
         result = await execute()
+        if self.protocol and result.is_error:
+            self.protocol.capture({**turn_facts(ctx), "event": "forge_tool_returned_error",
+                                   "tool": call.name, "ended_turn": False})
         async with self.sessions() as db, db.begin():
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == ctx.user_id, ToolExecutionReceipt.request_id == ctx.request_id,

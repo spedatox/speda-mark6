@@ -42,6 +42,8 @@ class Deliveries:
         kwargs={'data':{k:str(v) for k,v in payload.items()},'files':files} if files else {'json':payload}
         status,body=await request_bytes('POST','https://api.telegram.org/bot'+token+'/'+method,
             maximum=64000,timeout=30 if files else 12,**kwargs)
+        if status == 429:
+            raise ProviderError('telegram_throttled', 'Telegram rejected this request due to rate limiting.')
         try: data=json.loads(body)
         except ValueError: raise ProviderError('delivery_unknown','Telegram returned an unverifiable response.')
         if status>=300 or not isinstance(data,dict) or not data.get('ok'):
