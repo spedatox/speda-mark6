@@ -751,7 +751,9 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       for (;;) {
         try {
           for await (const event of source) yield event
-          return
+          if (settled) return
+          ctrl.signal.throwIfAborted()
+          throw new TypeError('Connection closed before the turn was confirmed')
         } catch (err) {
           // An abort (Stop, or switching away) is deliberate — never retried.
           // A watchdog timeout is a decision this code already made. Anything
@@ -920,28 +922,15 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           finalizeFlush()
           // Cut speech dead rather than finish(): the turn failed, so whatever
           // is still queued belongs to an answer that is not coming.
-          voiceRef.current?.stop()
-          voiceRef.current = null
-          spokenIdRef.current = null
-          setOrbState('idle')
+          stopSpeaking()
           settled = true
-          dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: errorText(event.data) } })
+          dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: errorText(event.data), unsent: !gotStart } })
         }
-      }
-      // Stream ended. If the backend closed it without a terminal event (e.g. it
-      // crashed mid-turn), finalize anyway so the message never stays stuck
-      // "thinking" with no way out. Keep whatever text streamed.
-      if (!settled) {
-        finalizeFlush()
-        // Text did stream, so speak the remainder rather than discarding it —
-        // an abrupt backend close should not swallow the last clause.
-        voiceRef.current?.finish()
-        settled = true
-        dispatch({ type: 'FINISH_MESSAGE', payload: { id: assistantId, sessionId: state.activeSessionId ?? 0 } })
       }
     } catch (err: unknown) {
       finalizeFlush()  // keep whatever text streamed before the failure/abort
       settled = true
+      if (abortRef.current === ctrl) stopSpeaking()
       if (timedOut) {
         // Precise, phase-specific reason built by the watchdog — never filler.
         dispatch({ type: 'ERROR_MESSAGE', payload: { id: assistantId, error: timeoutReason || t.chatMain.timedOutFallback, unsent: !gotStart } })
@@ -958,7 +947,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           }
           // Do NOT dispatch FINISH_MESSAGE — the turn is STILL running on the backend.
         }
-      } else if (err instanceof AttachGone) {
+      } else if (err instanceof AttachGone && gotStart) {
         // The backend has no record of this turn any more: it finished while we
         // were reconnecting and aged out of the replay window. The answer is in
         // the DB — finalise the bubble rather than accusing the backend of being
@@ -967,7 +956,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       } else if (err instanceof Error) {
         // Network failures throw a bare TypeError ("Failed to fetch") — name it
         // as unreachable-backend rather than dumping the opaque string.
-        const net = /failed to fetch|networkerror|load failed|err_connection|attach failed: HTTP/i.test(err.message)
+        const net = isTransportFailure(err) || err instanceof AttachGone
         // Last check before accusing the backend of being unreachable: ask it.
         // Reconnection is exhausted, but if the turn is STILL listed as running
         // then the answer is coming and this is a local transport problem, not a
@@ -1003,7 +992,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
     }
   }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
       settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
-      dispatch, t, rememberVoice, reply, state.room?.members, state.viewEpoch])
+      dispatch, t, rememberVoice, reply, state.room?.members, state.viewEpoch, stopSpeaking])
 
   // Mirror the latest `send` into a ref so the stable row handlers below can call
   // it without listing it as a dependency (which would make them change identity
@@ -1283,7 +1272,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   // stateRef so this handler keeps a STABLE identity across chunks.
   const handleRegenerate = useCallback((assistantId: string) => {
     const st = stateRef.current
-    if (st.isStreaming) return
+    if (st.isStreaming || abortRef.current) return
     const idx = st.messages.findIndex(m => m.id === assistantId)
     if (idx <= 0) return
     const userMsg = [...st.messages.slice(0, idx)].reverse().find(message => !message.roomNotice && !message.isWorkerAnchor)
@@ -1328,7 +1317,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
    * every transition the transcript already handles — switch, reattach,
    * regenerate, delete — for free. */
   const voiceAnswers = useMemo(
-    () => state.messages.filter(m => m.role === 'assistant' && !m.roomNotice),
+    () => state.messages.filter(m => m.role === 'assistant' && !m.roomNotice && !m.isWorkerAnchor),
     [state.messages],
   )
   /* Which answer voice mode is showing.
@@ -1347,7 +1336,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
   const voiceIndex = voicePin ?? Math.max(0, voiceAnswers.length - 1)
   const voiceReply = voiceAnswers[voiceIndex] ?? null
   const replayVoice = () => {
-    if (!voiceReply || voiceReply.isStreaming || state.isStreaming || !voiceReady) return
+    if (!voiceReply || voiceReply.isError || voiceReply.isStreaming || state.isStreaming || !voiceReady) return
     stopSpeaking()
     const saved = voiceRecordings.current.get(voiceReply.id)
     const recording = saved?.text === voiceReply.content ? saved : undefined
@@ -1409,6 +1398,10 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           inputLevel={voiceInputLevel}
           reply={voiceReply?.content ?? ''}
           streaming={!!voiceReply?.isStreaming}
+          error={voiceReply?.isError ? voiceReply.errorNote || t.message.somethingWentWrong : undefined}
+          onRetry={voiceReply?.isError && voiceIndex === voiceAnswers.length - 1 && !state.isStreaming
+            ? () => handleRegenerate(voiceReply.id)
+            : undefined}
           tools={voiceReply?.tools ?? []}
           answerIndex={voiceIndex}
           answerCount={voiceAnswers.length}
@@ -1426,7 +1419,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
           onClose={() => onCloseVoice?.()}
           onStopSpeaking={stopSpeaking}
           onReplay={replayVoice}
-          canReplay={voiceReady && !!voiceReply?.content.trim() && !voiceReply?.isStreaming && !state.isStreaming}
+          canReplay={voiceReady && !!voiceReply?.content.trim() && !voiceReply.isError && !voiceReply.isStreaming && !state.isStreaming}
           micState={micState}
           configured={voiceReady}
           canvas={canvas}

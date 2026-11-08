@@ -776,6 +776,7 @@ function RetryBtn({ onClick }: { onClick: () => void }) {
   const [hover, setHover] = useState(false)
   return (
     <button
+      type="button"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -791,6 +792,25 @@ function RetryBtn({ onClick }: { onClick: () => void }) {
       <IconRefresh />
       {t.message.tryAgain}
     </button>
+  )
+}
+
+export function TurnError({ error, onRetry, style }: {
+  error: string
+  onRetry?: () => void
+  style?: React.CSSProperties
+}) {
+  return (
+    <div style={{
+      color: '#f87171', userSelect: 'text', overflowWrap: 'anywhere',
+      background: 'rgba(248,113,113,0.07)',
+      border: '1px solid rgba(248,113,113,0.2)',
+      borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
+      ...style,
+    }}>
+      <div role="alert">{error}</div>
+      {onRetry && <div style={{ marginTop: '0.5rem' }}><RetryBtn onClick={onRetry} /></div>}
+    </div>
   )
 }
 
@@ -1609,24 +1629,11 @@ export default function Message({ message, showAttribution = true, onDelete, onR
         )}
 
         {message.isError && (
-          <div style={{
-            color: '#f87171', userSelect: 'text',
-            background: 'rgba(248,113,113,0.07)',
-            border: '1px solid rgba(248,113,113,0.2)',
-            borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
-            marginTop: message.content || message.tools.length ? '0.5rem' : 0,
-          }}>
-            {message.errorNote || message.content || t.message.somethingWentWrong}
-            {/* Retry lives INSIDE the banner and is never hover-gated: a failed
-                turn is exactly where the owner needs this button, and the hover
-                action bar below is gated on `content` — which a turn that died
-                before streaming anything does not have. */}
-            {onRegenerate && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <RetryBtn onClick={onRegenerate} />
-              </div>
-            )}
-          </div>
+          <TurnError
+            error={message.errorNote || message.content || t.message.somethingWentWrong}
+            onRetry={onRegenerate}
+            style={{ marginTop: message.content || message.tools.length ? '0.5rem' : 0 }}
+          />
         )}
 
         {/* Downloadable files Speda produced this turn */}

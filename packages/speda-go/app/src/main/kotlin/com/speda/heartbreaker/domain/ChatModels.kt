@@ -133,6 +133,8 @@ data class ChatMessage(
     val roomNotice: JsonElement? = null,
     val roomEventSequence: Long = 0,
     val isWorkerAnchor: Boolean = false,
+    /** The client received no start event for this failed turn. */
+    val unsent: Boolean = false,
 )
 
 @Immutable

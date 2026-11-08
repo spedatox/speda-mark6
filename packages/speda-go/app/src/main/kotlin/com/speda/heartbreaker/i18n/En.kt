@@ -7,7 +7,7 @@ package com.speda.heartbreaker.i18n
  *  toggle. Turkish (`Tr.kt`) is the app's default; see `Strings.kt` for why the
  *  two files must stay structurally identical. */
 val En = AppStrings(
-    voiceMode = AppStrings.VoiceMode(replay = "Replay", stop = "Stop"),
+    voiceMode = AppStrings.VoiceMode(replay = "Replay", stop = "Stop", retry = "Try again"),
     common = AppStrings.Common(
         cancel = "Cancel",
         save = "Save",

@@ -285,31 +285,41 @@ fun ChatScreen(
                         // backwards sets a number.
                         val idx = voicePin ?: (answers.size - 1).coerceAtLeast(0)
                         val live = answers.getOrNull(idx)
-                        VoiceModeScreen(
-                            reply = live?.content.orEmpty(),
-                            tools = live?.tools ?: emptyList(),
-                            // Only the newest answer can still be arriving; an
-                            // older one is finished by definition, and showing it
-                            // as live would spin its activity card for ever.
-                            streaming = state.isStreaming && idx == answers.size - 1,
-                            state = voiceState,
-                            level = vm.voiceLevel,
-                            captionLines = canvas.captionLines,
-                            maxPanels = canvas.maxPanels,
-                            activityAfterMs = canvas.activityAfterMs,
-                            canvasEnabled = canvas.enabled,
-                            answerIndex = idx,
-                            answerCount = answers.size,
-                            onAnswer = { i ->
-                                vm.stopSpeaking()
-                                // Landing on the newest re-pins, so the board
-                                // resumes following the conversation.
-                                voicePin = if (i >= answers.size - 1) null else i.coerceAtLeast(0)
-                            },
-                            canReplay = live != null && live.content.isNotBlank() && !state.isStreaming,
-                            onReplay = { live?.let { vm.replayVoice(it.id) } },
-                            onStopSpeaking = vm::stopSpeaking,
-                        )
+                        Column(Modifier.fillMaxSize()) {
+                            VoiceModeScreen(
+                                reply = live?.content.orEmpty(),
+                                tools = live?.tools ?: emptyList(),
+                                streaming = live?.isStreaming == true,
+                                state = voiceState,
+                                level = vm.voiceLevel,
+                                captionLines = canvas.captionLines,
+                                maxPanels = canvas.maxPanels,
+                                activityAfterMs = canvas.activityAfterMs,
+                                canvasEnabled = canvas.enabled,
+                                answerIndex = idx,
+                                answerCount = answers.size,
+                                onAnswer = { i ->
+                                    vm.stopSpeaking()
+                                    // Landing on the newest re-pins, so the board
+                                    // resumes following the conversation.
+                                    voicePin = if (i >= answers.size - 1) null else i.coerceAtLeast(0)
+                                },
+                                canReplay = live != null && !live.isError && live.content.isNotBlank() && !state.isStreaming,
+                                onReplay = { live?.let { vm.replayVoice(it.id) } },
+                                onStopSpeaking = vm::stopSpeaking,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (live?.isError == true) {
+                                TurnErrorBanner(
+                                    error = live.errorNote?.takeIf { it.isNotBlank() }
+                                        ?: LocalStrings.current.message.somethingWentWrong,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                                    onRetry = if (!state.isStreaming && idx == answers.lastIndex) {
+                                        { vm.regenerate(live.id, turnOpts(settings)) }
+                                    } else null,
+                                )
+                            }
+                        }
                     } else if (state.messages.isEmpty()) {
                         WelcomeView(
                             brand = brand,

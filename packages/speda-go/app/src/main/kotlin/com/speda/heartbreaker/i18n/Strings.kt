@@ -93,7 +93,7 @@ data class AppStrings(
         val composing: String,
     )
 
-    data class VoiceMode(val replay: String, val stop: String)
+    data class VoiceMode(val replay: String, val stop: String, val retry: String)
 
     data class Composer(
         val placeholder: String,

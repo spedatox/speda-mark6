@@ -9,6 +9,7 @@ import {
   splitPanels, hasArtifacts, captionOf, fenceKindOf, STREAMS_LIVE, type VoicePanel,
 } from '../lib/voicePanels'
 import VoiceActivity from './VoiceActivity'
+import { TurnError } from './Message'
 import type { ToolBadge } from '../lib/types'
 import type { CanvasSettings } from '../lib/voice'
 import type { MicState } from '../lib/mic'
@@ -111,6 +112,8 @@ interface Props {
   reply: string
   /** True while that reply is still being written (gates partial-fence render). */
   streaming: boolean
+  error?: string
+  onRetry?: () => void
   /** The turn's tool calls, as they fire. Voice mode is the surface where these
    *  matter MOST — there is no answer on screen to reassure the owner while a
    *  research turn spends two minutes browsing. */
@@ -151,12 +154,12 @@ interface Props {
 }
 
 export default function VoiceMode({
-  state, amplitude, spectrum, inputLevel, reply, streaming, tools, prompt,
+  state, amplitude, spectrum, inputLevel, reply, streaming, error, onRetry, tools, prompt,
   answerIndex, answerCount, onAnswer, language, onLanguage,
   onClose, onStopSpeaking, onReplay, canReplay, micState, configured, agentName, canvas, dock, onDock,
 }: Props) {
   const t = useT()
-  const visible = useMemo(() => renderable(reply, streaming), [reply, streaming])
+  const visible = useMemo(() => renderable(reply, streaming || !!error), [reply, streaming, error])
   const hasText = visible.trim().length > 0
   // The staged windows, capped at the same ceiling the agent was briefed with —
   // a model that overruns its budget must not be able to overrun the board too.
@@ -540,8 +543,13 @@ export default function VoiceMode({
           </div>
         )}
 
-        {/* Status line */}
-        <div
+        {error ? (
+          <TurnError
+            error={error}
+            onRetry={onRetry}
+            style={{ pointerEvents: 'auto', maxWidth: 'min(100%, 640px)', maxHeight: 'min(30vh, 12rem)', overflowY: 'auto' }}
+          />
+        ) : <div
           className={state === 'thinking' ? 'thinking-shimmer' : undefined}
           style={{
             fontFamily: "'Rajdhani', sans-serif", fontSize: '0.7rem',
@@ -550,7 +558,7 @@ export default function VoiceMode({
           }}
         >
           {label}
-        </div>
+        </div>}
 
         <div style={{ display: 'flex', gap: '0.5rem', pointerEvents: 'auto' }}>
         {canReplay && (

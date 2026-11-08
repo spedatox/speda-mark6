@@ -78,7 +78,7 @@ sealed interface ChatAction {
      *  the reducer case rather than pinned to one payload type here. */
     data class Subagent(val id: String, val event: JsonObject) : ChatAction
     data class FinishMessage(val id: String, val sessionId: Int) : ChatAction
-    data class ErrorMessage(val id: String, val error: String) : ChatAction
+    data class ErrorMessage(val id: String, val error: String, val unsent: Boolean = false) : ChatAction
     data class UpdateSessionTitle(val sessionId: Int, val title: String) : ChatAction
     data class DeleteMessage(val id: String) : ChatAction
     data class TruncateFrom(val id: String) : ChatAction
@@ -248,7 +248,7 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
                     // Preserve everything already streamed; attach the error as a
                     // SEPARATE banner. A mid-turn drop must never vaporize the answer.
                     if (m.id == action.id) {
-                        m.copy(isStreaming = false, isError = true, errorNote = action.error, status = null)
+                        m.copy(isStreaming = false, isError = true, errorNote = action.error, status = null, unsent = action.unsent)
                     } else {
                         m
                     }

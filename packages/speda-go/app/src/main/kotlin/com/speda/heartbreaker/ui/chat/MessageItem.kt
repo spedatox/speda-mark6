@@ -47,6 +47,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -78,6 +81,24 @@ import com.speda.heartbreaker.ui.prose.LocalMessageStreaming
 import com.speda.heartbreaker.ui.prose.ProseText
 import kotlinx.coroutines.delay
 import java.util.Locale
+
+@Composable
+internal fun TurnErrorBanner(error: String, modifier: Modifier = Modifier, onRetry: (() -> Unit)? = null) {
+    val errorColor = Color(0xFFF87171)
+    Column(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(errorColor.copy(alpha = 0.07f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        HbText(error, style = HbType.read, color = errorColor,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        if (onRetry != null) {
+            HbGlassButton(LocalStrings.current.voiceMode.retry, onClick = onRetry, contentColor = errorColor)
+        }
+    }
+}
 
 /**
  * One chat row. Assistant rows interleave text + tool activity at the char offset
@@ -331,19 +352,8 @@ private fun AssistantRow(
 
             if (message.isError) {
                 val top = if (message.content.isNotEmpty() || message.tools.isNotEmpty()) 8.dp else 0.dp
-                Box(
-                    Modifier
-                        .padding(top = top)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(red = 248, green = 113, blue = 113).copy(alpha = 0.07f))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    HbText(
-                        message.errorNote ?: message.content.ifEmpty { t.message.somethingWentWrong },
-                        style = HbType.read,
-                        color = Color(0xFFF87171),
-                    )
-                }
+                TurnErrorBanner(message.errorNote ?: message.content.ifEmpty { t.message.somethingWentWrong },
+                    modifier = Modifier.padding(top = top))
             }
 
             // Action bar — tap the answer to reveal it once streaming ends

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.speda.heartbreaker.data.ActiveRun
 import com.speda.heartbreaker.data.IgorApi
+import com.speda.heartbreaker.data.ImageBlock
 import com.speda.heartbreaker.data.MessageCache
 import com.speda.heartbreaker.data.MessageJson
 import com.speda.heartbreaker.data.SseEvent
@@ -611,7 +612,17 @@ class ChatViewModel(
         if (st.isStreaming) return
         val idx = st.messages.indexOfFirst { it.id == assistantId }
         if (idx <= 0) return
-        if (st.messages.take(idx).none { it.role == Role.User }) return
+        val userIdx = st.messages.take(idx).indexOfLast { it.roomNotice == null && !it.isWorkerAnchor }
+        val user = st.messages.getOrNull(userIdx)?.takeIf { it.role == Role.User } ?: return
+        if (st.messages[idx].unsent) {
+            val dataUrl = Regex("^data:([^;]+);base64,(.+)$")
+            val images = user.images.orEmpty().mapNotNull { url ->
+                dataUrl.matchEntire(url)?.destructured?.let { (mediaType, data) -> ImageBlock(mediaType, data) }
+            }
+            dispatch(ChatAction.TruncateFrom(user.id))
+            send(user.content, defaultOpts.copy(keepMessages = historyMessageCount(st.messages.take(userIdx)), images = images))
+            return
+        }
         dispatch(ChatAction.TruncateFrom(assistantId))
         send("", defaultOpts.copy(keepMessages = historyMessageCount(st.messages.take(idx)), regenerate = true))
     }
@@ -793,6 +804,13 @@ class ChatViewModel(
         // ThinkingDone dispatched) the moment real work resumes, so the panel's
         // "Thought for Ns" pill reads actual wall-clock time, not a guess.
         var thinkingStartedAt: Long? = null
+        fun failTurn(message: String) {
+            if (!visible()) return
+            stopSpeaking()
+            dispatch(ChatAction.ErrorMessage(assistantId, message, unsent = !gotStart && !softLanding))
+            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, message))
+        }
+
         fun markThinkingDone() {
             thinkingStartedAt?.let {
                 dispatch(ChatAction.ThinkingDone(assistantId, System.currentTimeMillis() - it))
@@ -989,12 +1007,9 @@ class ChatViewModel(
                         }
                         "error" -> {
                             flush(); settled = true
-                            // Nothing half-spoken survives a failed turn.
-                            stopSpeaking()
                             val message = strOf((event.data as? JsonObject)?.get("message"))
                                 ?: strOf(event.data) ?: strings.chatMain.turnFailed
-                            dispatch(ChatAction.ErrorMessage(assistantId, message))
-                            if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, message))
+                            failTurn(message)
                         }
                     }
                 }
@@ -1005,8 +1020,7 @@ class ChatViewModel(
                 flush()
                 if (timedOut) {
                     runId?.let { attached.remove(it) }
-                    dispatch(ChatAction.ErrorMessage(assistantId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
-                    if (visible() && roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, timeoutReason.ifEmpty { strings.chatMain.timedOutFallback }))
+                    failTurn(timeoutReason.ifEmpty { strings.chatMain.timedOutFallback })
                 } else if (userStopped) {
                     if (!settled) {
                         dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
@@ -1021,11 +1035,15 @@ class ChatViewModel(
                 }
                 throw e
             } catch (e: IgorApi.AttachGone) {
+                flush(); settled = true
+                if (!gotStart && !softLanding) {
+                    failTurn(strings.chatMain.networkError)
+                    break
+                }
                 // The backend has no record of this turn: it finished while we
                 // were reconnecting and aged out of the replay window. The answer
                 // is in the DB — finalise rather than accusing the backend of
                 // being unreachable, and let the transcript reload show it.
-                flush(); settled = true
                 dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                 if (visible() && roomFormat) {
                     val sid = turnSessionId ?: fallbackSessionId
@@ -1062,8 +1080,7 @@ class ChatViewModel(
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                     if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else {
-                    dispatch(ChatAction.ErrorMessage(assistantId, strings.chatMain.networkError))
-                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId, strings.chatMain.networkError))
+                    failTurn(strings.chatMain.networkError)
                 }
                 break
             } catch (e: Exception) {
@@ -1096,11 +1113,7 @@ class ChatViewModel(
                     dispatch(ChatAction.FinishMessage(assistantId, fallbackSessionId))
                     if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId))
                 } else {
-                    dispatch(ChatAction.ErrorMessage(assistantId,
-                        if (net) strings.chatMain.networkError
-                        else msg.ifEmpty { strings.chatMain.requestFailed }))
-                    if (roomFormat) dispatch(ChatAction.FinishRoomTurn(turnSessionId ?: fallbackSessionId,
-                        if (net) strings.chatMain.networkError else msg.ifEmpty { strings.chatMain.requestFailed }))
+                    failTurn(if (net) strings.chatMain.networkError else msg.ifEmpty { strings.chatMain.requestFailed })
                 }
                 break
             }
