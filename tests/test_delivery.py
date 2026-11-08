@@ -38,6 +38,14 @@ async def pair(gateway,agent='sentinel'):
     return nonce
 
 
+async def wait_for_run(coordinator, run_id, status="succeeded"):
+    # The live task can finish before the gateway returns its receipt.
+    task = coordinator.live.get(run_id)
+    if task is not None:
+        await task
+    assert (await coordinator.inspect_run(1, run_id))["status"] == status
+
+
 async def test_random_single_use_pairing_owner_attribution_and_retry(memory):
     bits,gateway,delivery,calls=await channel(memory,[reply('Expense recorded')])
     with pytest.raises(CoordinationError): await gateway.receive(1,'sentinel',event('/start'))
@@ -48,7 +56,7 @@ async def test_random_single_use_pairing_owner_attribution_and_retry(memory):
     forward=event('Other person paid',5); forward['message']['forward_origin']={'type':'user'}
     assert not (await gateway.receive(1,'sentinel',forward))['accepted']
     first=await gateway.receive(1,'sentinel',event('I spent 100 TRY on groceries'))
-    await bits.coordinator.live[first['run_id']]
+    await wait_for_run(bits.coordinator, first['run_id'])
     await asyncio.gather(*list(bits.coordinator.background))
     assert (await gateway.receive(1,'sentinel',event('I spent 100 TRY on groceries')))['run_id']==first['run_id']
     assert len(bits.client.calls)==1
@@ -132,7 +140,7 @@ async def test_telegram_model_pin_survives_policy_edit_on_exact_update_retry(mem
     policy.telegram_models={'sentinel':'kimi:kimi-k2.6'}
     await bits.policy.save(1,revision,policy)
     first=await gateway.receive(1,'sentinel',event('Check this once',20))
-    await bits.coordinator.live[first['run_id']]
+    await wait_for_run(bits.coordinator, first['run_id'])
     revision,policy=await bits.policy.snapshot(1)
     policy.telegram_models={}
     await bits.policy.save(1,revision,policy)
@@ -156,7 +164,7 @@ async def test_telegram_reply_to_alert_survives_pending_drain_as_quoted_context(
     version,policy=await bits.budget.policy(1)
     await bits.budget.save(1,version,policy.model_copy(update={'paused':False}))
     result=(await gateway.drain(1))['inputs'][0]
-    await bits.coordinator.live[result['run_id']]
+    await wait_for_run(bits.coordinator, result['run_id'])
     assert (await gateway.receive(1,'sentinel',update))['duplicate']
     assert 'direct Telegram conversation' in bits.client.calls[0]['system']
     history=str(bits.client.calls[0]['messages'])
@@ -170,7 +178,7 @@ async def test_telegram_empty_reply_delivers_a_failure_notice(memory):
     bits,gateway,delivery,calls=await channel(memory,[reply('')])
     await pair(gateway)
     result=await gateway.receive(1,'sentinel',event('Are you there?',24))
-    await bits.coordinator.live[result['run_id']]
+    await wait_for_run(bits.coordinator, result['run_id'], status="reconciling")
     await asyncio.gather(*list(bits.coordinator.background))
     sends=[payload for _,method,payload in calls if method=='sendMessage']
     assert len(sends)==1 and 'could not finish the reply' in sends[0]['text']
