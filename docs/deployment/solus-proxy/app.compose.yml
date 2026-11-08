@@ -1,0 +1,13 @@
+services:
+  app:
+    environment:
+      FORWARDED_ALLOW_IPS: "172.31.255.2"
+    networks:
+      solus_proxy:
+        aliases:
+          - solus-app
+
+networks:
+  solus_proxy:
+    external: true
+    name: speda-solus-proxy

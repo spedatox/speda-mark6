@@ -1,0 +1,5 @@
+@solus_api path /solus/api/v1/*
+request_body @solus_api {
+	max_size 2MB
+}
+reverse_proxy @solus_api solus-app:8000

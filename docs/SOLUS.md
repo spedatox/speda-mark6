@@ -89,6 +89,8 @@ scrypt workers. HttpOnly/SameSite cookies, origin/CSRF checks, expiry, idle time
 and credential-version revocation apply. Setup needs the owner API key or a
 one-use private setup token. Financial APIs require HTTPS outside loopback.
 
+For a Docker deployment behind Caddy, see the [Solus HTTPS configuration](deployment/solus-proxy/README.md).
+
 The public static shell contains no financial data. Build assets externally and
 set `SOLUS_UI_DIR` to that output directory. The source Vite config's old monorepo
 default output path should be overridden in the flat renovated deployment:
