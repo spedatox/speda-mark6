@@ -23,8 +23,8 @@ Use these exact renderer formats (each fence starts and ends on its own line):
   labels, generous spacing and no label collisions. Use for conceptual models,
   mechanisms, geometry, flows, annotated diagrams and causal relationships.
 - `html | Descriptive title`: self-contained responsive HTML + vanilla JS for
-  sliders, live calculations, simulations, input/output exploration or practice
-  controls. Label inputs with values/units; update on input and on initial load.
+  custom interactions when the client has no suitable native renderer. Label
+  inputs with values/units; update on input and on initial load.
   Use --accent, --text-primary and --text-secondary on a transparent background.
   No network, parent DOM, app storage or tools are available in this sandbox.
   Choose useful defaults and valid formulas; a working small model beats a large
@@ -68,8 +68,8 @@ broader worked topic, within the panel limit. A focused follow-up may need only
    equations step by step and define symbols, assumptions and units.
 3. Work: a complete numerical/concrete example, with intermediate values visible
    in math or a table. Check arithmetic, dimensions and edge cases explicitly.
-4. Explore: when changing a parameter helps, proactively build a small HTML
-   calculator/simulation with sliders or inputs. Update both results and the visual
+4. Explore: when changing a parameter helps, build a small calculator or
+   simulation with sliders or inputs. Use the native format when available. Update the visual
    model; show what is held constant. This is especially useful for probability,
    statistics, economics, accounting, algorithms, data structures and physics.
 5. Contrast: visualize a common misconception, boundary case, or alternative method
@@ -84,12 +84,39 @@ allow a prediction before revealing the solution. Keep examples clearly labeled
 as illustrative and grounded in the supplied course material when available.
 """
 
-CANVAS_REVISION = hashlib.sha256((CANVAS_GUIDANCE + ULTRON_TUTORING).encode()).hexdigest()
+NATIVE_ARTIFACTS = r"""
+## Native Mark VI artifacts
+Use native renderer formats first. For schedules or ordered events use a
+`timeline | Title` fence with one `time/date — description` per line, not SVG.
+Use native chart, table and calendar fences for their corresponding data.
+For practice and one-slider rule simulations, use an `artifact | Title` fence
+with a single JSON object. The client supplies the entire interface, labels and
+behavior. Supply the content in the user's language. Do not include HTML, CSS,
+JS, expressions to evaluate, or Markdown in these JSON fields.
+
+Practice format:
+{"kind":"practice","description":"Predict the output before running the code.","items":[{"prompt":"What does this print?","code":"System.out.println(12 / 5);","answer":"2","explanation":"Both operands are integers, so the fractional part is discarded."}]}
+Use 1–8 items. `code` is optional. Use a literal short answer, with exact case
+and internal spacing, and explain why it is correct. The card reveals the
+solution only after the learner checks an answer or explicitly asks to reveal it.
+
+Explore format:
+{"kind":"explore","description":"Move the score to test which branch wins.","parameter":{"label":"Score","min":-10,"max":110,"initial":79,"unit":"pts"},"cases":[{"through":-1,"label":"Invalid","detail":"The score is below zero."},{"through":89,"label":"Below A","detail":"The score is valid and below 90."},{"through":100,"label":"A","detail":"The score is at least 90 and at most 100."},{"through":110,"label":"Invalid","detail":"The score is above 100."}]}
+Use integer bounds between -10000 and 10000, min < max, initial in range, and
+1–12 cases with strictly increasing inclusive `through` values. The first case
+starts at min, each later case starts after the prior threshold, and the last
+ends at max. The selected case and explanation update live. `unit` is optional.
+Use sandboxed HTML only for custom interactions outside these formats, and SVG
+for spatial diagrams that need authored geometry.
+"""
+
+CANVAS_REVISION = hashlib.sha256((CANVAS_GUIDANCE + ULTRON_TUTORING + NATIVE_ARTIFACTS).encode()).hexdigest()
 
 
 def canvas_guidance(variables, *, tutoring=False):
+    native = NATIVE_ARTIFACTS if variables.get('native_artifacts') else ''
     if not variables.get('canvas'):
-        return ''
+        return native
     limit = max(1, min(32, int(variables.get('canvas_max_panels', 24))))
     return (CANVAS_GUIDANCE + f'\nStage at most {limit} authored panels in this turn.\n'
-            + (ULTRON_TUTORING if tutoring else ''))
+            + (ULTRON_TUTORING if tutoring else '') + native)

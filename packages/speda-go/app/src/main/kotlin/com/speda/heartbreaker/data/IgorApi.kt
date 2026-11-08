@@ -166,6 +166,7 @@ class IgorApi(
                         // key of noise on the hot path.
                         if (cc.voice) put("voice", true)
                         put("canvas", opts.canvas)
+                        put("native_artifacts", true)
                         if (opts.canvas) put("canvas_max_panels", opts.canvasMaxPanels.coerceIn(1, 24))
                         cc.location?.let { loc ->
                             put(

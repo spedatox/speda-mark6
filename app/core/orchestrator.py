@@ -92,6 +92,8 @@ class AgentOrchestrator:
         variables['canvas'] = (settings.voice_canvas_enabled and context.task_role != 'worker'
             and surface.get('canvas') is True and surface.get('platform') in {'desktop', 'web'})
         variables['canvas_max_panels'] = min(settings.voice_canvas_max_panels, surface.get('canvas_max_panels', 24))
+        variables['native_artifacts'] = (context.task_role != 'worker'
+            and surface.get('native_artifacts') is True and surface.get('platform') in {'desktop', 'web', 'android'})
         language = {'en': 'English', 'tr': 'Turkish'}.get(settings.agent_language)
         language_rule = ('\nWrite user-facing prose in ' + language + '. Preserve code, identifiers and quoted evidence verbatim.') if language else ''
         if self._profiles is not None:

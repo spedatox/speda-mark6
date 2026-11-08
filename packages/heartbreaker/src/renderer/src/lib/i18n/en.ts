@@ -1001,6 +1001,12 @@ const en = {
     desktop: 'DESKTOP',
     telegram: 'TELEGRAM',
   },
+  artifact: {
+    practice: 'Practice lab', explore: 'Simulation', questions: 'Questions', question: 'Question', solved: 'solved',
+    yourAnswer: 'Your prediction', enterAnswer: 'Enter your answer', check: 'Check answer', correct: 'Correct',
+    retry: 'Try another prediction.', reveal: 'Reveal solution', solution: 'Solution', reset: 'Reset',
+    next: 'Next question', activeOutcome: 'Live outcome', outcomes: 'Outcome ranges', invalid: 'Artifact source',
+  },
   connectionSetup: {
     title: 'Connect to Igor',
     firstTimeSetup: 'First-time setup',

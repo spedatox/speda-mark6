@@ -46,3 +46,10 @@ test('table and interactive HTML retain their renderer source in canvas', () => 
   assert.match(panels[1].source, /^```html/)
   assert.match(panels[1].source, /const n=1/)
 })
+
+test('native labs keep their fence and short timelines use less board space', () => {
+  const panels = splitPanels('```artifact | Practice\n{"kind":"practice"}\n```\n```timeline | Plan\n09:00 — Start\n10:00 — End\n```')
+  assert.equal(panels[0].kind, 'artifact')
+  assert.match(panels[0].source, /^```artifact/)
+  assert.equal(pack(panels, 1200, 500, 1200, 500)[1].h, 184)
+})

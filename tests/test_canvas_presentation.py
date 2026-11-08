@@ -49,13 +49,18 @@ async def test_orchestrator_applies_server_cap_and_does_not_brief_workers_or_uns
     ctx = context(agent_id='ultron')
     ctx.extra['client_surface'] = validate({'platform': 'desktop', 'canvas': True, 'canvas_max_panels': 24})
     assert 'at most 12 authored panels' in bits.engine.build_system_prompt(ctx)
+    assert 'Native Mark VI artifacts' not in bits.engine.build_system_prompt(ctx)
+    ctx.extra['client_surface']['native_artifacts'] = True
+    assert 'Native Mark VI artifacts' in bits.engine.build_system_prompt(ctx)
     ctx.extra['client_surface']['canvas_max_panels'] = 4
     assert 'at most 4 authored panels' in bits.engine.build_system_prompt(ctx)
     ctx.task_role = 'worker'
     assert 'CANVAS MODE IS ACTIVE' not in bits.engine.build_system_prompt(ctx)
+    assert 'Native Mark VI artifacts' not in bits.engine.build_system_prompt(ctx)
     ctx.task_role = 'interactive'
     ctx.extra['client_surface']['platform'] = 'android'
     assert 'CANVAS MODE IS ACTIVE' not in bits.engine.build_system_prompt(ctx)
+    assert 'Native Mark VI artifacts' in bits.engine.build_system_prompt(ctx)
     ctx.extra['client_surface']['platform'] = 'desktop'
     monkeypatch.setattr(settings, 'voice_canvas_enabled', False)
     assert 'CANVAS MODE IS ACTIVE' not in bits.engine.build_system_prompt(ctx)
@@ -68,16 +73,18 @@ async def test_real_turn_gets_ultron_canvas_brief_and_next_chat_turn_does_not(me
     bits = await setup(memory, [reply('A visual explanation.'), reply('A short chat reply.')])
     adapter = ClientCompatibility(bits.coordinator)
     first = await adapter.start(1, 'ultron', ClientChat(message='Teach me Bayes theorem', client_context={
-        'platform': 'desktop', 'voice': True, 'canvas': True, 'canvas_max_panels': 24}))
+        'platform': 'desktop', 'voice': True, 'canvas': True, 'canvas_max_panels': 24, 'native_artifacts': True}))
     await bits.coordinator.live[first['run_id']]
     call = bits.client.calls[0]
     assert 'CANVAS MODE IS ACTIVE' in call['system']
     assert '### Ultron: visual tutoring' in call['system']
+    assert 'Native Mark VI artifacts' in call['system']
     assert 'This reply will be spoken' in json.dumps(call['messages'])
     assert 'canvas presentation is deferred' not in json.dumps(call['messages'])
     assert first['run_id'] not in bits.coordinator._surfaces
     second = await adapter.start(1, 'ultron', ClientChat(message='Thanks', session_id=first['session_id']))
     await bits.coordinator.live[second['run_id']]
     assert 'CANVAS MODE IS ACTIVE' not in bits.client.calls[1]['system']
+    assert 'Native Mark VI artifacts' not in bits.client.calls[1]['system']
     assert 'client telemetry' not in json.dumps(bits.client.calls[1]['messages'])
     await bits.coordinator.shutdown()

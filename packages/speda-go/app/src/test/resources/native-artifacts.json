@@ -1,0 +1,21 @@
+{
+  "practice": {
+    "kind": "practice",
+    "description": "Predict the exact output.",
+    "items": [
+      {"prompt": "What is printed?", "code": "System.out.println(12 / 5);", "answer": "2", "explanation": "Integer division truncates the fraction."}
+    ]
+  },
+  "explore": {
+    "kind": "explore",
+    "description": "Explore boundaries.",
+    "parameter": {"label": "Score", "min": -1, "max": 101, "initial": 79, "unit": "pts"},
+    "cases": [
+      {"through": -1, "label": "Invalid", "detail": "Below zero."},
+      {"through": 89, "label": "Below A", "detail": "The score is valid and below 90."},
+      {"through": 100, "label": "A", "detail": "90 through 100."},
+      {"through": 101, "label": "Invalid", "detail": "Above 100."}
+    ]
+  },
+  "boundaries": [[-1, 0], [0, 1], [89, 1], [90, 2], [100, 2], [101, 3]]
+}

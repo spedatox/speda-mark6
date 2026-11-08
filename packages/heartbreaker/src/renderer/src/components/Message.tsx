@@ -14,6 +14,7 @@ import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
 import CodeBlock from './CodeBlock'
 import WidgetFrame from './WidgetFrame'
+import NativeArtifact from './NativeArtifact'
 import ChartBlock from './ChartBlock'
 import CalendarBlock from './CalendarBlock'
 import { TableBlock, TimelineBlock } from './StructuredBlock'
@@ -38,7 +39,7 @@ const RENDERABLE_LANGS = new Set(['html', 'htm', 'widget', 'svg'])
 // its reveal at the opening of one of these while it is still unclosed — half a
 // JSON object is not a chart. Every OTHER fence streams; see safeTarget.
 const HOLD_WHILE_OPEN = new Set([
-  'chart', 'calendar', 'table', 'timeline', 'map', 'aircraft', 'bus', ...RENDERABLE_LANGS,
+  'chart', 'calendar', 'table', 'timeline', 'map', 'aircraft', 'bus', 'artifact', ...RENDERABLE_LANGS,
 ])
 
 // House Party authorization is a real SSE event (`house_party_auth`) now, not a
@@ -899,6 +900,7 @@ const mdComponents: any = {
     }
     if (lang === 'table') return <TableBlock source={code} title={title} />
     if (lang === 'timeline') return <TimelineBlock source={code} title={title} />
+    if (lang === 'artifact') return <NativeArtifact source={code} title={title} />
     {
       // Rich blocks run third-party renderers (MapLibre/WebGL, charting) on
       // model-authored input — each one is a place a throw can escape and, with

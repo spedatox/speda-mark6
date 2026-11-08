@@ -20,14 +20,38 @@ export default function CanvasPreview({ fixtures, onClose }: { fixtures: [string
     const observer = new ResizeObserver(resize); observer.observe(el); resize()
     return () => observer.disconnect()
   }, [])
-  const source = [fixtures[2][1], fixtures[0][1], fence('chart | Attendance overview', JSON.stringify({ type: 'bar', xKey: 'course', series: [{ key: 'hours', label: 'Hours' }], data: [
+  const practice = fence('artifact | Predict the output', JSON.stringify({
+    kind: 'practice', description: 'Trace each line, then check your prediction.',
+    items: [
+      { prompt: 'What does Java print?', code: 'int a = 12, b = 5;\nSystem.out.println(a / b + " " + a % b);', answer: '2 2',
+        explanation: 'Integer division gives the quotient 2. The remainder is 12 − 5 × 2, which is also 2.' },
+      { prompt: 'How many times does the loop run?', code: 'int n = 505, count = 0;\nwhile (n > 0) { count++; n /= 10; }', answer: '3',
+        explanation: 'Each pass drops one digit. The values are 505, 50, 5, then 0.' },
+      { prompt: 'What does the final print show?', code: 'int x = 0;\nwhile (x < 3) x += 2;\nSystem.out.println(x);', answer: '4',
+        explanation: 'The loop enters with 0 and 2. After the second pass, 4 fails the condition.' },
+    ],
+  }))
+  const explore = fence('artifact | Grade branch simulator', JSON.stringify({
+    kind: 'explore', description: 'Move the score across a boundary to see which condition runs.',
+    parameter: { label: 'Score', min: -10, max: 110, initial: 79, unit: 'pts' },
+    cases: [
+      { through: -1, label: 'Invalid', detail: 'The input guard rejects scores below zero.' },
+      { through: 59, label: 'F', detail: 'Every grade condition fails, so the final else runs.' },
+      { through: 69, label: 'D', detail: 'The first true condition is score >= 60.' },
+      { through: 79, label: 'C', detail: 'The first true condition is score >= 70.' },
+      { through: 89, label: 'B', detail: 'The first true condition is score >= 80.' },
+      { through: 100, label: 'A', detail: 'The first true condition is score >= 90.' },
+      { through: 110, label: 'Invalid', detail: 'The input guard rejects scores above 100 before grading.' },
+    ],
+  }))
+  const source = [practice, explore,
+    fence('timeline | Tuesday timeline', '09:00 — Workplace Application I\n16:20 — Appointment at Etlik Hospital'),
+    fixtures[2][1], fixtures[0][1], fence('chart | Attendance overview', JSON.stringify({ type: 'bar', xKey: 'course', series: [{ key: 'hours', label: 'Hours' }], data: [
     { course: 'Logistics', hours: 3 }, { course: 'Marketing Principles', hours: 7 }, { course: 'Data Structures', hours: 9 }, { course: 'Workplace Application', hours: 16 },
   ] })), fixtures[3][1], fixtures[1][1],
     fence('stat | Focus', 'THIS WEEK\nFriday morning\nAttend Marketing'),
     fence('stat | Coursework', 'MARKETING / MAR411\nTwo courses\nKeep the full names readable'),
-    fence('svg | Tuesday timeline', '<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="190" viewBox="0 0 1100 190"><path d="M40 90H1060" stroke="#36abca"/><text x="40" y="60" font-size="24" fill="#dbe6ec">09:00 — Workplace Application I</text><text id="overflow-label" x="940" y="202" font-size="24" fill="#dbe6ec">16:20 — Appointment at Etlik Hospital</text><circle cx="940" cy="90" r="5" fill="#36abca"/></svg>'),
     fence('svg | Tall diagram', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 830"><path d="M130 40V800" stroke="#36abca"/><text x="130" y="38" text-anchor="middle" font-size="24" fill="#dbe6ec">Start</text><text x="130" y="810" text-anchor="middle" font-size="24" fill="#dbe6ec">End</text></svg>'),
-    fence('html | Predict the output', '<pre>int a = 12, b = 5;\nSystem.out.println(a / b);</pre><label for="prediction">Prediction</label> <input id="prediction" placeholder="Enter your answer"> <button id="check">Check</button><p id="result" role="status"></p><script>check.onclick=()=>result.textContent=prediction.value==="2"?"Correct":"Try again"</script>'),
     fence('card | Appointment details', 'Oncology — Internal Medicine\nTime: 16:20\nLocation: Varlık, Halil Sezai Erkut Cd. No:5, Yenimahalle\nNote: Full address remains readable.'),
   ].join('\n\n')
   const panels: VoicePanel[] = [

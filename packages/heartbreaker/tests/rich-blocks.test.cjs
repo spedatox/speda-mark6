@@ -117,3 +117,19 @@ test('interactive hints describe only visible, enabled controls', () => {
   vm.runInNewContext(source, context)
   assert.equal(context.artifactControls({ querySelectorAll: () => groups.shift() }), 1 | 8)
 })
+
+test('native practice and simulation follow the Android fixture contract', () => {
+  const { parseNativeArtifact, answerMatches } = load('nativeArtifacts')
+  const fixtures = JSON.parse(fs.readFileSync(path.join(__dirname, '../../speda-go/app/src/test/resources/native-artifacts.json'), 'utf8'))
+  const practice = parseNativeArtifact(JSON.stringify(fixtures.practice))
+  assert.equal(practice.kind, 'practice')
+  assert.ok(answerMatches(' 2\n', practice.items[0].answer))
+  assert.equal(answerMatches('A  B', 'A B'), false)
+  assert.equal(answerMatches('a', 'A'), false)
+  const explore = parseNativeArtifact(JSON.stringify(fixtures.explore))
+  for (const [value, expected] of fixtures.boundaries) {
+    assert.equal(explore.cases.findIndex(step => value <= step.through), expected)
+  }
+  fixtures.explore.cases.at(-1).through = 100
+  assert.equal(parseNativeArtifact(JSON.stringify(fixtures.explore)), null)
+})

@@ -72,6 +72,7 @@ class ClientTransportTest {
             val context = body["client_context"]!!.jsonObject
             assertTrue(context["voice"]!!.jsonPrimitive.boolean)
             assertTrue(context["canvas"]!!.jsonPrimitive.boolean)
+            assertTrue(context["native_artifacts"]!!.jsonPrimitive.boolean)
             assertEquals(8, context["canvas_max_panels"]!!.jsonPrimitive.int)
         }
     }

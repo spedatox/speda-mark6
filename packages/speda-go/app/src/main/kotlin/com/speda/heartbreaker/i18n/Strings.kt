@@ -807,6 +807,19 @@ data class AppStrings(
         val fitDiagram: String,
         val zoomIn: String,
         val zoomOut: String,
+        val practiceLab: String,
+        val simulation: String,
+        val question: String,
+        val solved: String,
+        val prediction: String,
+        val checkAnswer: String,
+        val correctAnswer: String,
+        val tryAgain: String,
+        val revealSolution: String,
+        val solution: String,
+        val resetArtifact: String,
+        val nextQuestion: String,
+        val liveOutcome: String,
     )
 
     data class Aircraft(

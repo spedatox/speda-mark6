@@ -249,6 +249,7 @@ fun FenceBlock(language: String, code: String) {
         lang == "bus" -> BusBlock(code)
         lang == "svg" -> SvgBlock(code)
         lang == "html" -> HtmlBlock(code)
+        lang == "artifact" -> NativeArtifact(code, info.title)
         // The protocol is desktop-only, but the model can still write one of
         // these cards — it is answering, not checking which client asked. Say
         // plainly why nothing is going to happen here rather than rendering an

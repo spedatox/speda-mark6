@@ -24,6 +24,7 @@ class ClientContext(BaseModel):
     location:ClientLocation|None=None
     voice:bool=False
     canvas:bool=False
+    native_artifacts:bool=False
     canvas_max_panels:int=Field(default=24,ge=1,le=32)
 
 

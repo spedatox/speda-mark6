@@ -27,17 +27,17 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
   const scroll = useRef<HTMLDivElement>(null)
   const topZ = useRef(10)
   const endGesture = useRef<() => void>()
-  const viewportHeight = Math.max(100, height - 40)
   const orbInViewport = reserveX < width && reserveY < height
   const expandedWidth = orbInViewport && reserveX >= 600 ? reserveX : width
   const roomAboveOrb = reserveY - 40
-  const expandedHeight = orbInViewport && expandedWidth === width && roomAboveOrb >= 260
-    ? roomAboveOrb : viewportHeight
+  const bottomInset = orbInViewport && expandedWidth === width && roomAboveOrb >= 260
+    ? height - reserveY + GAP : 0
+  const viewportHeight = Math.max(100, height - 40 - bottomInset)
   const placed = useMemo(() => pack(panels, width, viewportHeight, reserveX, reserveY - 40), [panels, width, viewportHeight, reserveX, reserveY])
   const contentHeight = Math.max(viewportHeight, ...placed.map(p => (pinned[p.id]?.y ?? p.y) + (pinned[p.id]?.h ?? p.h) + GAP))
   // On small screens where the orb cannot have its own strip, allow the last
   // panel to be scrolled completely above it as well.
-  const bottomRoom = reserveX < 600 ? Math.max(0, viewportHeight - Math.max(0, reserveY - 40)) : 0
+  const bottomRoom = !bottomInset && reserveX < 600 ? Math.max(0, viewportHeight - Math.max(0, reserveY - 40)) : 0
 
   useEffect(() => { setPinned({}); setFull(null); scroll.current?.scrollTo({ top: 0, behavior: 'instant' }) }, [reflow])
   useEffect(() => {
@@ -104,13 +104,13 @@ export default function VoiceCanvas({ panels, width, height, reserveX, reserveY,
     </div>
     <div ref={scroll} className="hb-canvas-scroll" role="region" aria-label="Canvas workspace" tabIndex={0}
       onScroll={event => { if (full && event.currentTarget.scrollTop) event.currentTarget.scrollTop = 0 }}
-      style={{ position: 'absolute', inset: '40px 0 0', overflow: full ? 'hidden' : 'auto', scrollbarGutter: 'stable', overscrollBehavior: 'contain' }}>
+      style={{ position: 'absolute', inset: `40px 0 ${bottomInset}px`, overflow: full ? 'hidden' : 'auto', scrollbarGutter: 'stable', overscrollBehavior: 'contain' }}>
       <div style={{ position: 'relative', minHeight: contentHeight + bottomRoom }}>
         {placed.map(p => {
           const pin = pinned[p.id], isFull = full === p.id
           const w = Math.min(pin?.w ?? p.w, Math.max(1, width - GAP * 2 - 12))
           const box = isFull
-            ? { x: GAP, y: GAP, w: Math.max(1, expandedWidth - GAP * 2 - 12), h: expandedHeight - GAP * 2 }
+            ? { x: GAP, y: GAP, w: Math.max(1, expandedWidth - GAP * 2 - 12), h: viewportHeight - GAP * 2 }
             : { x: clamp(pin?.x ?? p.x, 0, Math.max(0, width - w - GAP)), y: pin?.y ?? p.y, w, h: pin?.h ?? p.h }
           const title = p.title.replace(/_/g, ' ').trim() || p.kind
           return <section key={p.id} aria-label={title} data-panel-id={p.id} data-kind={p.kind} data-expanded={isFull}

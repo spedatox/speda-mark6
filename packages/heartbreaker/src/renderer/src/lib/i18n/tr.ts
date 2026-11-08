@@ -989,6 +989,12 @@ const tr: Dict = {
     desktop: 'MASAÜSTÜ',
     telegram: 'TELEGRAM',
   },
+  artifact: {
+    practice: 'Alıştırma', explore: 'Simülasyon', questions: 'Sorular', question: 'Soru', solved: 'çözüldü',
+    yourAnswer: 'Tahminin', enterAnswer: 'Cevabını yaz', check: 'Cevabı kontrol et', correct: 'Doğru',
+    retry: 'Bir tahmin daha yap.', reveal: 'Çözümü göster', solution: 'Çözüm', reset: 'Sıfırla',
+    next: 'Sonraki soru', activeOutcome: 'Anlık sonuç', outcomes: 'Sonuç aralıkları', invalid: 'Bileşen kaynağı',
+  },
   connectionSetup: {
     title: "Igor'a Bağlan",
     firstTimeSetup: 'İlk kurulum',

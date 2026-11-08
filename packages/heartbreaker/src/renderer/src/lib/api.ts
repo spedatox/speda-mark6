@@ -156,7 +156,7 @@ export async function* streamChat(
       // Surface awareness — tell Speda whether this turn came from the desktop
       // app or the web build. (The Android app and Telegram set their own.)
       client_context: {
-        ...desktopClientContext(), voice: !!opts.voice, canvas: !!opts.canvas,
+        ...desktopClientContext(), voice: !!opts.voice, canvas: !!opts.canvas, native_artifacts: true,
         ...(opts.canvas ? { canvas_max_panels: opts.canvasMaxPanels ?? 24 } : {}),
       },
     }),

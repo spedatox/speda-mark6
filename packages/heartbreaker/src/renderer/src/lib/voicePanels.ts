@@ -33,7 +33,7 @@
  */
 
 export type PanelKind =
-  | 'math' | 'chart' | 'map' | 'calendar' | 'code' | 'widget' | 'table'
+  | 'math' | 'chart' | 'map' | 'calendar' | 'code' | 'widget' | 'artifact' | 'table'
   | 'stat' | 'image' | 'article' | 'card' | 'timeline' | 'quote'
   // Not something the agent stages — the board's own window, showing what the
   // machine is DOING. It is a PanelKind so the packer, the drag, the resize and
@@ -61,6 +61,7 @@ export interface VoicePanel {
  *  kind each becomes. Anything else fenced is source code. */
 const FENCE_KIND: Record<string, PanelKind> = {
   chart: 'chart', calendar: 'calendar', map: 'map', html: 'widget', htm: 'widget', widget: 'widget', svg: 'widget',
+  artifact: 'artifact',
   table: 'table', math: 'math',
   // The presentation vocabulary — kinds that exist so a fact can be SHOWN
   // rather than spoken. Their bodies are small forgiving formats rather than
@@ -85,7 +86,7 @@ export const BOARD_KINDS = new Set<PanelKind>([
 /** Fallback label, for a window the agent left untitled. */
 const LABEL: Record<PanelKind, string> = {
   math: 'SOLUTION', chart: 'CHART', map: 'MAP', calendar: 'SCHEDULE',
-  code: 'SOURCE', widget: 'RENDER', table: 'TABLE', stat: 'FIGURE',
+  code: 'SOURCE', widget: 'RENDER', artifact: 'LAB', table: 'TABLE', stat: 'FIGURE',
   image: 'IMAGE', article: 'SOURCE', card: 'FILE', timeline: 'TIMELINE',
   quote: 'QUOTE', activity: 'ACTIVITY', narration: 'NARRATION',
 }
@@ -100,6 +101,7 @@ const SIZE: Record<PanelKind, { w: number; h: number }> = {
   calendar: { w: 640, h: 480 },
   code:     { w: 500, h: 330 },
   widget:   { w: 620, h: 430 },
+  artifact: { w: 660, h: 485 },
   table:    { w: 600, h: 420 },
   stat:     { w: 280, h: 190 },
   image:    { w: 420, h: 320 },
@@ -346,7 +348,11 @@ export function pack(panels: VoicePanel[], W: number, H: number, reserveX: numbe
     const base = SIZE[panel.kind].w
     const w = Math.min(base, available, base >= 500 && available >= 1000 && available < 1280 ? (available - GAP) / 2 : available)
     if (row.length && rowWidth + GAP + w > available) flush()
-    row.push({ ...panel, x: 0, y, w, h: SIZE[panel.kind].h })
+    const timeline = panel.kind === 'timeline' ? panel.source.trim() : ''
+    const h = timeline
+      ? Math.max(172, Math.min(440, 88 + 48 * timeline.split('\n').length))
+      : SIZE[panel.kind].h
+    row.push({ ...panel, x: 0, y, w, h })
     rowWidth += (row.length > 1 ? GAP : 0) + w
   }
   flush()
