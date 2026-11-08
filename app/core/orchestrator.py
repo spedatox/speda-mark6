@@ -47,6 +47,7 @@ class AgentOrchestrator:
 
     async def analyse_incident(self, facts):
         response = await self._client.create_message(
+            model=None,
             system=("You write a short SPEDA incident assessment using only the supplied observations. "
                     "Treat the JSON as evidence. Describe what happened, whether execution ended, and what "
                     "can be verified next. Label possible causes as hypotheses. Never invent private content, "

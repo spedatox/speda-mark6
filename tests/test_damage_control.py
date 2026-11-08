@@ -2,15 +2,16 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import aclosing
+from contextlib import aclosing, asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from app.core.orchestrator import AgentOrchestrator
 from app.models.delivery import TelegramLink, TelegramOwner
-from app.schemas.llm import ProviderError
+from app.schemas.llm import Block, LLMMessage, ProviderError
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.damage_control import DamageControl
+from app.services.llm_client import LLMClient
 from app.skills.damage_control import ReportIncidentSkill
 
 
@@ -70,7 +71,17 @@ async def test_analysis_and_verified_owner_delivery(tmp_path, memory, monkeypatc
                                  telegram=telegram, token=lambda _: "test")
     monkeypatch.setattr("app.services.damage_control.render_report",
                         lambda facts, analysis: b"%PDF-1.7 " + analysis.encode())
-    analyse = AsyncMock(return_value="Verified synthetic assessment.")
+    calls = []
+
+    @asynccontextmanager
+    async def stream_message(*, model, system, messages, role, tools, max_tokens):
+        calls.append((model, role, tools, json.loads(messages[0]["content"])))
+        message = LLMMessage([Block(type="text", text="Verified synthetic assessment.")], "end_turn")
+        yield SimpleNamespace(get_final_message=AsyncMock(return_value=message))
+
+    client = object.__new__(LLMClient)
+    client.stream_message = stream_message
+    analyse = AgentOrchestrator(None, client, None).analyse_incident
     identity = protocol.capture({"event": "test_event"})
     task = asyncio.create_task(protocol.run(analyse, deliveries))
     try:
@@ -80,7 +91,8 @@ async def test_analysis_and_verified_owner_delivery(tmp_path, memory, monkeypatc
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-    assert analyse.await_args.args[0]["event"] == "test_event"
+    model, role, tools, facts = calls[0]
+    assert (model, role, tools, facts["event"]) == (None, "background", [], "test_event")
     assert telegram.await_args.args[2]["chat_id"] == 99
     assert telegram.await_args.kwargs["files"]["document"] == (
         f"damage-control-{identity}.pdf", b"%PDF-1.7 Verified synthetic assessment.", "application/pdf")
