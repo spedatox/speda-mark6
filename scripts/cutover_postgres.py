@@ -177,6 +177,24 @@ def citation_checks(deployment, identities):
     return results
 
 
+def reset_database_override(deployment, image):
+    script = """
+from uuid import uuid4
+from urllib.parse import urlsplit
+from app.services.config_store import ConfigStore
+store = ConfigStore()
+state = store.read()
+prior = state['values'].get('database_url')
+if prior is not None:
+    if urlsplit(prior).scheme != 'sqlite+aiosqlite':
+        raise RuntimeError('Refusing to reset an unexpected database override')
+    store.save(state['revision'], {}, 'postgres-cutover-' + uuid4().hex, reset=['database_url'])
+"""
+    deployment.run(['docker', 'run', '--rm', '--network', 'none',
+                    '-e', 'SPEDA_DATA_DIR=/state', '-v', deployment.config['state_dir'] + ':/state',
+                    image, 'python', '-c', script])
+
+
 def switch(deployment, target, cases, commit):
     current = json.loads((deployment.root / 'current.json').read_text())
     app = deployment.config['app_container']
@@ -213,6 +231,7 @@ def switch(deployment, target, cases, commit):
     proxy_restored = False
     can_reopen = True
     sqlite = None
+    reset_requested = False
     try:
         inhibit.touch(exist_ok=False)
         if was_spark_running:
@@ -236,6 +255,8 @@ def switch(deployment, target, cases, commit):
         columns, expected = verify_backup(deployment, root, candidate.postgres, current['image_id'])
         if sqlite.execute('PRAGMA data_version').fetchone()[0] != frozen_version:
             raise RuntimeError('SQLite changed after writers were paused')
+        reset_requested = True
+        reset_database_override(deployment, current['image_id'])
         atomic(HOST_CONFIG, json.dumps(candidate.config, indent=2) + '\n')
         candidate_started = True
         candidate.run(candidate.compose + ['up', '-d', '--no-deps', '--no-build', 'app'])
@@ -268,6 +289,9 @@ def switch(deployment, target, cases, commit):
         if not opened and can_reopen:
             can_reopen = False
             atomic(HOST_CONFIG, original_config)
+            if reset_requested:
+                configuration = Path(deployment.config['state_dir']) / 'configuration.json'
+                atomic(configuration, (root / 'state-before' / 'configuration.json').read_text())
             if app_stop_requested:
                 deployment.run(deployment.compose + ['up', '-d', '--no-deps', '--no-build', 'app'])
                 deployment.health(app)

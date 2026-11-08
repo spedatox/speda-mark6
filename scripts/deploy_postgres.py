@@ -8,7 +8,7 @@ import time
 from urllib.parse import urlunsplit
 from uuid import uuid4
 
-from scripts.deploy_production import DataPreservationFailure, Deployment, container_database
+from scripts.deploy_production import DataPreservationFailure, Deployment, container_database, container_database_env
 
 
 POSTGRES_IMAGE = 'postgres@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938'
@@ -170,8 +170,8 @@ class PostgresDeployment(Deployment):
             rehearse_app(self, old, recovery)
             if recovery.fingerprints(columns) != expected:
                 raise RuntimeError('Schema rehearsal altered existing PostgreSQL rows')
-        active = container_database(self.config['app_container'])
-        local = urlunsplit(active._replace(netloc=active.netloc.rsplit('@', 1)[0] + '@127.0.0.1:5432'))
+        configured = container_database_env(self.config['app_container'])
+        local = urlunsplit(configured._replace(netloc=configured.netloc.rsplit('@', 1)[0] + '@127.0.0.1:5432'))
         migration = self.migrate_postgres(image, self.postgres, backup, local)
         try:
             preserved = self.postgres.fingerprints(columns) == expected

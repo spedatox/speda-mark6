@@ -82,11 +82,19 @@ def atomic(path, text):
         Path(name).unlink(missing_ok=True)
 
 
-def container_database(container):
+def container_database_env(container):
     values = json.loads(subprocess.check_output([
         'docker', 'inspect', container, '--format', '{{json .Config.Env}}',
     ], timeout=20))
     return urlsplit(next(value.partition('=')[2] for value in values if value.startswith('DATABASE_URL=')))
+
+
+def container_database(container):
+    value = subprocess.check_output([
+        'docker', 'exec', container, 'python', '-c',
+        'from app.config import settings; print(settings.database_url)',
+    ], text=True, timeout=20, stderr=subprocess.PIPE)
+    return urlsplit(value.strip())
 
 
 class Deployment:
@@ -275,7 +283,7 @@ class Deployment:
             snapshot_report, migration = self.prepare_database(release['image_id'], old)
             atomic(env_path, image_env(previous_env, release['image_id'])); changed = True
             self.run(self.compose + ['up', '-d', '--no-deps', '--no-build', 'app'])
-            self.health(app); self.authenticated_check()
+            self.health(app); self.check_backend(); self.authenticated_check()
             actual = self.run(['docker', 'inspect', app, '--format', '{{.Image}}'])
             if actual != release['image_id']: raise RuntimeError('Running image mismatch')
             healthy = True

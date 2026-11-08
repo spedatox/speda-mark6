@@ -63,6 +63,7 @@ class Host(Deployment):
         return ''
 
     def load_image(self, upload, release): return release
+    def check_backend(self): pass
 
     def health(self, name):
         if self.failure == 'health' and self.image == NEW and not self.failed:
