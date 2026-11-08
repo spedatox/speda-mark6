@@ -43,7 +43,7 @@ class ProfileRegistry:
         self.aliases = {"nightcrawler": "friday", "night_crawler": "friday"}
         roster = (
             ("speda", "SPEDA", "J.A.R.V.I.S. (MCU)", "Personal assistant; coordinates the room", {"Task", "project_delegate"}),
-            ("ultron", "Ultron", "Ultron (MCU)", "Academic life, coursework and study", {"Task"}),
+            ("ultron", "Ultron", "Ultron (MCU)", "Academic life, coursework and study", {"Task", "read_course_memory"}),
             ("optimus", "Optimus", "Optimus Prime (Transformers Prime)", "Engineering; leads Autobots", {"Task", "project_delegate"}),
             ("friday", "Friday", "F.R.I.D.A.Y. (MCU)", "Research, OSINT and web monitoring", {"Task"}),
             ("atomix", "Atomix", "Atomix (Ben 10)", "Health, training and wellbeing", {"Task"}),

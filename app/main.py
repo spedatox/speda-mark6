@@ -160,6 +160,8 @@ async def lifespan(app: FastAPI):
     preparer.library_indexer = indexer
     lookup = MemoryLookupSkill(memory_runtime, library, catalogue)
     await registry.register_skill(lookup)
+    from app.skills.course_memory import ReadCourseMemorySkill
+    await registry.register_skill(ReadCourseMemorySkill(catalogue))
     from app.skills.search_history import SearchHistorySkill
     await registry.register_skill(SearchHistorySkill(lookup))
     await registry.register_skill(IaconProposeSkill(preparer))
