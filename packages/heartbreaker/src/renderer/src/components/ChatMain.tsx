@@ -1399,7 +1399,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <RoomConversation config={config} party={profile?.agentId === 'warroom'} engaged={partyEngaged}
+      <RoomConversation config={config} party={profile?.agentId === 'warroom'} engaged={partyEngaged} voiceMode={voiceOpen}
         reply={reply} onClearReply={() => setReply(null)}>
       {voiceOpen ? (
         <VoiceMode

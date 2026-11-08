@@ -48,6 +48,9 @@
 .hb-room-member button,.hb-room-reply-context>button { color:var(--hb-text-dim); background:transparent; border:0; padding:3px 7px; cursor:pointer; }
 .hb-room-layout { display:flex; flex:1; min-height:0; min-width:0; overflow:hidden; }
 .hb-room-transcript { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+/* Voice canvas panels have their own scroll boundary. The docked orb extends
+   past the transcript edge into the corner beside the composer. */
+.hb-room-layout-voice,.hb-room-layout-voice>.hb-room-transcript { overflow:visible; }
 .hb-room-party { width:182px; flex-shrink:0; padding:18px 14px; border-left:1px solid var(--hb-line); background:var(--hb-base); overflow-y:auto; }
 .hb-room-player { display:flex; align-items:center; gap:10px; margin-top:18px; }
 .hb-room-player strong { font-size:.85rem; font-weight:500; }

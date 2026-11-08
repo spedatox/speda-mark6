@@ -11,8 +11,8 @@ import AgentMark from './AgentMark'
 
 export const roomName = (id: string) => BRANDS[id]?.name ?? id
 
-export default function RoomConversation({ config, party, reply, onClearReply, children }: {
-  config: AppConfig; party: boolean; engaged?: boolean
+export default function RoomConversation({ config, party, voiceMode, reply, onClearReply, children }: {
+  config: AppConfig; party: boolean; engaged?: boolean; voiceMode?: boolean
   reply: ChatMessage | null; onClearReply: () => void; children: ReactNode
 }) {
   const { state, dispatch } = useChatContext()
@@ -123,7 +123,8 @@ export default function RoomConversation({ config, party, reply, onClearReply, c
           onClick={() => void change('dismiss', id)}>×</button>}
       </span>)}
     </div>}
-    <div className="hb-room-layout"><div className="hb-room-transcript">{children}</div>
+    <div className={voiceMode ? 'hb-room-layout hb-room-layout-voice' : 'hb-room-layout'}>
+      <div className="hb-room-transcript">{children}</div>
       {party && <aside className="hb-room-party" aria-label={t.members}>
         <div className="hb-room-party-heading">{t.fullRoster}</div>
         {!room && <p className="hb-room-caption">{t.startFirst}</p>}
