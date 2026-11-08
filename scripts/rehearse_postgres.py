@@ -18,6 +18,7 @@ from app.database import Base
 import app.models  # noqa: F401
 from app.models.memory_serving import MemoryText
 from app.services.postgres_search import install_postgres_search
+from app.services.solus.guards import install_guards
 from scripts.rehearse_sqlite import integrity, quote, readonly
 
 
@@ -141,6 +142,7 @@ async def load(snapshot, url):
                         # Driver details can contain private values and attachment bytes.
                         raise ValueError(f"Rehearsal failed for {table.name} ({type(exc).__name__})") from None
                 await install_postgres_search(connection)
+                await connection.run_sync(install_guards)
         return {"active_tables": results, "active_rows": sum(row["rows"] for row in results.values()),
                 "archive_only_tables": archive, "archive_only_columns": extensions,
                 "archive_location": "original SQLite snapshot", "cutover_ready": False}

@@ -176,6 +176,8 @@ class SolusHTTP:
             # SQLite's legacy driver does not begin a snapshot for SELECT alone.
             # Each multi-query report must see one committed ledger edition.
             await db.begin()
+            if db.bind.dialect.name == "postgresql":
+                await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
             user_id = self.context(request, db).user_id
             query = request.query_params
             try:

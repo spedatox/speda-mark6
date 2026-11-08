@@ -58,6 +58,23 @@ from tests.test_global_budget import (
     test_shared_pause_rejects_chat_before_admission_and_keeps_automation_intake,
     test_completed_client_retry_survives_later_budget_pause,
 )
+from tests.test_solus_core import (
+    seeded_ledger,
+    test_card_statement_calendar_installments_and_payment,
+    test_concurrent_retry_and_cross_book_scope,
+    test_invoice_partial_payment_credit_note_and_period_close,
+    test_posted_history_protected_even_through_sql,
+    test_receipt_retry_currency_and_isolated_session,
+)
+
+
+@pytest_asyncio.fixture
+async def ledger(memory):
+    from app.services.solus.guards import install_guards
+    async with memory.engine.begin() as connection:
+        await connection.run_sync(install_guards)
+    async with seeded_ledger(memory.engine, seed_users=False) as state:
+        yield state
 
 
 @pytest_asyncio.fixture

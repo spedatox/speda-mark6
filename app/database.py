@@ -69,11 +69,11 @@ async def init_db() -> None:
         if engine.dialect.name == "sqlite":
             from app.services.memory_store import init_indexes
             await init_indexes(conn)
-            from app.services.solus.guards import install_guards
-            await conn.run_sync(install_guards)
         elif engine.dialect.name == "postgresql":
             from app.services.postgres_search import install_postgres_search
             await install_postgres_search(conn)
+        from app.services.solus.guards import install_guards
+        await conn.run_sync(install_guards)
 
 
 async def close_db() -> None:

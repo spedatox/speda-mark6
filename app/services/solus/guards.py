@@ -1,11 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Idempotent SQLite ledger guards, applied at startup and migration rehearsal."""
+"""Idempotent database ledger guards, applied at startup and migration rehearsal."""
 
 
 def install_guards(connection):
+    if connection.dialect.name == "postgresql":
+        install_postgres_guards(connection)
+        return
     if connection.dialect.name != "sqlite":
-        raise RuntimeError("Solus ledger guards currently require SQLite; do not activate on another store.")
+        raise RuntimeError("Unsupported Solus ledger store.")
     columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(solus_card_statements)")}
     if "event_ids" not in columns:
         connection.exec_driver_sql("ALTER TABLE solus_card_statements ADD COLUMN event_ids JSON NOT NULL DEFAULT '[]'")
@@ -66,3 +69,92 @@ def install_guards(connection):
     }
     for name, definition in definitions.items():
         connection.exec_driver_sql(f"CREATE TRIGGER IF NOT EXISTS solus_{name} {definition}")
+
+
+def install_postgres_guards(connection):
+    definitions = {
+        "immutable": """
+            RAISE EXCEPTION '% history is immutable', TG_TABLE_NAME USING ERRCODE = '23514';
+        """,
+        "event": """
+            IF TG_OP = 'INSERT' THEN
+                IF NEW.posted THEN
+                    RAISE EXCEPTION 'insert journal as draft' USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END IF;
+            IF OLD.posted THEN
+                RAISE EXCEPTION 'posted journal is immutable' USING ERRCODE = '23514';
+            END IF;
+            IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+            IF NEW.posted THEN
+                IF (SELECT COUNT(*) FROM solus_postings WHERE event_id = NEW.id) < 2 THEN
+                    RAISE EXCEPTION 'journal needs two postings' USING ERRCODE = '23514';
+                END IF;
+                IF EXISTS (SELECT a.currency FROM solus_postings p JOIN solus_accounts a ON a.id=p.account_id
+                           WHERE p.event_id=NEW.id GROUP BY a.currency HAVING SUM(p.amount_minor) <> 0) THEN
+                    RAISE EXCEPTION 'journal is not balanced per currency' USING ERRCODE = '23514';
+                END IF;
+                IF (SELECT closed_through FROM solus_books WHERE id=NEW.book_id FOR SHARE) >= NEW.occurred_on THEN
+                    RAISE EXCEPTION 'period is closed' USING ERRCODE = '23514';
+                END IF;
+            END IF;
+            RETURN NEW;
+        """,
+        "posting": """
+            IF TG_OP = 'UPDATE' THEN
+                RAISE EXCEPTION 'replace draft postings; never edit lines' USING ERRCODE = '23514';
+            END IF;
+            IF TG_OP = 'DELETE' THEN
+                IF (SELECT posted FROM solus_events WHERE id=OLD.event_id FOR NO KEY UPDATE) THEN
+                    RAISE EXCEPTION 'posted lines immutable' USING ERRCODE = '23514';
+                END IF;
+                RETURN OLD;
+            END IF;
+            IF (SELECT posted FROM solus_events WHERE id=NEW.event_id FOR NO KEY UPDATE) THEN
+                RAISE EXCEPTION 'posted lines immutable' USING ERRCODE = '23514';
+            END IF;
+            IF (SELECT closed FROM solus_accounts WHERE id=NEW.account_id FOR SHARE) THEN
+                RAISE EXCEPTION 'account is closed' USING ERRCODE = '23514';
+            END IF;
+            RETURN NEW;
+        """,
+        "account": """
+            IF EXISTS (SELECT 1 FROM solus_postings WHERE account_id=OLD.id) THEN
+                RAISE EXCEPTION 'account semantics immutable after use' USING ERRCODE = '23514';
+            END IF;
+            RETURN NEW;
+        """,
+        "event_child": """
+            IF TG_TABLE_NAME = 'solus_settlements' THEN
+                IF (SELECT posted FROM solus_events WHERE id=NEW.payment_id FOR NO KEY UPDATE) THEN
+                    RAISE EXCEPTION 'posted payment allocations immutable' USING ERRCODE = '23514';
+                END IF;
+            ELSIF (SELECT posted FROM solus_events WHERE id=NEW.event_id FOR NO KEY UPDATE) THEN
+                RAISE EXCEPTION 'posted schedules immutable' USING ERRCODE = '23514';
+            END IF;
+            RETURN NEW;
+        """,
+    }
+    for name, body in definitions.items():
+        connection.exec_driver_sql(f"""
+            CREATE OR REPLACE FUNCTION solus_guard_{name}() RETURNS trigger
+            LANGUAGE plpgsql SET search_path FROM CURRENT AS $$ BEGIN {body} END; $$
+        """)
+    for table in ("routing_revisions", "schedule_items", "settlements", "commands",
+                  "imports", "reconciliations", "lots", "disposals", "valuations"):
+        connection.exec_driver_sql(f"""
+            CREATE OR REPLACE TRIGGER solus_immutable BEFORE UPDATE OR DELETE ON solus_{table}
+            FOR EACH ROW EXECUTE FUNCTION solus_guard_immutable()
+        """)
+    for table, name, operations in (
+        ("events", "event", "INSERT OR UPDATE OR DELETE"),
+        ("postings", "posting", "INSERT OR UPDATE OR DELETE"),
+        ("accounts", "account", "UPDATE OF currency, scale, account_type, book_id"),
+        ("schedule_items", "event_child", "INSERT"),
+        ("settlements", "event_child", "INSERT"),
+    ):
+        connection.exec_driver_sql(f"""
+            CREATE OR REPLACE TRIGGER solus_{name} BEFORE {operations} ON solus_{table}
+            FOR EACH ROW EXECUTE FUNCTION solus_guard_{name}()
+        """)

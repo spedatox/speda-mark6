@@ -3,7 +3,7 @@ import hashlib
 import json
 import re
 import time
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.models.solus_ledger import SolusCommand, SolusEvent, SolusPosting, SolusScheduleItem
@@ -75,8 +75,12 @@ async def resolve_evidence(db, context, supplied):
 
 
 async def writer_fence(db, user_id):
+    if db.bind.dialect.name == 'postgresql':
+        # Serialize a single owner's ledger decisions without locking their chat row.
+        await db.execute(text("SELECT pg_advisory_xact_lock(1936682101, :owner)"), {"owner": user_id})
+        return
     if db.bind.dialect.name != 'sqlite':
-        raise SolusError('Solus immutable ledger guards currently require SQLite; this store is not activated.', 409)
+        raise SolusError('Unsupported Solus ledger store.', 409)
     # A database write lock precedes all receipt/source/account reads. It also
     # works with the native engine's explicit BEGIN event (no nested BEGIN).
     await db.execute(update(User).where(User.id == user_id).values(name=User.name))

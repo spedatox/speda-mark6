@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Accounting invariants, statement cutoffs and transactional failures."""
 from datetime import date
+from contextlib import asynccontextmanager
 from uuid import uuid4
 import random
 
@@ -67,10 +68,20 @@ async def ledger(tmp_path):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
         await connection.run_sync(install_guards)
+    try:
+        async with seeded_ledger(engine) as state:
+            yield state
+    finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def seeded_ledger(engine, *, seed_users=True):
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as db:
-        db.add_all([User(id=1, name="Owner", timezone="Europe/Istanbul"), User(id=2, name="Other", timezone="UTC")])
-        await db.commit()
+    if seed_users:
+        async with factory() as db:
+            db.add_all([User(id=1, name="Owner", timezone="Europe/Istanbul"), User(id=2, name="Other", timezone="UTC")])
+            await db.commit()
     async with factory() as db:
         context = AgentContext(agent_id="owner", user_id=1, session_id=0, request_id=str(uuid4()), triggered_by="user",
             trigger_payload={}, output_mode="respond", model="", system_prompt="", conversation_history=[], db=db, timezone="Europe/Istanbul")
@@ -82,7 +93,6 @@ async def ledger(tmp_path):
                 "book_id": book["book_id"], "name": name, "account_type": kind})
             ids[name] = result["account_id"]
         yield context, factory, book["book_id"], ids
-    await engine.dispose()
 
 
 def purchase(book_id, ids, **changes):
