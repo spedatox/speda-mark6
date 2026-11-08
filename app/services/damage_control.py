@@ -83,6 +83,9 @@ class IncidentJournal:
             )""")
             db.execute("CREATE INDEX IF NOT EXISTS incident_pending ON incidents(status, next_attempt, timestamp)")
             db.execute("CREATE TABLE IF NOT EXISTS docker_cursor (id INTEGER PRIMARY KEY CHECK (id=1), timestamp INTEGER)")
+            db.execute("""CREATE TABLE IF NOT EXISTS incident_inspections (
+                id TEXT PRIMARY KEY, reviewed_at REAL, assessment_state TEXT, assessment TEXT, assessed_at REAL
+            )""")
 
     @contextmanager
     def connect(self):

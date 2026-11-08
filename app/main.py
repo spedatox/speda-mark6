@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.config import _DATA_DIR
-    from app.services.damage_control import DamageControl, exception_facts
+    from app.services.damage_control import DamageControl, IncidentJournal, exception_facts
 
     incident_tasks = []
     protocol = None
+    path = _DATA_DIR / "damage-control" / "incidents.sqlite3"
     if settings.damage_control_enabled and settings.external_integrations_enabled and (
             settings.telegram_bot_token or settings.telegram_bot_tokens not in ("", "{}")):
-        protocol = DamageControl(_DATA_DIR / "damage-control" / "incidents.sqlite3")
+        protocol = DamageControl(path)
         protocol.journal.recover()
         for name in ("", "uvicorn"):
             logging.getLogger(name).addHandler(protocol)
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
         if Path("/var/run/docker.sock").is_socket():
             incident_tasks.append(asyncio.create_task(protocol.observe_docker()))
     app.state.damage_control = protocol
+    app.state.damage_control_journal = protocol.journal if protocol else IncidentJournal(path) if path.is_file() else None
     try:
         async with application_lifespan(app, incident_tasks):
             yield
@@ -391,6 +393,8 @@ def create_app() -> FastAPI:
     app.include_router(configuration_router)
     app.include_router(models.router)
     app.include_router(iacon.router)
+    from app.routers.incident_journal import router as incident_journal_router
+    app.include_router(incident_journal_router)
     app.include_router(library.router)
     from app.integration import include_routes
     include_routes(app)
