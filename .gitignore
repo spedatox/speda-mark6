@@ -15,6 +15,11 @@ build/
 *.egg-info/
 .eggs/
 
+# Heartbreaker's Windows icon is a source asset for electron-builder.
+!/packages/heartbreaker/build/
+/packages/heartbreaker/build/*
+!/packages/heartbreaker/build/icon.ico
+
 # Virtual environment
 .venv/
 venv/
