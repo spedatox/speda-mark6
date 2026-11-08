@@ -21,7 +21,16 @@ def searchable_body(dialect):
     if dialect=='sqlite':
         sql = "CASE WHEN json_type(messages.content)='text' THEN json_extract(messages.content,'$') WHEN json_type(messages.content)='array' THEN COALESCE((SELECT group_concat(json_extract(j.value,'$.text'),' ') FROM json_each(messages.content) j WHERE json_extract(j.value,'$.type')='text'),'') ELSE '' END"
     else:
-        sql = "CASE WHEN json_typeof(messages.content)='string' THEN messages.content #>> '{}' WHEN json_typeof(messages.content)='array' THEN COALESCE((SELECT string_agg(j.value->>'text',' ') FROM json_array_elements(messages.content) j(value) WHERE j.value->>'type'='text'),'') ELSE '' END"
+        # PostgreSQL JSON retains escaped zero bytes but cannot extract them
+        # as SQL text. Rewrite only real escapes in the searchable projection.
+        safe_json = r"""CASE WHEN strpos(messages.content::text, chr(92) || 'u0000') > 0
+            THEN regexp_replace(messages.content::text,
+                $zero$(?<!\\)((?:\\\\)*)\\u0000$zero$, $safe$\1\\u0001$safe$, 'g')::json
+            ELSE messages.content END"""
+        sql = f"""(SELECT CASE WHEN json_typeof(body)='string' THEN body #>> '{{}}'
+            WHEN json_typeof(body)='array' THEN COALESCE((SELECT string_agg(j.value->>'text',' ')
+                FROM json_array_elements(body) j(value) WHERE j.value->>'type'='text'),'')
+            ELSE '' END FROM (VALUES ({safe_json})) AS searchable(body))"""
     body=literal_column(sql)
     for original,replacement in zip('İıŞşĞğÜüÖöÇç','iiSsGgUuOoCc'):
         body=func.replace(body,original,replacement)

@@ -3,8 +3,27 @@ from datetime import datetime, timezone
 
 from sqlalchemy import ForeignKey, Index, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from app.database import Base
+
+
+class MemoryText(TypeDecorator):
+    """Reversibly store legacy zero bytes in PostgreSQL text."""
+
+    impl = Text
+    cache_ok = True
+    escape = "\ufdd0"
+
+    def process_bind_param(self, value, dialect):
+        if value is None or dialect.name != "postgresql":
+            return value
+        return value.replace(self.escape, self.escape + "e").replace("\0", self.escape + "0")
+
+    def process_result_value(self, value, dialect):
+        if value is None or dialect.name != "postgresql":
+            return value
+        return value.replace(self.escape + "0", "\0").replace(self.escape + "e", self.escape)
 
 
 class MemoryChange(Base):
@@ -20,9 +39,9 @@ class MemoryChange(Base):
     source_role: Mapped[str] = mapped_column(String(32))
     session_id: Mapped[int | None] = mapped_column(ForeignKey("sessions.id"), nullable=True)
     message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"), nullable=True)
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(MemoryText)
     content_hash: Mapped[str] = mapped_column(String(64))
-    routing_text: Mapped[str] = mapped_column(Text)
+    routing_text: Mapped[str] = mapped_column(MemoryText)
     provenance: Mapped[dict] = mapped_column(JSON, default=dict)
     outcome: Mapped[str] = mapped_column(String(32), default="pending")
     capture_offset: Mapped[int] = mapped_column(default=0)
@@ -49,7 +68,7 @@ class MemoryServingUnit(Base):
     aliases: Mapped[list] = mapped_column(JSON, default=list)
     sections: Mapped[list] = mapped_column(JSON)
     dependencies: Mapped[list] = mapped_column(JSON)
-    routing_text: Mapped[str] = mapped_column(Text)
+    routing_text: Mapped[str] = mapped_column(MemoryText)
     revision: Mapped[int] = mapped_column(default=1)
     compiler_version: Mapped[int] = mapped_column(default=1)
     published_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

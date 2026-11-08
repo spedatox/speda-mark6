@@ -2,5 +2,6 @@ from tests.test_coordination_postgres import memory
 from tests.test_history_lookup import (
     test_archive_uses_real_text_owner_agent_scope_and_one_shared_batch,
     test_archive_date_range_is_owner_local_and_hidden_originals_remain_retained,
+    test_archive_can_search_messages_with_escaped_zero_bytes,
     test_archive_packing_keeps_cursors_and_assistant_attribution_honest,
 )

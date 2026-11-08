@@ -52,6 +52,21 @@ async def test_archive_date_range_is_owner_local_and_hidden_originals_remain_ret
     async with memory.sessions() as db: assert await db.get(Message,identity)
 
 
+async def test_archive_can_search_messages_with_escaped_zero_bytes(memory):
+    text = "Lecture briefing\0original tail"
+    _, identity, source = await seed(memory, text)
+    _, literal, _ = await seed(memory, [{"type": "text", "text": r"Literal \u0000 notation"}])
+    lookup = MemoryLookupSkill(MemoryRuntime(memory.store))
+    from app.models.memory_serving import MemoryChange
+
+    result = json.loads(await SearchHistorySkill(lookup).execute({"query": "briefing"}, memory.context()))
+    assert [(row["message_id"], row["text"]) for row in result["results"]] == [(identity, text)]
+    result = json.loads(await SearchHistorySkill(lookup).execute({"query": "u0000"}, memory.context()))
+    assert [row["message_id"] for row in result["results"]] == [literal]
+    async with memory.sessions() as db:
+        assert (await db.get(MemoryChange, source)).content == text
+
+
 async def test_archive_packing_keeps_cursors_and_assistant_attribution_honest(memory):
     expected=[]
     for index in range(9):

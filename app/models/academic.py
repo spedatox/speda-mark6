@@ -11,7 +11,7 @@ See docs/ULTRON_WEAR.md for the whole pipeline (watch ⇄ Igor ⇄ n8n ⇄ FCM).
 from datetime import date as date_cls
 from datetime import datetime
 
-from sqlalchemy import Boolean, Date, Float, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Date, Float, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -117,7 +117,7 @@ class AttendanceEntry(Base):
 
     # Epoch millis from the recording device. Last-write-wins conflict
     # resolution between the watch and the server uses this, not row order.
-    recorded_at: Mapped[int] = mapped_column(Integer, default=0)
+    recorded_at: Mapped[int] = mapped_column(BigInteger, default=0)
     source: Mapped[str] = mapped_column(String(32), default="wear")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
