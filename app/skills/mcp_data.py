@@ -1,6 +1,7 @@
 """MCP resources and prompts through the same grants and execution receipts."""
+import json
+
 from app.skills.base import Skill
-from app.schemas.llm import ProviderError
 
 
 class MCPDataSkill(Skill):
@@ -46,15 +47,19 @@ class MCPDataSkill(Skill):
                 or (context.extra.get('active_servers') is not None and client.server_name not in context.extra['active_servers'])
                 or context.agent_id not in client.allowed_agents or (
                     getattr(client, 'allowed_users', None) is not None and context.user_id not in client.allowed_users)):
-            raise ProviderError('unauthorized_mcp', 'MCP connection is unavailable to this agent')
+            # This rejection is settled locally before any request reaches the connection.
+            return json.dumps({'status': 'error', 'code': 'unauthorized_mcp',
+                               'message': 'MCP connection is unavailable to this agent'})
         operation = args['operation']
         if operation == 'read_resource':
             if not args.get('uri'):
-                raise ProviderError('invalid_arguments', 'A discovered resource URI is required')
+                return json.dumps({'status': 'error', 'code': 'invalid_arguments',
+                                   'message': 'A discovered resource URI is required'})
             parameters = {'uri':args['uri']}
         elif operation == 'get_prompt':
             if not args.get('name'):
-                raise ProviderError('invalid_arguments', 'A discovered prompt name is required')
+                return json.dumps({'status': 'error', 'code': 'invalid_arguments',
+                                   'message': 'A discovered prompt name is required'})
             parameters = {'name':args['name'], 'arguments':args.get('arguments', {})}
         else:
             parameters = {'cursor':args['cursor']} if args.get('cursor') else {}

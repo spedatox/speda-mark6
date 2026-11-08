@@ -7,7 +7,10 @@ from app.services.library import LibraryService
 from app.services.library_indexer import LibraryIndexer
 from app.services.memory_store import capture_source
 from tests.test_coordination_postgres import memory
-from tests.test_iacon_hisar import Catalog, test_hisar_original_ids_editions_citations_and_live_denial
+from tests.test_iacon_hisar import (
+    Catalog, test_hisar_original_ids_editions_citations_and_live_denial,
+    test_menu_lookup_recovers_the_exact_date_within_the_byte_budget,
+)
 
 
 async def matches(store, db, term, limit=20):

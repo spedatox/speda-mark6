@@ -126,6 +126,10 @@ precedence over its older revision. Treat unresolved_conflicts as unresolved;
 never select a convenient claim as fact. An overdue state remains unverified,
 not completed. Use corpus=hall_of_records for Hisar documents, or record_id
 for a native catalogue document excerpt. These share the same one-batch budget.
+When the owner asks for a detail from Iacon Hall of Records, search directly
+by topic or title. For a specific day, pass the owner-local date as on_date.
+Use list for a catalogue request and read for a known document ID.
+Iacon Hall of Records evidence is retrieved through memory_lookup.
 Orion prepares evidence-backed changes after the turn; pending_review means
 they have not been accepted yet. Orion handles consolidation and Telegram
 follow-ups. Never claim a reminder was sent without a delivery receipt.

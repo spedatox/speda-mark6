@@ -237,3 +237,50 @@ async def test_catalog_and_exact_document_reads_use_the_existing_shared_lookup_b
     denied = json.loads(await skill.execute({"query":"", "corpus":"hall_of_records", "operation":"read",
         "document_ids":[doc]}, memory.context()))
     assert denied["status"] == "not_found"
+
+
+async def test_menu_lookup_recovers_the_exact_date_within_the_byte_budget(memory, monkeypatch):
+    from datetime import date, datetime
+    from types import SimpleNamespace
+    from app.services import library
+
+    class TurnClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 6, 17, 7, tzinfo=tz)
+
+    monkeypatch.setattr(library, "dt", SimpleNamespace(datetime=TurnClock, date=date))
+    client = Catalog()
+    row = "6.11.2026 CUMA Mercimek çorbası"
+    menu = row + "\n" + ("Yurtta servis saatleri değişebilir.\n" * 60) + (
+        "26.11.2026 PERŞEMBE Dinner menu\n" + "Dinner menu special. " * 82
+    )
+    doc, revision = client.add("November Residence Meals", menu,
+                               coverage_start="2026-11-01", coverage_end="2026-11-30")
+    indexer = LibraryIndexer(client, memory.sessions, enqueue=client.enqueue)
+    service = LibraryService(indexer)
+    await indexer.reconcile()
+    await indexer.index_revision(doc, revision)
+    # The dated row contains none of the keyword query terms.
+    baseline = await service.search(memory.context(), "dinner menu")
+    assert baseline.results and all(row not in result.content for result in baseline.results)
+
+    client.records[doc]["document"]["type"] = "cafeteria_menu"
+    skill = MemoryLookupSkill(MemoryRuntime(memory.store), service)
+    args = {"corpus": "hall_of_records", "query": "dinner menu"}
+    context = memory.context()
+    raw = await skill.execute(args, context)
+    result = json.loads(raw)
+    assert result["status"] == "success" and result["query_date"] == "2026-11-06"
+    evidence, = result["results"]
+    assert row in evidence["content"] and evidence["revision_id"] == revision
+    assert (await service.citation_source(evidence["citation_id"]))["content"] == evidence["content"]
+    assert result["warnings"] == ["Additional passages omitted by the shared turn budget"]
+    assert context.memory_budget.lookup_batches == 1
+    assert len(raw.encode()) == context.memory_budget.used <= context.memory_budget.lookup_limit
+
+    later = json.loads(await skill.execute({**args, "on_date": "2026-11-26"}, memory.context()))
+    assert "26.11.2026" in later["results"][0]["content"]
+    client.records[doc]["document"]["access_policy"] = {"allowed_agents": []}
+    denied = json.loads(await skill.execute(args, memory.context()))
+    assert not denied["results"]

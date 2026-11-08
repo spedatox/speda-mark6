@@ -148,6 +148,40 @@ async def test_parallel_memory_requests_keep_the_first_result_and_finish_the_tur
         await bits.coordinator.shutdown()
 
 
+async def test_mcp_browse_rejection_finishes_the_turn_without_an_unknown_receipt(memory):
+    import json
+    from mcp.server import MCPServer
+    from app.mcp.client import MCPClient
+    from app.models.model_policy import ToolExecutionReceipt
+    from app.skills.mcp_data import MCPDataSkill
+    from app.skills.tool_search import ToolSearchSkill
+
+    discover = LLMMessage([Block(type="tool_use", id="discover", name="tool_search",
+        input={"query": "mcp_browse"})], "tool_use")
+    browse = LLMMessage([Block(type="tool_use", id="browse", name="mcp_browse",
+        input={"server": "iacon", "operation": "list_resources"})], "tool_use")
+    bits = await setup(memory, [discover, browse, reply("I could not reach that connection.")])
+    registry = bits.engine._registry
+    client = MCPClient("fixture", target=MCPServer("fixture"), allowed_agents={"speda"})
+    await registry.register_mcp(client)
+    await registry.register_skill(MCPDataSkill(registry))
+    await registry.register_skill(ToolSearchSkill(registry))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        run = await send(bits, room, "Check Iacon")
+        assert run["status"] == "succeeded"
+        results = [block for message in bits.client.calls[2]["messages"] if isinstance(message["content"], list)
+                   for block in message["content"] if block["type"] == "tool_result"]
+        result, = [block for block in results if block["tool_use_id"] == "browse"]
+        assert json.loads(result["content"])["code"] == "unauthorized_mcp"
+        async with memory.sessions() as db:
+            receipt = await db.scalar(select(ToolExecutionReceipt).where(ToolExecutionReceipt.call_id == "browse"))
+        assert receipt.status == "completed" and client.calls == 0
+    finally:
+        await bits.coordinator.shutdown()
+        await registry.shutdown_adapters()
+
+
 async def test_unknown_paid_response_is_held_never_resent(memory):
     bits = await setup(memory, [ProviderError("disconnect", "Connection lost after dispatch")])
     room = await bits.coordinator.create(1, CreateRoom())

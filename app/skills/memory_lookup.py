@@ -9,8 +9,10 @@ class MemoryLookupSkill(Skill):
     name = "memory_lookup"
     read_only = True
     description = (
-        "Retrieve a bounded batch of source-linked personal memory missing from the supplied context. "
-        "Use it for a specific person, past event, or exact source detail needed to answer the owner. "
+        "Retrieve source-linked evidence from Iacon, including Hisar Hall of Records documents. "
+        "For an answer from a Hall of Records document, search with its topic or title and supply on_date "
+        "for a specific day such as today. Use list for catalogue questions and read when you already have a document ID. "
+        "Use personal memory for a specific person, past event, or exact source detail missing from the supplied context. "
         "Only one lookup is allowed per turn, including when requesting tools in parallel. If used, answer from available evidence and state any gaps. "
         "Returns attributed evidence, ambiguity and incomplete-coverage status within one shared turn budget."
     )
@@ -21,7 +23,9 @@ class MemoryLookupSkill(Skill):
         "before": {"type":"string", "maxLength":10, "description":"Inclusive owner-local YYYY-MM-DD archive date."},
         "before_message_id": {"type":"integer", "minimum":1},
         "limit": {"type":"integer", "minimum":1, "maximum":8},
-        "operation": {"type":"string", "enum":["search","list","read"], "description":"Hall of Records supports bounded catalog listing and exact document reading in the same single lookup batch."},
+        "operation": {"type":"string", "enum":["search","list","read"], "description":"Hall of Records search returns evidence. List returns catalogue metadata only. Read requires one known document ID. Each operation uses the single lookup batch."},
+        "on_date": {"type":"string", "pattern":r"^\d{4}-\d{2}-\d{2}$",
+                    "description":"Owner-local YYYY-MM-DD for a Hall of Records search of date-specific material."},
         "document_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
         "revision_id": {"type":"string", "maxLength":128},
         "page": {"type":"integer", "minimum":1},
@@ -141,17 +145,22 @@ class MemoryLookupSkill(Skill):
                     result.pop('passages',None)
                     result.pop('citation_ids',None)
                 elif operation=='search':
-                    result = (await self.library.search(context, query, doc_ids=document_ids, limit=4)).model_dump(mode="json")
+                    result = (await self.library.search(context, query, doc_ids=document_ids,
+                        on_date=args.get('on_date'), limit=min(4, args.get('limit', 4)))).model_dump(mode="json")
                 else:
                     return '{"status":"unavailable","reason":"Unknown bounded library operation"}'
             ceiling = min(budget.lookup_limit, budget.turn_limit - budget.used)
             items_key = 'documents' if operation=='list' else 'results'
-            while len(json.dumps(result, ensure_ascii=False).encode()) > ceiling and result.get(items_key):
+            encoded = json.dumps(result, ensure_ascii=False)
+            if len(encoded.encode()) > ceiling and result.get(items_key):
+                result.setdefault("warnings", []).append("Additional passages omitted by the shared turn budget")
+            while len(encoded.encode()) > ceiling and result.get(items_key):
                 result[items_key].pop()
-                result["warnings"] = ["Additional passages omitted by the shared turn budget"]
                 if operation=='list': result['has_more']=True
                 if operation=='read': result['next_offset']=args.get('offset',0)+len(result[items_key])
-            encoded = json.dumps(result, ensure_ascii=False)
+                encoded = json.dumps(result, ensure_ascii=False)
+            if operation != 'list' and result.get('status') == 'success' and not result[items_key]:
+                return '{"status":"budget_exhausted"}'
             if len(encoded.encode()) > ceiling:
                 return '{"status":"budget_exhausted"}'
             budget.used += len(encoded.encode())

@@ -8,6 +8,7 @@ import asyncio
 import math
 import hashlib
 import hmac
+import re
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -114,12 +115,63 @@ class LibraryService:
             ]).on_conflict_do_nothing(index_elements=["id"]))
         await db.commit()
 
+    async def _keyword_rows(self, db, match, revisions, limit):
+        generations = [self.indexer.generation_id(rid) for rid in revisions]
+        if db.bind.dialect.name == "postgresql":
+            return await self.postgres_search.rank(db, match, revisions, generations, limit)
+        statement = text(
+            "SELECT passage_id, bm25(library_passages_fts,0,1,2,0,0,0) AS rank "
+            "FROM library_passages_fts WHERE library_passages_fts MATCH :match "
+            "AND revision_id IN :revisions AND generation_id IN :generations "
+            "ORDER BY rank, passage_id LIMIT :limit"
+        ).bindparams(bindparam("revisions", expanding=True), bindparam("generations", expanding=True))
+        return (await db.execute(statement, {"match": match, "revisions": list(revisions),
+                                            "generations": generations, "limit": limit})).all()
+
+    async def _prioritize_date(self, db, passages, dated_revisions, day, limit):
+        first_rank = {}
+        for rank, passage in enumerate(passages):
+            if passage.revision_id in dated_revisions:
+                first_rank.setdefault(passage.revision_id, rank)
+        if not first_rank:
+            return passages
+
+        # Match full dates rather than scoring the common month and year tokens.
+        day_number = f"0?{day.day}" if day.day < 10 else str(day.day)
+        month_number = f"0?{day.month}" if day.month < 10 else str(day.month)
+        local_date = rf"{day_number}[-./]{month_number}[-./]{day.year}"
+        iso_date = day.isoformat()
+        exact = re.compile(rf"(?<!\w)(?:{local_date}|{iso_date})(?!\w)")
+        matches = {p.id for p in passages if p.revision_id in first_rank and exact.search(p.content)}
+        missing = first_rank.keys() - {p.revision_id for p in passages if p.id in matches}
+        if missing:
+            # Recover exact dates outside the keyword candidate window, scoped to editions
+            # that already matched the topic and passed the live access and coverage checks.
+            phrases = [f'"{d} {m} {day.year}"'
+                       for d in sorted({str(day.day), f"{day.day:02d}"})
+                       for m in sorted({str(day.month), f"{day.month:02d}"})]
+            phrases.append(f'"{day.year} {day.month:02d} {day.day:02d}"')
+            date_query = " OR ".join(phrases)
+            rows = await self._keyword_rows(db, f"content : ({date_query})", missing, limit)
+            if rows:
+                found = await db.scalars(select(LibraryPassage).where(LibraryPassage.id.in_([row[0] for row in rows])))
+                by_id = {p.id: p for p in found if exact.search(p.content)}
+                passages.extend(by_id[row[0]] for row in rows if row[0] in by_id)
+                matches.update(by_id)
+
+        if not matches:
+            return passages
+
+        # Keep each edition's best topic rank and prefer its exact dates there.
+        ranked = sorted(enumerate(passages), key=lambda item: (
+            (first_rank[item[1].revision_id], 0) if item[1].id in matches else (item[0], 1)
+        ))
+        return [passage for _, passage in ranked]
+
     async def search(self, context, query_text, doc_ids=None, *, category=None, doc_type=None,
                      on_date=None, revision_id=None, limit=8):
-        today = dt.datetime.now(ZoneInfo(context.timezone)).date().isoformat()
-        query_date = on_date or today
-        if on_date:
-            dt.date.fromisoformat(on_date)
+        day = dt.date.fromisoformat(on_date) if on_date else dt.datetime.now(ZoneInfo(context.timezone)).date()
+        query_date = day.isoformat()
         match = build_match_query(query_text)
         if not match:
             return LibrarySearchResponse(status="empty_query", query_date=query_date)
@@ -127,6 +179,7 @@ class LibraryService:
                                       document_ids=doc_ids, include_archived=bool(revision_id))
         warnings = []
         eligible = {}
+        dated_revisions = set()
         async with self.sessions() as db:
             postgres = db.bind.dialect.name == "postgresql"
             if postgres:
@@ -143,8 +196,8 @@ class LibraryService:
                 # Period-bound records are filtered using authoritative edition metadata.
                 current = record.get("active_revision") or {}
                 dates = current if not revision_id else {"coverage_start": rev.coverage_start, "coverage_end": rev.coverage_end}
-                if on_date or (not revision_id and (dates.get("coverage_start") or dates.get("coverage_end"))):
-                    start, end = dates.get("coverage_start"), dates.get("coverage_end")
+                start, end = dates.get("coverage_start"), dates.get("coverage_end")
+                if (on_date or not revision_id) and (start or end):
                     if not start or not end:
                         warnings.append(f"{doc['title']}: coverage dates are missing")
                         continue
@@ -156,27 +209,20 @@ class LibraryService:
                     warnings.append(f"{doc['title']}: {status}")
                     continue
                 eligible[rid] = (doc, rev)
+                if on_date or (not revision_id and doc["type"] == "cafeteria_menu"):
+                    dated_revisions.add(rid)
             if not eligible:
                 return LibrarySearchResponse(status="unavailable" if warnings else "no_matches",
                                              query_date=query_date, warnings=warnings)
-            generations = [self.indexer.generation_id(rid) for rid in eligible]
-            if postgres:
-                rows = await self.postgres_search.rank(db, match, eligible, generations, min(32, limit * 4))
-            else:
-                statement = text(
-                    "SELECT passage_id, bm25(library_passages_fts,0,1,2,0,0,0) AS rank "
-                    "FROM library_passages_fts WHERE library_passages_fts MATCH :match "
-                    "AND revision_id IN :revisions AND generation_id IN :generations "
-                    "ORDER BY rank, passage_id LIMIT :limit"
-                ).bindparams(bindparam("revisions", expanding=True), bindparam("generations", expanding=True))
-                rows = (await db.execute(statement, {"match": match, "revisions": list(eligible),
-                                                    "generations": generations, "limit": min(32, limit * 4)})).all()
+            candidate_limit = min(32, limit * 4)
+            rows = await self._keyword_rows(db, match, eligible, candidate_limit)
             scores = {identity: -float(rank) for identity, rank in rows}
             found = await db.scalars(select(LibraryPassage).where(LibraryPassage.id.in_(scores)))
             by_id = {passage.id: passage for passage in found}
             passages = [by_id[identity] for identity in scores if identity in by_id]
             mode = "keyword_bm25"
             if self.indexer.embedder is not None:
+                generations = [self.indexer.generation_id(rid) for rid in eligible]
                 ranked = await self._semantic(db, query_text, eligible, generations, warnings)
                 if ranked is not None:
                     # Reciprocal ranks compare modalities without conflating BM25 and cosine scales.
@@ -190,7 +236,7 @@ class LibraryService:
                     passages = sorted(candidates.values(), key=lambda p: (-fused[p.id], p.id))
                     scores = fused
                     mode = "hybrid_rrf"
-            passages = passages[:limit]
+            passages = (await self._prioritize_date(db, passages, dated_revisions, day, candidate_limit))[:limit]
             if any(p.needs_review for p in passages):
                 warnings.append("OCR transcription requires verification against the original; it can contain recognition errors")
             results = []

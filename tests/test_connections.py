@@ -257,12 +257,13 @@ async def test_resources_cannot_use_replaced_or_disabled_connection(memory):
         assert skill.available(context)
         await registry.drop_mcp_server('fixture')
         await registry.register_mcp(MCPClient('fixture',target=server,allowed_agents={'speda'}))
-        with pytest.raises(ProviderError):
-            await skill.execute({'server':'fixture','operation':'read_resource','uri':'fixture://evidence'},context)
+        replaced = await skill.execute({'server':'fixture','operation':'read_resource','uri':'fixture://evidence'},context)
+        assert json.loads(replaced)['code'] == 'unauthorized_mcp'
         new=memory.context()
         assert 'Original evidence' in await skill.execute({'server':'fixture','operation':'read_resource','uri':'fixture://evidence'},new)
         registry._mcp_clients['fixture'].active=False
-        with pytest.raises(ProviderError): await skill.execute({'server':'fixture','operation':'list_resources'},new)
+        disabled = await skill.execute({'server':'fixture','operation':'list_resources'},new)
+        assert json.loads(disabled)['code'] == 'unauthorized_mcp'
     finally:
         await registry.shutdown_adapters()
 
