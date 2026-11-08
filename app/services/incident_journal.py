@@ -59,12 +59,12 @@ class JournalView:
                     ROW_NUMBER() OVER (PARTITION BY fingerprint ORDER BY timestamp DESC, id DESC) AS latest
                 FROM events WINDOW group_key AS (PARTITION BY fingerprint)
             )
-            SELECT * FROM grouped WHERE latest=1
+            SELECT * FROM grouped WHERE (latest=1 OR id=?)
                 AND (? OR (reviewed_at IS NULL AND severity <> 'test'))
                 AND (? IS NULL OR severity=?)
                 AND (?='' OR INSTR(LOWER(facts), ?) > 0 OR id=?)
             ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?""",
-                (reviewed, severity, severity, search, search, search, limit + 1, offset)).fetchall()
+                (search, reviewed, severity, severity, search, search, search, limit + 1, offset)).fetchall()
         incidents = []
         for row in rows[:limit]:
             facts = json.loads(row["facts"])

@@ -41,6 +41,7 @@ async def test_owner_journal_groups_repeats_and_assessment_does_not_release_deli
         assert (row["id"], row["occurrences"], row["severity"]) == (identity, 2, "critical")
         assert len((await client.get(root)).json()["incidents"]) == 1
         assert len((await client.get(root, params={"reviewed": True})).json()["incidents"]) == 2
+        assert (await client.get(root, params={"q": older})).json()["incidents"][0]["id"] == older
         detail = (await client.get(endpoint)).json()
         assert [item["id"] for item in detail["recent_occurrences"]] == [identity, older]
 
