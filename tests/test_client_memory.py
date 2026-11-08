@@ -121,7 +121,8 @@ async def test_corrected_import_does_not_leak_obsolete_prepared_text(memory):
     await import_catalogue(snapshot, memory.store, memory.context())
     catalogue = Catalogue(memory.store)
     editor = ClientMemory(catalogue)
-    runtime = MemoryRuntime(memory.store)
+    # Check correction visibility independently of the runtime's latency tests.
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2.0)
     assert "OBSOLETE_OFFICE" in packet_json(await runtime.prepare(memory.context("OBSOLETE_OFFICE")))
     view = (await editor.files(1))[0]
     await editor.commit(1, view["path"], "I now work in Istanbul. CURRENT_OFFICE", view["updated_at"])
