@@ -14,12 +14,13 @@ from app.schemas.sse import SSEEventType
 
 
 class ChatTurns:
-    def __init__(self, session_manager, profile, orchestrator, preparer, session_factory):
+    def __init__(self, session_manager, profile, orchestrator, preparer, session_factory, *, titles=None):
         self.sessions = session_manager
         self.profile = profile
         self.orchestrator = orchestrator
         self.preparer = preparer
         self.session_factory = session_factory
+        self.titles = titles
         self.background = set()
 
     async def start(self, db, body):
@@ -65,9 +66,12 @@ class ChatTurns:
                         if isinstance(content, str):
                             content = [{"type": "text", "text": content}]
                         db.add(Message(session_id=context.session_id, role=message["role"], content=content))
+                context.extra["reply_completed"] = event.type == SSEEventType.DONE
             yield event.to_sse()
 
     async def after_turn(self, context):
+        if self.titles and context.extra.get("reply_completed"):
+            await self.titles.generate(context.user_id, context.session_id, context.agent_id)
         await self.preparer.drain(context)
 
     async def websocket(self, socket):

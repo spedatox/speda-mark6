@@ -183,6 +183,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.services.task_runner import TaskRunner
     registry._task_runner = TaskRunner(orchestrator, model_policy)
     from app.services.chat_turns import ChatTurns
+    from app.services.session_titles import SessionTitles
     from app.services.iacon_catalogue import Catalogue
     from app.services.iacon_budget import MaintenanceBudget
     from app.services.iacon_worker import Orion
@@ -208,13 +209,14 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.skills.search_history import SearchHistorySkill
     await registry.register_skill(SearchHistorySkill(lookup))
     await registry.register_skill(IaconProposeSkill(preparer))
-    chat_turns = ChatTurns(session_manager, profile, orchestrator, preparer, AsyncSessionLocal)
+    titles = SessionTitles(AsyncSessionLocal, client)
+    chat_turns = ChatTurns(session_manager, profile, orchestrator, preparer, AsyncSessionLocal, titles=titles)
     from app.services.coordination import Coordinator
     from app.services.coordination_budget import CoordinationBudget
     from app.skills.collaboration import CollaborationSkill, ProjectStatusSkill, ProjectDelegateSkill, DecisionSkill, ProjectReviewSkill, ProjectReleaseSkill, ProjectCheckpointSkill
     coordination_budget = CoordinationBudget(AsyncSessionLocal, client)
     coordinator = Coordinator(AsyncSessionLocal, profiles, orchestrator, model_policy,
-        coordination_budget, preparer=preparer)
+        coordination_budget, preparer=preparer, titles=titles)
     from app.services.projects import Projects
     projects = Projects(AsyncSessionLocal, coordinator, settings)
     coordinator.projects = projects

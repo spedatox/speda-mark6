@@ -29,9 +29,10 @@ from app.services.memory_store import capture_source
 
 
 class Coordinator:
-    def __init__(self, sessions, profiles, orchestrator, policy, budget, *, preparer=None):
+    def __init__(self, sessions, profiles, orchestrator, policy, budget, *, preparer=None, titles=None):
         self.sessions, self.profiles, self.orchestrator = sessions, profiles, orchestrator
         self.policy, self.budget, self.preparer = policy, budget, preparer
+        self.titles = titles
         self.identity = uuid4().hex
         self.live, self.background = {}, set()
         self.replies = {}
@@ -866,6 +867,10 @@ class Coordinator:
                     room.active_run = None
                 await self.event(db, room, "round_finished", "system", {"status": run.status}, run.id)
             await self.notify()
+            if self.titles and run.policy.get("origin") == "user" and run.status in {"succeeded", "waiting_tasks"}:
+                task = asyncio.create_task(self.titles.generate(run.user_id, room.session_id, room.lead))
+                self.background.add(task)
+                task.add_done_callback(self.background.discard)
             await self.advance_room(run.user_id, run.room_id)
             if self.workers and children:
                 await self.workers.wait_run(run_id)

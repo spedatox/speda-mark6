@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from uuid import uuid4, uuid5, NAMESPACE_URL
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
+from app.database import write_session
 from app.models.client_compat import ClientTurn, ClientSession, HiddenMessage, ClientReplay
 from app.models.coordination import Room, RoomEvent, CoordinationRun, AgentStep
 from app.models.coordination import Project
@@ -154,7 +155,7 @@ class ClientCompatibility:
                             raise CoordinationError("not_found", "Conversation unavailable", 404)
                     else:
                         session = Session(user_id=owner, agent_id=presentation_id, triggered_by="user",
-                                          model_used=body.model or "unassigned", title=body.message[:80])
+                                          model_used=body.model or "unassigned")
                         db.add(session)
                         await db.flush()
                     room = await db.scalar(select(Room).where(Room.session_id == session.id, Room.user_id == owner))
@@ -457,13 +458,15 @@ class ClientCompatibility:
                          'Saved status does not prove a live executor. External files are referenced, not bundled.']}
 
     async def edit_session(self, owner, session_id, *, title=None, hide=False):
-        async with self.sessions() as db, db.begin():
-            session = await self.owned_session(db, owner, session_id)
+        async with write_session(self.sessions) as db:
+            await self.owned_session(db, owner, session_id)
+            if title is not None:
+                await db.execute(update(Session).where(Session.id == session_id, Session.user_id == owner)
+                                 .values(title=title))
             room = await db.scalar(select(Room).where(Room.session_id == session_id))
             if hide and room and room.active_run:
                 raise CoordinationError("conversation_busy", "Stop the active reply before removing its conversation", 409)
             if title is not None:
-                session.title = title
                 if room:
                     room.title = title
             if hide:

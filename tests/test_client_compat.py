@@ -9,7 +9,95 @@ from app.models.session import Session
 from app.schemas.client_compat import ClientChat
 from app.services.client_compat import ClientCompatibility
 from app.services.coordination_budget import CoordinationError
+from app.services.session_titles import SessionTitles
 from tests.test_coordination import setup, reply
+
+
+@pytest.mark.parametrize("structured", [False, True])
+async def test_title_is_generated_after_reply_and_visible_to_clients(memory, structured):
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+
+    bits = await setup(memory, [reply("Kütleçekim dalgaları uzay-zamanı büker."), reply("Elbette.")])
+    calls = []
+    started = asyncio.Event()
+    finish_title = asyncio.Event()
+
+    class TitleClient:
+        policy = bits.policy
+
+        async def create_message(self, **kwargs):
+            calls.append(kwargs)
+            started.set()
+            await finish_title.wait()
+            return reply('```text\nTitle: “Kütleçekim Dalgaları Rehberi”.\n```')
+
+    bits.coordinator.titles = SessionTitles(memory.sessions, TitleClient())
+    app = create_app()
+    app.state.client_compat = ClientCompatibility(bits.coordinator)
+    headers = {"X-API-Key": "test-only-key"}
+    if structured:
+        headers["X-Chat-Format"] = "room-v1"
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as http:
+            response = await http.post("/chat/speda", json={"message": "Kütleçekim dalgaları nasıl oluşur?"})
+            assert response.status_code == 200
+            frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+            assert frames[-1]["type"] == "done"
+            session_id = frames[-1]["session_id"]
+            await asyncio.wait_for(started.wait(), 2)
+            assert (await http.get("/sessions")).json()[0]["title"] is None
+
+            response = await http.post("/chat/speda", json={"session_id": session_id, "message": "Bir örnek ver."})
+            assert response.status_code == 200 and '"done"' in response.text
+            finish_title.set()
+            await asyncio.wait_for(asyncio.gather(*bits.coordinator.background), 2)
+
+            assert len(calls) == 1
+            assert calls[0]["role"] == "background"
+            assert "uzay-zamanı büker" in calls[0]["messages"][0]["content"]
+            assert (await http.get("/sessions")).json()[0]["title"] == "Kütleçekim Dalgaları Rehberi"
+            assert (await http.get(f"/sessions/{session_id}/room")).json()["title"] == "Kütleçekim Dalgaları Rehberi"
+    finally:
+        await bits.coordinator.shutdown()
+
+
+@pytest.mark.parametrize("rename", [False, True])
+async def test_untitled_legacy_session_gets_fallback_and_keeps_manual_rename(memory, rename):
+    from app.schemas.llm import ProviderError
+
+    bits = await setup(memory, [reply("Here is the follow-up.")])
+    adapter = ClientCompatibility(bits.coordinator)
+    started = asyncio.Event()
+    finish_title = asyncio.Event()
+
+    class UnavailableTitleClient:
+        policy = bits.policy
+
+        async def create_message(self, **kwargs):
+            started.set()
+            await finish_title.wait()
+            raise ProviderError("not_configured", "Title provider unavailable")
+
+    bits.coordinator.titles = SessionTitles(memory.sessions, UnavailableTitleClient())
+    async with memory.sessions() as db, db.begin():
+        session = Session(user_id=1, agent_id="speda", triggered_by="user", model_used="legacy", title="")
+        db.add(session)
+        await db.flush()
+        db.add(Message(session_id=session.id, role="user",
+                       content=[{"type": "text", "text": "Compare\n renewable energy storage methods"}]))
+    try:
+        await adapter.start(1, "speda", ClientChat(session_id=session.id, message="Continue"))
+        await asyncio.wait_for(started.wait(), 2)
+        if rename:
+            await adapter.edit_session(1, session.id, title="My energy notes")
+        finish_title.set()
+        await asyncio.wait_for(asyncio.gather(*bits.coordinator.background), 2)
+        expected = "My energy notes" if rename else "Compare renewable energy storage methods"
+        assert (await adapter.list_sessions(1, "speda", 10))[0]["title"] == expected
+        assert (await adapter.room_for_session(1, session.id))["title"] == expected
+    finally:
+        await bits.coordinator.shutdown()
 
 
 async def test_chat_accepts_large_powerpoint_and_redacts_invalid_attachment_input(memory):
