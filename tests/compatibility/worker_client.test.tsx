@@ -14,7 +14,7 @@ import { useLiveSteering, mayClearSteeringDraft } from '@client/lib/useLiveSteer
 import ProjectWorkspace, { ProjectFolderPicker } from '@client/components/ProjectWorkspace'
 import { projectRequest } from '@client/lib/projectWorkspace'
 import { useProjectNavigation } from '@client/lib/useProjectNavigation'
-import { CloudProjectPanel } from '@client/components/CloudProjects'
+import { CloudProjectForm, CloudProjectPanel } from '@client/components/CloudProjects'
 
 const execution = 'a'.repeat(32), step = 'b'.repeat(32)
 const config = { apiBase: 'https://worker.test', apiKey: 'fixture', agentId: 'optimus' }
@@ -114,6 +114,40 @@ test('cloud environment publication is explicit and bound to the reviewed revisi
   })
   assert.deepEqual(posted, [{ environment_id: review.id, review_hash: review.review_hash }])
   assert.equal(selections.at(-1), review.id)
+})
+
+test('an Optimus prototype form provisions a private repo and sends the first task', async t => {
+  const saved = globalThis.fetch
+  const posted: { url: string; body: Record<string, unknown> }[] = []
+  globalThis.fetch = async (url, init) => {
+    posted.push({ url: String(url), body: JSON.parse(String(init?.body)) })
+    return Response.json({ project_id: 42 })
+  }
+  const selected: number[] = []
+  let view: Renderer.ReactTestRenderer
+  await act(async () => {
+    view = Renderer.create(<CloudProjectForm config={config} onCancel={() => {}} onPrepared={id => selected.push(id)} />)
+  })
+  t.after(async () => { await act(async () => view.unmount()); globalThis.fetch = saved })
+  await act(async () => {
+    view.root.findByType('select').props.onChange({ target: { value: 'prototype' } })
+  })
+  await act(async () => {
+    view.root.findByType('input').props.onChange({ target: { value: 'Log Viewer' } })
+    view.root.findByType('textarea').props.onChange({ target: { value: 'Build a log viewer' } })
+  })
+  await act(async () => {
+    view.root.findByType('form').props.onSubmit({ preventDefault() {} })
+    await delay()
+  })
+  assert.equal(posted.length, 1)
+  const url = new URL(posted[0].url)
+  assert.equal(url.pathname, '/projects/cloud/github-workspaces')
+  assert.equal(url.searchParams.get('agent_id'), 'optimus')
+  const { request_id, ...body } = posted[0].body
+  assert.equal(typeof request_id, 'string')
+  assert.deepEqual(body, { name: 'Log Viewer', agent_id: 'optimus', mode: 'prototype', task: 'Build a log viewer' })
+  assert.deepEqual(selected, [42])
 })
 
 test('reopening the app restores the authorized project chat and retains its binding', async t=>{

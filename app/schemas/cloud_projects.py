@@ -1,6 +1,7 @@
 import re
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.coordination import Contract
 
@@ -31,6 +32,29 @@ class PrepareCloudEnvironment(Contract):
                        for part in value.split('/'))):
             raise ValueError('Enter a valid Git branch name')
         return value
+
+
+class PrepareGitHubWorkspace(Contract):
+    request_id: str = Field(pattern=r'^[a-fA-F0-9-]{32,36}$')
+    agent_id: Literal['optimus'] = 'optimus'
+    name: str = Field(min_length=1, max_length=255)
+    mode: Literal['prototype', 'fork']
+    repository: str | None = Field(default=None, min_length=3, max_length=201)
+    allow_public: bool = False
+    task: str = Field(default='', max_length=16000)
+
+    @field_validator('repository')
+    @classmethod
+    def github_repository(cls, value):
+        return PrepareCloudEnvironment.github_repository(value) if value is not None else None
+
+    @model_validator(mode='after')
+    def validate_mode(self):
+        if self.mode == 'fork' and not self.repository:
+            raise ValueError('A fork requires an upstream repository')
+        if self.mode == 'prototype' and (self.repository or self.allow_public):
+            raise ValueError('Prototypes are created in a new private repository')
+        return self
 
 
 class PublishCloudEnvironment(Contract):

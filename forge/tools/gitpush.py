@@ -256,8 +256,15 @@ def _explain_api(status: int, body: str) -> str:
     return f"GitHub returned HTTP {status}: {detail}"
 
 
+class GitHubHTTPError(str):
+    def __new__(cls, status_code: int, message: str):
+        error = super().__new__(cls, message)
+        error.status_code = status_code
+        return error
+
+
 async def _github_api(method: str, path: str, token: str, **kwargs
-                      ) -> tuple[dict | None, str]:
+                      ) -> tuple[dict | list | None, str]:
     """One GitHub API call. Returns (payload, "") or (None, readable error) —
     the same errors-as-values contract every networked tool here keeps."""
     httpx = _client()
@@ -276,7 +283,9 @@ async def _github_api(method: str, path: str, token: str, **kwargs
     except Exception as e:  # noqa: BLE001 — unreachable GitHub is a result, not a crash
         return None, f"Could not reach GitHub: {e}"
     if response.status_code >= 400:
-        return None, _explain_api(response.status_code, response.text)
+        return None, GitHubHTTPError(response.status_code, _explain_api(response.status_code, response.text))
+    if response.status_code == 204:
+        return {}, ""
     try:
         return response.json(), ""
     except Exception:  # noqa: BLE001

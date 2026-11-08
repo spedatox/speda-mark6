@@ -5,6 +5,32 @@ wait until a supervisor contribution finishes before starting a task.
 
 ## Cloud projects
 
+Optimus can start a GitHub workspace from a direct chat request to build a
+prototype or to change a named `owner/repository`. In **Projects → New cloud
+project**, the same modes are **Create a private prototype** and **Fork into
+Optimus’s account**. Include a first task to open a project chat automatically
+after the toolchain check. Optimus creates prototypes privately and verifies
+the ownership and upstream identity of any reused fork.
+
+Configure the dedicated account's login, user credential and GitHub-provided
+commit email with `OPTIMUS_GITHUB_ACCOUNT`, `OPTIMUS_GITHUB_WORKSPACE_TOKEN`
+and `OPTIMUS_GITHUB_COMMIT_EMAIL`. The user credential needs repository
+creation, access to the intended upstream repositories and permission to push
+to repos owned by Optimus. Opening a draft also requires permission to open
+PRs against the upstream. `OPTIMUS_GITHUB_SHARE_WITH` optionally invites the
+configured GitHub user to new private prototypes. Set it only if the configured
+credential can manage collaborators. Store the credential on the host.
+
+Public fork checkpoints require the project form's explicit opt-in, or the
+host policy `OPTIMUS_GITHUB_PUBLIC_FORKS_IN_CHAT=true` for chat requests.
+GitHub controls private fork availability. A successful coding task publishes
+its verified artifact to a dedicated task branch on the owned repository or
+fork. The project panel links to the exact commit. Later chats in that project
+start from the latest confirmed checkpoint, and explicit task dependencies can
+select earlier work. Draft PRs remain a separate owner action.
+
+### Existing repositories
+
 In Heartbreaker or SPEDA Go, open **Projects → New cloud project** and enter a
 GitHub repository and branch. Forge prepares the repository on the execution
 host and runs the environment check in the configured coder image. The project

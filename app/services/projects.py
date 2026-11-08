@@ -500,6 +500,7 @@ class Projects:
             # A review/change depending on one result receives that exact artifact.
             # Multiple divergent artifacts need explicit integration, not guessed merges.
             artifacts = {d.result.get("workspace") for d in dependencies if d.result and d.result.get("workspace")}
+            previous = None
             if len(artifacts) > 1:
                 raise CoordinationError("integration_required", "Multiple artifact branches require an integration step")
             if artifacts:
@@ -511,6 +512,12 @@ class Projects:
                 actual, _ = await asyncio.to_thread(inventory, source)
                 if any(d.result.get("revision") != actual for d in dependencies):
                     raise CoordinationError("stale_artifact", "A dependency artifact changed after verification")
+            elif environment and environment.get('target') and not dependencies:
+                previous = run.policy.get('cloud_checkpoints', {}).get(task.owner_agent)
+                if previous:
+                    source = self.state / 'artifacts' / previous['task_id']
+                    if (await asyncio.to_thread(inventory, source))[0] != previous['artifact_revision']:
+                        raise CoordinationError('stale_artifact', 'The published checkpoint artifact changed after verification')
             target = self.state / "artifacts" / task.id
             revision = await asyncio.to_thread(snapshot, source, target)
             policy_data = run.policy
@@ -598,10 +605,17 @@ class Projects:
                 "workspace": str(target), "base_revision": revision, "revision": final_revision,
                 "canonical_source_revision": canonical_revision,
                 **({'cloud_environment': environment} if environment else {}),
+                **({'checkpoint_base': previous} if previous else {}),
                 "integration": "pending", "verification": "worker_report; inspect recorded tool results"}
             async with write_session(self.sessions) as db:
                 await db.execute(update(ProjectTask).where(ProjectTask.id == task.id)
                     .values(status=result.status, result=payload))
+                checkpoint_push = None
+                if (result.status == 'succeeded' and not worker.read_only and not signal.is_set()
+                        and environment and environment.get('target')):
+                    checkpoint_push = await self.cloud.record_checkpoint(db, task, payload)
+            if checkpoint_push:
+                self.cloud.launch(self.cloud.push_checkpoint(*checkpoint_push))
             if claimed:
                 await asyncio.to_thread(self.workshop.finish, source_claim, result.status, json.dumps(payload))
                 claimed = False

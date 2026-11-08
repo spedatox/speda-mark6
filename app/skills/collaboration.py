@@ -40,7 +40,49 @@ class ProjectStatusSkill(Skill):
         state['mission_control'] = await MissionControl(context.coordination).snapshot(context)
         from app.services.project_release import ProjectRelease
         state['release_targets'] = await ProjectRelease(context.coordination.projects).targets()
+        project = context.extra.get('project_context') or {}
+        if project.get('cloud_environment') and project.get('id'):
+            cloud = await context.coordination.projects.cloud.status(context.user_id, context.agent_id, project['id'])
+            state['github'] = {'checkpoints': [{key: entry.get(key) for key in ('task_id', 'status', 'url', 'error')}
+                for entry in cloud['checkpoints'][:8]]}
         return json.dumps(state)
+
+
+class StartGitHubProjectSkill(Skill):
+    name, read_only = 'start_github_project', False
+    requires_network = True
+    description = ('Start a durable GitHub project from the current direct owner request. '
+        'Use when the owner asks you to build a new prototype or to implement a change in a named GitHub repository. '
+        'Choose prototype for a new private repository, or fork when the current owner message names the upstream owner/repository. '
+        'Use existing project tools for a follow-up within a project, and answer questions about hypothetical work without starting a project. '
+        'Returns a queued project ID. The new project gets its own chat and GitHub links after setup and checkpoint publishing finish.')
+    input_schema = {'type': 'object', 'properties': {
+        'name': {'type': 'string', 'minLength': 1, 'maxLength': 255},
+        'mode': {'enum': ['prototype', 'fork']},
+        'repository': {'type': 'string', 'maxLength': 201}},
+        'required': ['name', 'mode'], 'additionalProperties': False}
+
+    def available(self, context):
+        from app.services.coordination_budget import CoordinationError
+        projects = context.coordination.projects if context.coordination else None
+        room = context.extra.get('room_state') or {}
+        if (context.agent_id != 'optimus' or context.triggered_by != 'user' or context.task_role != 'interactive'
+                or context.project_id or not context.run_id or not projects or not projects.enabled
+                or [member['agent_id'] for member in room.get('members', [])] != ['optimus']
+                or (context.effective_policy and context.effective_policy.snapshot.budget_mode)):
+            return False
+        try:
+            projects.cloud.github.credentials()
+        except CoordinationError:
+            return False
+        return True
+
+    async def execute(self, args, context):
+        from app.services.coordination_budget import CoordinationError
+        if not self.available(context):
+            raise CoordinationError('cloud_owner_request', 'Start GitHub projects from a direct Optimus chat', 403)
+        result = await context.coordination.projects.cloud.prepare_from_chat(context, **args)
+        return json.dumps(result)
 
 
 class ProjectDelegateSkill(Skill):

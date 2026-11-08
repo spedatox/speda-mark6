@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import mkdtemp
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select, update
@@ -11,7 +12,8 @@ from sqlalchemy import select, update
 from app.database import write_session
 from app.models.coordination import ProjectOperation, ProjectTask
 from app.schemas.project_workspace import WorkspaceCreate
-from app.services.coordination_budget import CoordinationError, digest
+from app.services.cloud_github import CloudGitHub
+from app.services.coordination_budget import CoordinationError, digest, insert_for
 from forge.cell.base import CellCleanupError, CellPolicy
 from forge.cell.factory import build_cell
 from forge.tools.gitpush import _CRED_HELPER, _HARDEN, _TOKEN_ENV, _github_api, _token
@@ -24,6 +26,7 @@ class CloudEnvironments:
         self.build = build
         self.github_api = github_api
         self.jobs = set()
+        self.github = CloudGitHub(self)
 
     def workspace(self):
         from app.services.project_workspace import ProjectWorkspace
@@ -39,9 +42,15 @@ class CloudEnvironments:
         # A lost executor leaves evidence. Restart never repeats a remote write.
         async with write_session(self.sessions) as db:
             await db.execute(update(ProjectOperation).where(
-                ProjectOperation.kind.in_(['cloud_environment', 'cloud_pr']),
+                ProjectOperation.kind.in_(['cloud_environment', 'cloud_pr', 'cloud_checkpoint']),
                 ProjectOperation.status.in_(['preparing', 'executing'])
             ).values(status='reconciling'))
+            published = await db.scalars(select(ProjectOperation).where(
+                ProjectOperation.kind == 'cloud_environment', ProjectOperation.status == 'published'))
+            for row in published:
+                if row.details.get('setup_pending'):
+                    row.details = {**row.details, 'setup_pending': False,
+                        'setup_error': 'Setup was interrupted. Check GitHub access and the project chat list.'}
 
     async def shutdown(self):
         for job in list(self.jobs):
@@ -67,12 +76,14 @@ class CloudEnvironments:
         async with self.sessions() as db:
             rows = list(await db.scalars(select(ProjectOperation).where(
                 ProjectOperation.project_id == native_id,
-                ProjectOperation.kind.in_(['cloud_environment', 'cloud_pr']))))
+                ProjectOperation.kind.in_(['cloud_environment', 'cloud_pr', 'cloud_checkpoint']))))
         rows = [r for r in rows if r.details.get('agent_id') == self.workspace().agent(agent)]
         environments = sorted((r for r in rows if r.kind == 'cloud_environment'),
             key=lambda r: r.details['created_at'], reverse=True)
         return {'environments': [self.view(r) for r in environments[:20]],
-            'pull_requests': [self.view(r) for r in rows if r.kind == 'cloud_pr'][:100]}
+            'pull_requests': [self.view(r) for r in rows if r.kind == 'cloud_pr'][:100],
+            'checkpoints': [self.view(r) for r in sorted(rows, key=lambda r: r.details.get('created_at', ''), reverse=True)
+                if r.kind == 'cloud_checkpoint'][:100]}
 
     async def binding(self, db, native_id, *, allow_draft=False):
         if not native_id:
@@ -88,9 +99,36 @@ class CloudEnvironments:
             raise CoordinationError('cloud_unpublished', 'Publish a prepared cloud environment before starting a task', 409)
         row = max(published, key=lambda r: r.details['published_at'])
         return {'id': row.id, **{key: row.details[key] for key in (
-            'repository', 'branch', 'commit', 'image', 'source_revision')}}
+            'repository', 'branch', 'commit', 'image', 'source_revision', 'target') if key in row.details}}
 
-    async def prepare(self, owner, body, project_id=None):
+    async def prepare_managed(self, owner, body):
+        self.github.credentials()
+        self.projects.configured()
+        if not self.projects.enabled:
+            raise CoordinationError('project_unconfigured', 'Enable project execution before provisioning a GitHub workspace', 503)
+        return await self.prepare(owner, body, managed=True)
+
+    async def prepare_from_chat(self, context, name, mode, repository=None):
+        from app.models.coordination import RoomEvent
+        from app.schemas.cloud_projects import PrepareGitHubWorkspace
+
+        await context.coordination.ensure_active(context)
+        async with self.sessions() as db:
+            owner_event = await db.scalar(select(RoomEvent).where(RoomEvent.run_id == context.run_id,
+                RoomEvent.kind == 'user_message', RoomEvent.speaker == 'owner'))
+        text = (owner_event.payload.get('text') or '').strip() if owner_event and not owner_event.payload.get('replay') else ''
+        if not text or len(text) > 16000:
+            raise CoordinationError('cloud_owner_request', 'Start the GitHub project from a direct owner text request', 422)
+        body = PrepareGitHubWorkspace(request_id=context.run_id, name=name, mode=mode,
+            repository=repository, task=text,
+            allow_public=mode == 'fork' and self.projects.settings.optimus_github_public_forks_in_chat)
+        if body.repository and not re.search(r'(?<![a-z0-9_.-])' + re.escape(body.repository)
+                + r'(?:\.git)?(?![a-z0-9_.-])', text.lower()):
+            raise CoordinationError('cloud_owner_repository', 'Include the GitHub owner/repository in your request', 422)
+        result = await self.prepare_managed(context.user_id, body)
+        return {key: result.get(key) for key in ('id', 'project_id', 'status', 'target', 'error')}
+
+    async def prepare(self, owner, body, project_id=None, *, managed=False):
         workspace = self.workspace()
         workspace.configured()
         agent = workspace.agent(body.agent_id)
@@ -106,31 +144,45 @@ class CloudEnvironments:
         if project_id is None:
             folder = workspace.root() / ('cloud-' + identity)
             folder.mkdir(exist_ok=True)
+            description = (body.repository or 'Private GitHub prototype') if managed else f'{body.repository} · {body.branch}'
             project = await workspace.create(owner, WorkspaceCreate(agent_id=agent,
-                name=body.name, path=str(folder), description=f'{body.repository} · {body.branch}'))
+                name=body.name, path=str(folder), description=description))
             project_id, native_id = project['id'], project['workshop_project_id']
         else:
             native_id = await workspace.resolve(owner, agent, project_id, new_chat=True)
             async with self.sessions() as db:
-                first = await db.scalar(select(ProjectOperation.id).where(
+                first = await db.scalar(select(ProjectOperation).where(
                     ProjectOperation.project_id == native_id, ProjectOperation.kind == 'cloud_environment').limit(1))
             if not first:
                 raise CoordinationError('cloud_project_required', 'Create a cloud project for repository environments', 422)
+            if first.details.get('mode'):
+                raise CoordinationError('cloud_managed_environment', 'This project is bound to its managed GitHub repository', 409)
         details = {'agent_id': agent, 'project_id': project_id, 'repository': body.repository,
-            'branch': body.branch, 'check': body.check, 'request_hash': request_hash,
+            'branch': '' if managed else body.branch, 'check': 'git --version' if managed else body.check,
+            'request_hash': request_hash,
             'created_at': datetime.now(timezone.utc).isoformat()}
+        if managed:
+            details.update(name=body.name, mode=body.mode, allow_public=body.allow_public)
+            if body.task.strip():
+                details['initial_task'] = body.task.strip()
         async with write_session(self.sessions) as db:
             prior = await db.get(ProjectOperation, identity)
             if prior:
                 if prior.details.get('request_hash') != request_hash or prior.project_id != native_id:
                     raise CoordinationError('cloud_request_conflict', 'This request ID belongs to another environment', 409)
                 return self.view(prior)
-            db.add(ProjectOperation(id=identity, project_id=native_id,
-                kind='cloud_environment', status='preparing', details=details))
-        self.launch(self.prepare_environment(identity, details))
+            inserted = await db.execute(insert_for(db, ProjectOperation).values(id=identity, project_id=native_id,
+                kind='cloud_environment', status='preparing', details=details)
+                .on_conflict_do_nothing(index_elements=['id']))
+            if not inserted.rowcount:
+                prior = await db.get(ProjectOperation, identity)
+                if prior.details.get('request_hash') != request_hash or prior.project_id != native_id:
+                    raise CoordinationError('cloud_request_conflict', 'This request ID belongs to another environment', 409)
+                return self.view(prior)
+        self.launch(self.prepare_environment(identity, details, owner=owner))
         return {'id': identity, 'status': 'preparing', **details}
 
-    async def prepare_environment(self, identity, details):
+    async def prepare_environment(self, identity, details, *, owner=1):
         from app.services.projects import cell_image_for, inventory, snapshot
 
         try:
@@ -140,12 +192,28 @@ class CloudEnvironments:
             image = (await self.command('docker', 'image', 'inspect', '--format', '{{.Id}}', '--', image_ref)).strip()
             if not re.fullmatch(r'sha256:[a-f0-9]{64}', image):
                 raise CoordinationError('cloud_image', 'Could not resolve an immutable Docker image ID')
+            target = None
+            if details.get('mode'):
+                target = await self.github.provision(identity, details)
+                details = {**details, 'target': target, 'repository': target['repository'],
+                    'branch': target['branch'], 'phase': 'repository_ready'}
+                details.pop('error', None)
+                await self.settle(identity, 'preparing', details)
             root = self.root(identity)
             root.mkdir(parents=True, exist_ok=False)
             checkout = root / 'repository'
             url = self.url(details)
-            await self.git(root, 'clone', '--depth', '1', '--no-tags', '--single-branch',
-                '--branch', details['branch'], '--', url, str(checkout), token=self.credential(details['agent_id']))
+            token = self.github.credentials()[2] if target else self.credential(details['agent_id'])
+            if target and target['mode'] == 'fork':
+                await self.wait_for_fork(root, target, token)
+                await self.git(root, 'clone', '--depth', '1', '--no-tags', '--no-checkout',
+                    '--', url, str(checkout), token=token)
+                await self.git(checkout, 'fetch', '--depth', '1', '--no-tags', '--',
+                    self.url({'repository': target['upstream']}), 'refs/heads/' + target['branch'], token=token)
+                await self.git(checkout, 'checkout', '--detach', 'FETCH_HEAD')
+            else:
+                await self.git(root, 'clone', '--depth', '1', '--no-tags', '--single-branch',
+                    '--branch', details['branch'], '--', url, str(checkout), token=token)
             commit = (await self.git(checkout, 'rev-parse', 'HEAD')).strip()
             if not re.fullmatch(r'[a-f0-9]{40}', commit):
                 raise CoordinationError('cloud_commit', 'Git did not return a commit ID')
@@ -171,14 +239,87 @@ class CloudEnvironments:
                 return
             if (await asyncio.to_thread(inventory, baseline))[0] != source_revision:
                 raise CoordinationError('cloud_source_changed', 'Prepared source changed during verification')
-            await self.settle(identity, 'ready', {**details, 'review_hash': digest(details)})
+            if target:
+                await self.settle(identity, 'published', {**details, 'setup_pending': True,
+                    'published_at': datetime.now(timezone.utc).isoformat()})
+            else:
+                await self.settle(identity, 'ready', {**details, 'review_hash': digest(details)})
         except asyncio.CancelledError:
-            await asyncio.shield(self.settle(identity, 'reconciling', details))
+            await asyncio.shield(self.hold_environment(identity, details))
             raise
         except Exception as exc:
-            # Keep the check sandbox path and Git evidence for inspection.
-            status = 'reconciling' if type(exc).__name__ == 'CellCleanupError' else 'failed'
-            await self.settle(identity, status, {**details, 'error': self.safe_error(exc)})
+            await self.hold_environment(identity, details, exc)
+            return
+        if target:
+            await self.finish_managed_setup(identity, owner)
+
+    async def wait_for_fork(self, directory, target, token):
+        for attempt in range(5):
+            try:
+                if (await self.git(directory, 'ls-remote', '--', self.url(target), 'HEAD', token=token)).strip():
+                    return
+            except CoordinationError as exc:
+                if exc.code != 'cloud_command_failed' or attempt == 4:
+                    raise
+            if attempt < 4:
+                await asyncio.sleep(2)
+        raise CoordinationError('cloud_github_pending', 'GitHub has not made the fork available for cloning')
+
+    async def hold_environment(self, identity, details, exc=None):
+        async with write_session(self.sessions) as db:
+            row = await db.get(ProjectOperation, identity, with_for_update=True)
+            if row and row.status == 'preparing':
+                row.status = ('reconciling' if exc is None or isinstance(exc, CellCleanupError)
+                    or row.details.get('phase') == 'repository_requested' else 'failed')
+                if exc is not None:
+                    row.details = {**(details if details.get('phase') == 'repository_ready' else row.details),
+                        'error': self.safe_error(exc)}
+
+    async def reconcile_environment(self, owner, agent, project_id, identity):
+        native_id = await self.workspace().resolve(owner, agent, project_id, new_chat=True)
+        async with write_session(self.sessions) as db:
+            row = await db.get(ProjectOperation, identity, with_for_update=True)
+            if (not row or row.project_id != native_id or row.kind != 'cloud_environment'
+                    or row.details.get('agent_id') != self.workspace().agent(agent)):
+                raise CoordinationError('not_found', 'Cloud environment unavailable', 404)
+            if row.status != 'reconciling' or row.details.get('phase') != 'repository_requested':
+                raise CoordinationError('cloud_reconcile_unavailable', 'This operation has no unconfirmed GitHub repository', 409)
+            row.status = 'preparing'
+            result = self.view(row)
+        # Provisioning observes the recorded repository and cannot replay the POST.
+        self.launch(self.prepare_environment(identity, row.details, owner=owner))
+        return result
+
+    async def finish_managed_setup(self, identity, owner):
+        from app.schemas.client_compat import ClientChat
+        from app.services.client_compat import ClientCompatibility
+
+        async with self.sessions() as db:
+            row = await db.get(ProjectOperation, identity)
+        details = row.details
+        target = details['target']
+        viewer = self.projects.settings.optimus_github_share_with.strip().lower()
+        if viewer and target['mode'] == 'prototype':
+            try:
+                if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,38}', viewer):
+                    raise CoordinationError('cloud_github_share', 'Configure a valid GitHub collaborator username')
+                token = await self.github.verify_write(target)
+                await self.settle(identity, 'published', {**details, 'share_status': 'requested'})
+                result, error = await self.github_api('PUT', '/repos/' + target['repository'] + '/collaborators/' + viewer, token)
+                details = {**details, 'share_status': 'sent' if isinstance(result, dict) else 'unconfirmed'}
+                if error:
+                    details['share_error'] = error.replace(token, '[redacted]')
+            except Exception as exc:
+                details = {**details, 'share_status': 'failed', 'share_error': self.safe_error(exc)}
+            await self.settle(identity, 'published', details)
+        if details.get('initial_task'):
+            try:
+                chat = await ClientCompatibility(self.projects.coordinator).start(owner, details['agent_id'],
+                    ClientChat(project_id=details['project_id'], message=details['initial_task'], request_id=identity))
+                details = {**details, 'initial_session_id': chat['session_id'], 'initial_run_id': chat['run_id']}
+            except Exception as exc:
+                details = {**details, 'task_error': self.safe_error(exc)}
+        await self.settle(identity, 'published', {**details, 'setup_pending': False})
 
     async def publish(self, owner, agent, project_id, body):
         native_id = await self.workspace().resolve(owner, agent, project_id, new_chat=True)
@@ -206,6 +347,115 @@ class CloudEnvironments:
             raise CoordinationError('cloud_source_changed', 'Published source changed; prepare a new environment revision', 409)
         return path
 
+    @staticmethod
+    def checkpoint_id(task_id):
+        return uuid5(NAMESPACE_URL, f'speda:cloud-checkpoint:{task_id}').hex
+
+    async def record_checkpoint(self, db, task, payload):
+        environment = payload['cloud_environment']
+        if payload['revision'] == payload['base_revision'] or payload['revision'] == environment['source_revision']:
+            return
+        identity = self.checkpoint_id(task.id)
+        details = {'agent_id': task.owner_agent, 'task_id': task.id, 'environment': environment,
+            'title': 'Optimus checkpoint ' + task.id[:12], 'head': 'speda/' + task.id,
+            'source_revision': environment['source_revision'], 'artifact_revision': payload['revision'],
+            'created_at': datetime.now(timezone.utc).isoformat()}
+        if payload.get('checkpoint_base'):
+            details['base'] = payload['checkpoint_base']
+        if await db.get(ProjectOperation, identity):
+            return
+        db.add(ProjectOperation(id=identity, project_id=task.project_id, kind='cloud_checkpoint',
+            status='executing', details=details))
+        return identity, details
+
+    async def latest_checkpoints(self, db, project, environment, agents):
+        rows = list(await db.scalars(select(ProjectOperation).where(ProjectOperation.project_id == project,
+            ProjectOperation.kind == 'cloud_checkpoint', ProjectOperation.status == 'complete')))
+        latest = {}
+        for row in sorted(rows, key=lambda item: item.details['created_at'], reverse=True):
+            details = row.details
+            if details['environment']['id'] == environment and details['agent_id'] in agents:
+                latest.setdefault(details['agent_id'], {key: details[key] for key in
+                    ('task_id', 'artifact_revision', 'commit', 'url')})
+        return latest
+
+    async def remote_head(self, directory, target, head, token):
+        ref = 'refs/heads/' + head
+        result = (await self.git(directory, 'ls-remote', '--refs', '--',
+            self.url(target), ref, token=token)).strip()
+        if not result:
+            return None
+        match = re.fullmatch(r'([a-f0-9]{40})\s+' + re.escape(ref), result)
+        if match is None:
+            raise CoordinationError('cloud_ref', 'GitHub did not return the expected checkpoint ref')
+        return match[1]
+
+    async def push_checkpoint(self, identity, details):
+        token = None
+        try:
+            target = details['environment']['target']
+            token = await self.github.verify_write(target)
+            checkout, commit = await self.stage_commit(identity, details, token=token)
+            details = {**details, 'commit': commit, 'phase': 'pushing'}
+            await self.settle(identity, 'executing', details)
+            ref = 'refs/heads/' + details['head']
+            # A task branch belongs to this operation. Refuse any pre-existing ref.
+            await self.git(checkout, 'push', '--force-with-lease=' + ref + ':', '--',
+                self.url(target), 'HEAD:' + ref, token=token)
+            if await self.remote_head(checkout, target, details['head'], token) != commit:
+                raise CoordinationError('cloud_ref', 'GitHub has not confirmed the checkpoint commit')
+            await self.complete_checkpoint(identity, details)
+        except asyncio.CancelledError:
+            await asyncio.shield(self.settle(identity, 'reconciling', details))
+            raise
+        except Exception as exc:
+            message = self.safe_error(exc)
+            await self.settle(identity, 'reconciling' if details.get('commit') else 'failed',
+                {**details, 'error': message.replace(token, '[redacted]') if token else message})
+
+    async def complete_checkpoint(self, identity, details):
+        target = details['environment']['target']
+        settled = {**details, 'phase': 'published', 'url': target['url'] + '/tree/' + details['commit']}
+        settled.pop('error', None)
+        await self.settle(identity, 'complete', settled)
+        return {'id': identity, 'status': 'complete', **settled}
+
+    async def reconcile_checkpoint(self, owner, agent, project_id, identity):
+        native_id = await self.workspace().resolve(owner, agent, project_id)
+        async with write_session(self.sessions) as db:
+            row = await db.get(ProjectOperation, identity, with_for_update=True)
+            if (not row or row.kind != 'cloud_checkpoint' or row.project_id != native_id
+                    or row.details['agent_id'] != self.workspace().agent(agent)):
+                raise CoordinationError('not_found', 'GitHub checkpoint unavailable', 404)
+            if row.status == 'complete':
+                return self.view(row)
+            if row.status not in {'reconciling', 'failed'}:
+                raise CoordinationError('cloud_checkpoint_pending', 'This checkpoint is still publishing', 409)
+            details = {**row.details}
+            retry = not details.get('commit')
+            if retry:
+                details.pop('error', None)
+                row.status, row.details = 'executing', details
+            result = self.view(row)
+        if retry:
+            # The commit receipt always precedes the push. With no receipt, there was no push.
+            self.launch(self.push_checkpoint(identity, details))
+            return result
+        target = details['environment']['target']
+        token = await self.github.verify_write(target)
+        if await self.remote_head(self.projects.state, target, details['head'], token) != details['commit']:
+            raise CoordinationError('cloud_checkpoint_pending', 'GitHub has no matching checkpoint commit', 409)
+        return await self.complete_checkpoint(identity, details)
+
+    @staticmethod
+    def pr_target(details):
+        environment = details['environment']
+        target = environment.get('target')
+        upstream = target.get('upstream') if target else None
+        repo = upstream or environment['repository']
+        head = target['repository'].split('/')[0] + ':' + details['head'] if upstream else details['head']
+        return repo, environment['branch'], head
+
     async def reconcile_pull_request(self, owner, agent, project_id, operation_id):
         native_id = await self.workspace().resolve(owner, agent, project_id)
         async with self.sessions() as db:
@@ -218,14 +468,15 @@ class CloudEnvironments:
         details = row.details
         if row.status != 'reconciling' or not details.get('commit'):
             raise CoordinationError('cloud_pr_not_ready', 'This pull request has no uncertain remote result', 409)
-        token = self.credential(agent)
+        target = details['environment'].get('target')
+        token = await self.github.verify_write(target) if target else self.credential(agent)
         if not token:
             raise CoordinationError('cloud_github_access', 'Configure a repository-scoped GitHub publishing credential', 503)
-        environment = details['environment']
-        repo = environment['repository']
+        repo, branch, head = self.pr_target(details)
         rows, _ = await self.github_api('GET', '/repos/' + repo + '/pulls', token,
-            params={'state': 'all', 'head': repo.split('/')[0] + ':' + details['head'], 'base': environment['branch']})
+            params={'state': 'all', 'head': head if ':' in head else repo.split('/')[0] + ':' + head, 'base': branch})
         match = next((item for item in rows if item.get('head', {}).get('sha') == details['commit']
+            and (not target or (item['head'].get('repo') or {}).get('id') == target['id'])
             and isinstance(item.get('number'), int)), None) if isinstance(rows, list) else None
         if match is None:
             raise CoordinationError('cloud_pr_uncertain', 'GitHub has no verified pull request for the recorded commit', 409)
@@ -246,9 +497,6 @@ class CloudEnvironments:
             if prior.details['request_hash'] != request_hash or prior.details['agent_id'] != agent:
                 raise CoordinationError('cloud_pr_conflict', 'This task already has a pull request operation', 409)
             return self.view(prior)
-        token = self.credential(agent)
-        if not token:
-            raise CoordinationError('cloud_github_access', 'Configure a repository-scoped GitHub publishing credential', 503)
         review = await workspace.changes(owner, agent, project_id, body.task_id)
         if (not review['changes'] or body.expected_source_revision != review['expected_source_revision']
                 or body.expected_artifact_revision != review['expected_artifact_revision']):
@@ -267,43 +515,83 @@ class CloudEnvironments:
                 'request_hash': request_hash, 'task_id': body.task_id, 'title': body.title, 'body': body.body,
                 'head': 'speda/' + body.task_id, 'source_revision': body.expected_source_revision,
                 'artifact_revision': body.expected_artifact_revision}
+            target = environment.get('target')
+            token = self.github.credentials()[2] if target else self.credential(agent)
+            if not token:
+                raise CoordinationError('cloud_github_access', 'Configure a repository-scoped GitHub publishing credential', 503)
+            if target:
+                checkpoint = await db.get(ProjectOperation, self.checkpoint_id(task.id))
+                if (not checkpoint or checkpoint.status != 'complete'
+                        or checkpoint.details['artifact_revision'] != details['artifact_revision']):
+                    raise CoordinationError('cloud_checkpoint_pending', 'Wait for the verified GitHub checkpoint before opening a pull request', 409)
+                details['commit'] = checkpoint.details['commit']
             db.add(ProjectOperation(id=identity, project_id=native_id, kind='cloud_pr',
                 status='executing', details=details))
         self.launch(self.publish_pull_request(identity, details, token))
         return {'id': identity, 'status': 'executing', **details}
 
-    async def publish_pull_request(self, identity, details, token):
+    async def stage_commit(self, identity, details, *, token=None):
         from app.services.project_lifecycle import apply_snapshot
+        environment = details['environment']
+        await self.source(environment)
+        root = self.root(identity)
+        root.mkdir(parents=True, exist_ok=bool(token))
+        if token:
+            root = Path(mkdtemp(prefix='stage-', dir=root))
+        checkout = root / 'publish'
+        source = self.root(environment['id']) / 'repository'
+        # A new trusted Git directory. Workers never mount this repository.
+        await self.git(root, '-c', 'protocol.file.allow=always', 'clone', '--no-hardlinks',
+            '--no-checkout', '--', str(source), str(checkout))
+        base = details.get('base')
+        if base:
+            await self.git(checkout, 'fetch', '--no-tags', '--depth', '1', '--',
+                self.url(environment['target']), base['commit'], token=token)
+        await self.git(checkout, 'checkout', '--detach', base['commit'] if base else environment['commit'])
+        artifact = self.projects.state / 'artifacts' / details['task_id']
+        await asyncio.to_thread(apply_snapshot, artifact, checkout,
+            details['artifact_revision'], base['artifact_revision'] if base else details['source_revision'])
+        await self.git(checkout, 'add', '--all', '--force', '--', '.')
+        email = self.github.credentials()[1] if token else 'opt-import@users.noreply.github.com'
+        if token:
+            workflows = await self.git(checkout, 'diff', '--cached', '--name-only', '--', '.github/workflows/')
+            if workflows.strip():
+                raise CoordinationError('cloud_workflow_review', 'Changes to GitHub workflows require separate owner publication')
+        await self.git(checkout, '-c', 'user.name=Optimus', '-c', 'user.email=' + email,
+            '-c', 'commit.gpgsign=false', 'commit', '-m', details['title'])
+        return checkout, (await self.git(checkout, 'rev-parse', 'HEAD')).strip()
+
+    async def publish_pull_request(self, identity, details, token):
         try:
             environment = details['environment']
-            await self.source(environment)
-            root = self.root(identity)
-            root.mkdir(parents=True, exist_ok=False)
-            checkout = root / 'publish'
-            source = self.root(environment['id']) / 'repository'
-            # A new trusted Git directory. Workers never mount this repository.
-            await self.git(root, '-c', 'protocol.file.allow=always', 'clone', '--no-hardlinks',
-                '--no-checkout', '--', str(source), str(checkout))
-            await self.git(checkout, 'checkout', '--detach', environment['commit'])
-            artifact = self.projects.state / 'artifacts' / details['task_id']
-            await asyncio.to_thread(apply_snapshot, artifact, checkout,
-                details['artifact_revision'], details['source_revision'])
-            await self.git(checkout, 'add', '--all', '--force', '--', '.')
-            await self.git(checkout, '-c', 'user.name=Optimus', '-c', 'user.email=opt-import@users.noreply.github.com',
-                '-c', 'commit.gpgsign=false', 'commit', '-m', details['title'])
-            commit = (await self.git(checkout, 'rev-parse', 'HEAD')).strip()
-            details = {**details, 'commit': commit, 'phase': 'pushing'}
-            await self.settle(identity, 'executing', details)
-            await self.git(checkout, 'push', '--', self.url(environment), 'HEAD:refs/heads/' + details['head'], token=token)
+            target = environment.get('target')
+            if target:
+                token = await self.github.verify_write(target)
+                if target.get('upstream'):
+                    upstream = await self.github.repository(target['upstream'], token)
+                    if not upstream or upstream['id'] != target['upstream_id']:
+                        raise CoordinationError('cloud_github_upstream', 'The saved upstream repository changed')
+                if await self.remote_head(self.projects.state, target, details['head'], token) != details['commit']:
+                    raise CoordinationError('cloud_ref', 'The GitHub checkpoint branch changed after review')
+            else:
+                checkout, commit = await self.stage_commit(identity, details)
+                details = {**details, 'commit': commit, 'phase': 'pushing'}
+                await self.settle(identity, 'executing', details)
+                await self.git(checkout, 'push', '--', self.url(environment), 'HEAD:refs/heads/' + details['head'], token=token)
             details = {**details, 'phase': 'opening_pull_request'}
             await self.settle(identity, 'executing', details)
-            result, error = await self.github_api('POST', '/repos/' + environment['repository'] + '/pulls', token,
-                json={'title': details['title'], 'body': details['body'], 'head': details['head'],
-                    'base': environment['branch'], 'draft': True})
+            repo, branch, head = self.pr_target(details)
+            result, error = await self.github_api('POST', '/repos/' + repo + '/pulls', token,
+                json={'title': details['title'], 'body': details['body'], 'head': head,
+                    'base': branch, 'draft': True})
             if not result or not isinstance(result.get('number'), int):
                 raise CoordinationError('cloud_pr_uncertain', (error or 'GitHub did not return a pull request ID').replace(token, '[redacted]'))
+            if target:
+                remote = result.get('head') or {}
+                if remote.get('sha') != details['commit'] or (remote.get('repo') or {}).get('id') != target['id']:
+                    raise CoordinationError('cloud_pr_uncertain', 'GitHub returned a different head than the reviewed checkpoint')
             await self.settle(identity, 'complete', {**details, 'phase': 'published',
-                'url': f"https://github.com/{environment['repository']}/pull/{result['number']}"})
+                'url': f"https://github.com/{repo}/pull/{result['number']}"})
         except asyncio.CancelledError:
             await asyncio.shield(self.settle(identity, 'reconciling', details))
             raise

@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 
 _DATA_DIR = Path(os.environ.get('SPEDA_DATA_DIR', str(Path.home() / '.speda')))
 
@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     project_cell_image: str = Field(default='', description='Optional trusted prebuilt FORGE image with the project toolchain and dependencies; workers retain denied networking.')
     project_cell_images: str = Field(default='{}', description='Trusted JSON map of coder, reviewer and pentester to prebuilt Docker images. Per-role images override the shared image; workers retain denied networking.')
     project_release_targets_file: str = Field(default='', description='Trusted host JSON file of deployment argv, verification argv and allowed environment names. Empty disables publication.')
+    optimus_github_account: str = ""
+    optimus_github_workspace_token: SecretStr = SecretStr("")
+    optimus_github_commit_email: str = ""
+    optimus_github_share_with: str = ""
+    optimus_github_public_forks_in_chat: bool = False
 
     # Auth
     speda_api_key: str = "dev-key"
