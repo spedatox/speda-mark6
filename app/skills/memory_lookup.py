@@ -78,7 +78,10 @@ class MemoryLookupSkill(Skill):
             if len(encoded.encode())>ceiling: return '{"status":"budget_exhausted"}'
             budget.used+=len(encoded.encode())
             return encoded
-        except (ValueError,TimeoutError): return '{"status":"unavailable","reason":"Invalid dates or archive retrieval deadline"}'
+        except ValueError:
+            return '{"status":"unavailable","reason":"Use valid owner-local archive dates"}'
+        except TimeoutError:
+            return '{"status":"unavailable","reason":"Archive retrieval exceeded its deadline"}'
         except Exception: return '{"status":"unavailable","reason":"Archive unavailable within the retrieval deadline"}'
         finally: budget.elapsed_seconds+=monotonic()-started
 

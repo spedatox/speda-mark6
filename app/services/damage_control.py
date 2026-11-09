@@ -6,6 +6,7 @@ import logging
 import re
 import sqlite3
 import time
+from collections import deque
 from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ _reporting = ContextVar("damage_control_reporting", default=False)
 _identifier = re.compile(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}")
 _trace_id = re.compile(r"[a-f0-9-]{32,36}")
 _service_name = re.compile(r"speda(?:-[a-z0-9]+)*|onyx-app|yanki(?:-pot-provider)?")
+_release_check = re.compile(r"speda-pg-(?:restore|app-check)-[a-f0-9]{12}")
 _tool_failure = re.compile(r"^(?:[a-z_]+: (?:request|lookup|search) failed|"
                            r"Document generation failed|Delivery failed|The browser could not load that page)")
 
@@ -80,7 +82,7 @@ def tool_error_details(result):
             or status in ("failed", "error", "unavailable", "unknown")):
         return None
     details = {"tool_status": status if status in ("failed", "error", "unavailable", "unknown") else "error"}
-    for key in ("error", "message", "detail"):
+    for key in ("error", "message", "detail", "reason"):
         if message := clean_message(payload.get(key)):
             details["diagnostic_message"] = message
             break
@@ -166,6 +168,7 @@ class DamageControl(logging.Handler):
         self.journal = IncidentJournal(path)
         self.loop = asyncio.get_running_loop()
         self.wake = asyncio.Event()
+        self._release_check_kills = deque(maxlen=32)
 
     def capture(self, facts, *, identity=None, active=False):
         try:
@@ -229,10 +232,19 @@ class DamageControl(logging.Handler):
         if type(timestamp) is not int or timestamp < self.journal.docker_cursor():
             return
         event = {"oom": "service_out_of_memory", "health_status: unhealthy": "service_unhealthy"}.get(action)
+        identity = data["Actor"]["ID"]
+        if _release_check.fullmatch(name) and action == "kill" and attributes.get("signal") == "9":
+            self._release_check_kills.append((identity, timestamp))
         if action == "die" and attributes.get("exitCode") not in ("0", "143"):
-            event = "service_unexpected_exit"
+            # The deployment controller removes disposable checks with docker rm -f.
+            release_cleanup = attributes.get("exitCode") == "137" and any(
+                actor == identity and 0 <= timestamp - killed_at <= 30_000_000_000
+                for actor, killed_at in self._release_check_kills
+            )
+            if not release_cleanup:
+                event = "service_unexpected_exit"
         if event:
-            identity = sha256(f"docker:{data['Actor']['ID']}:{timestamp}:{action}".encode()).hexdigest()[:32]
+            identity = sha256(f"docker:{identity}:{timestamp}:{action}".encode()).hexdigest()[:32]
             facts = {"event": event, "service": name,
                      "service_event_at": datetime.fromtimestamp(timestamp / 1e9, timezone.utc).isoformat(timespec="seconds")}
             exit_code = attributes.get("exitCode", "")

@@ -43,7 +43,11 @@ async def _fetch(client: httpx.AsyncClient, outlet: str, category: str, url: str
     """Fetch + parse one feed. Returns normalized item dicts; [] on any failure
     (logged, never raised — a dead feed must not fail the whole poll)."""
     try:
-        resp = await client.get(url, headers={"User-Agent": _UA})
+        try:
+            resp = await client.get(url, headers={"User-Agent": _UA})
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            # A fresh connection can recover a transient publisher or DNS failure.
+            resp = await client.get(url, headers={"User-Agent": _UA})
         resp.raise_for_status()
     except Exception as e:  # noqa: BLE001
         logger.warning("news_feed_failed", extra={
@@ -53,6 +57,12 @@ async def _fetch(client: httpx.AsyncClient, outlet: str, category: str, url: str
         return []
     # feedparser is synchronous — keep it off the event loop.
     parsed = await asyncio.to_thread(feedparser.parse, resp.content)
+    if not parsed.version:
+        logger.warning("news_feed_failed", extra={
+            "outlet": outlet, "url": url, "error_type": "InvalidFeed",
+            "http_status": resp.status_code,
+        })
+        return []
     items: list[dict] = []
     for entry in parsed.entries[:_MAX_ITEMS_PER_FEED]:
         link = (getattr(entry, "link", "") or "").strip()

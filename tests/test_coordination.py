@@ -253,15 +253,40 @@ async def test_paid_response_replays_after_delivery_crash_without_another_charge
     await bits.coordinator.shutdown()
 
 
+async def test_address_to_a_nonmember_returns_a_denial_and_finishes_the_turn(memory):
+    import json
+    from app.models.model_policy import ToolExecutionReceipt
+
+    bits = await setup(memory, [
+        tool({"action": "address", "agent_id": "optimus", "message": "Check the assumption"}),
+        reply("Optimus is not in this room."),
+    ])
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        result = await send(bits, room)
+        assert result["status"] == "succeeded" and len(result["steps"]) == 1
+        async with memory.sessions() as db:
+            receipt = await db.scalar(select(ToolExecutionReceipt).where(ToolExecutionReceipt.name == "collaborate"))
+            assert receipt.status == "completed"
+            assert json.loads(receipt.result["text"])["code"] == "not_member"
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_consult_returns_to_caller_without_changing_membership(memory):
     bits = await setup(memory, [tool({"action": "consult", "agent_id": "scourge", "message": "Check the assumption"}),
-        reply("Checking it."), reply("The assumption fails under concurrent writes."), reply("I have revised the plan.")], contributions=3)
+        reply("Checking it."),
+        tool({"action": "address", "agent_id": "speda", "message": "Publish a private observation"}),
+        reply("The assumption fails under concurrent writes."), reply("I have revised the plan.")], contributions=3)
     room = await bits.coordinator.create(1, CreateRoom())
     result = await send(bits, room)
     assert result["status"] == "succeeded", await bits.coordinator.events(1, room["id"])
     assert result["contributions"] == 3
     assert (await bits.coordinator.rooms(1))[0]["members"] == ["speda"]
+    assert "private_exchange" in str(bits.client.calls[-2]["messages"])
     assert "assumption fails" in str(bits.client.calls[-1]["messages"])
+    assert all(e["kind"] != "contribution_queued" or e["payload"]["mode"] == "consult"
+               for e in (await bits.coordinator.events(1, room["id"]))["events"])
     await bits.coordinator.shutdown()
 
 

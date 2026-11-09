@@ -1,7 +1,8 @@
 """Bounded exact archive reads, sharing Iacon's foreground retrieval allowance."""
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
-from sqlalchemy import select, func, literal_column, or_
+from sqlalchemy import any_, select, func, literal_column, or_
+from sqlalchemy.dialects.postgresql import array
 from app.models.message import Message
 from app.models.session import Session
 from app.models.memory_serving import MemoryChange
@@ -17,16 +18,16 @@ def body_text(content):
     return ''
 
 
-def searchable_body(dialect):
+def searchable_body(dialect, column="messages.content"):
     if dialect=='sqlite':
         sql = "CASE WHEN json_type(messages.content)='text' THEN json_extract(messages.content,'$') WHEN json_type(messages.content)='array' THEN COALESCE((SELECT group_concat(json_extract(j.value,'$.text'),' ') FROM json_each(messages.content) j WHERE json_extract(j.value,'$.type')='text'),'') ELSE '' END"
     else:
         # PostgreSQL JSON retains escaped zero bytes but cannot extract them
         # as SQL text. Rewrite only real escapes in the searchable projection.
-        safe_json = r"""CASE WHEN strpos(messages.content::text, chr(92) || 'u0000') > 0
-            THEN regexp_replace(messages.content::text,
+        safe_json = rf"""CASE WHEN strpos({column}::text, chr(92) || 'u0000') > 0
+            THEN regexp_replace({column}::text,
                 $zero$(?<!\\)((?:\\\\)*)\\u0000$zero$, $safe$\1\\u0001$safe$, 'g')::json
-            ELSE messages.content END"""
+            ELSE {column} END"""
         sql = f"""(SELECT CASE WHEN json_typeof(body)='string' THEN body #>> '{{}}'
             WHEN json_typeof(body)='array' THEN COALESCE((SELECT string_agg(j.value->>'text',' ')
                 FROM json_array_elements(body) j(value) WHERE j.value->>'type'='text'),'')
@@ -35,6 +36,11 @@ def searchable_body(dialect):
     for original,replacement in zip('İıŞşĞğÜüÖöÇç','iiSsGgUuOoCc'):
         body=func.replace(body,original,replacement)
     return func.lower(body)
+
+
+def _like_pattern(term):
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 async def search_archive(db, context, query, *, after=None, before=None, limit=6, cursor=None):
@@ -69,8 +75,16 @@ async def search_archive(db, context, query, *, after=None, before=None, limit=6
     if after and before and date.fromisoformat(after)>date.fromisoformat(before):
         return {'status':'invalid_date','detail':'The date range is reversed.'}
     if terms:
-        body=searchable_body(db.bind.dialect.name)
-        stmt=stmt.where(or_(*(body.contains(term,autoescape=True) for term in terms)))
+        if db.bind.dialect.name == 'postgresql':
+            # Scope first so PostgreSQL does not decode large messages for other agents.
+            scope = stmt.with_only_columns(Message.id, Message.content).cte('archive_scope').prefix_with('MATERIALIZED')
+            body = searchable_body('postgresql', 'archive_scope.content')
+            matched = select(scope.c.id).where(body.like(any_(array([_like_pattern(term) for term in terms]))))
+            matched = matched.order_by(scope.c.id.desc()).limit(81).subquery()
+            stmt = select(Message, Session).join(Session, Message.session_id == Session.id).join(matched, Message.id == matched.c.id)
+        else:
+            body = searchable_body('sqlite')
+            stmt = stmt.where(or_(*(body.contains(term, autoescape=True) for term in terms)))
     candidates=list((await db.execute(stmt.order_by(Message.id.desc()).limit(81))).all())
     results=[]
     consumed=None

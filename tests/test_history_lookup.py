@@ -27,6 +27,8 @@ async def seed(memory, body, *, owner=1, agent='speda',role='user',stamp=None):
 
 async def test_archive_uses_real_text_owner_agent_scope_and_one_shared_batch(memory):
     _,identity,source=await seed(memory,[{'type':'text','text':'İLAYDA ile bütçeyi konuştuk.'}])
+    _,literal,_=await seed(memory,"Code x_y%z appears here.")
+    await seed(memory,"Code xayXz is a different value.")
     await seed(memory,'İlayda confidential',owner=2)
     await seed(memory,'İlayda private Sentinel chat',agent='sentinel')
     await seed(memory,[{'type':'_provider_state','text':'İlayda metadata only'}])
@@ -37,6 +39,8 @@ async def test_archive_uses_real_text_owner_agent_scope_and_one_shared_batch(mem
     assert result['results'][0]['source_id']==source
     assert context.memory_budget.lookup_batches==1 and not lookup.offered(context)
     assert 'budget exhausted' in await lookup.execute({'query':'İlayda'},context)
+    result=json.loads(await SearchHistorySkill(lookup).execute({'query':'x_y%z'},memory.context()))
+    assert [r['message_id'] for r in result['results']]==[literal]
 
 
 async def test_archive_date_range_is_owner_local_and_hidden_originals_remain_retained(memory):

@@ -116,6 +116,21 @@ async def test_docker_replay_and_secret_bearing_log(tmp_path):
     assert "secret-value" not in json.dumps(facts)
 
 
+async def test_disposable_release_cleanup_is_excluded_but_oom_is_reported(tmp_path):
+    protocol = DamageControl(tmp_path / "incidents.sqlite3")
+    protocol.journal.docker_cursor()
+    stamp = time.time_ns()
+    service = "speda-pg-restore-123456789012"
+    for sequence, (action, attributes) in enumerate((
+        ("kill", {"signal": "9"}), ("die", {"exitCode": "137"}), ("oom", {}),
+    )):
+        protocol.observe_container({"Action": action, "timeNano": stamp + sequence,
+                                    "Actor": {"ID": "fixture", "Attributes": {"name": service, **attributes}}})
+    with protocol.journal.connect() as db:
+        facts = [json.loads(row[0]) for row in db.execute("SELECT facts FROM incidents")]
+    assert [item["event"] for item in facts] == ["service_out_of_memory"]
+
+
 def test_diagnostic_details_keep_only_bounded_evidence():
     from app.services.incident_details import clean_message, log_details
     from app.services.damage_control import tool_error_details

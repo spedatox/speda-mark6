@@ -40,6 +40,5 @@ class BackendRestart:
 
     async def signal(self):
         if self.requested and self.shutdown:
-            await self.coordinator.notify()
             result=self.shutdown()
             if inspect.isawaitable(result): await result

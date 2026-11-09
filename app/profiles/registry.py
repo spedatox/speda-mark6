@@ -49,7 +49,7 @@ class ProfileRegistry:
             ("atomix", "Atomix", "Atomix (Ben 10)", "Health, training and wellbeing", {"Task"}),
             ("scourge", "Scourge", "Scourge (Transformers: Rise of the Beasts)", "Security; leads Decepticons", {"Task", "project_delegate"}),
             ("sentinel", "Sentinel", None, "Finance and budget intelligence", {"Task"}),
-            ("orion", "Orion", "Orion Pax (Transformers Prime)", "Iacon clerk and system maintenance", {"iacon_propose"}),
+            ("orion", "Orion", "Orion Pax (Transformers Prime)", "Iacon clerk and system maintenance", {"iacon_propose", "system_ops"}),
         )
         self.profiles = {}
         worker_roles = {"speda": frozenset({"autobot", "decepticon", "reviewer"}),

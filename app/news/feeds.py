@@ -45,7 +45,7 @@ FEEDS: list[tuple[str, str, str]] = [
     ("Yeni Akit", "dunya", "https://www.yeniakit.com.tr/rss/haber/dunya"),
     ("Yeni Akit", "teknoloji", "https://www.yeniakit.com.tr/rss/haber/teknoloji"),
     # ── English outlets ──────────────────────────────────────────────────────
-    ("Daily Sabah", "world", "https://www.dailysabah.com/rss"),
+    ("Daily Sabah", "world", "https://www.dailysabah.com/rss/world"),
     ("Yeni Şafak EN", "news", "https://www.yenisafak.com/en/rss"),
     # ── Additional Turkish outlets ───────────────────────────────────────────
     # /rss 404s — the outlet moved its feed to the CDN host it advertises in

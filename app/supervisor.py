@@ -26,11 +26,16 @@ def supervise(popen=subprocess.Popen):
                     break
                 except subprocess.TimeoutExpired:
                     if stopping:
-                        try: return child.wait(timeout=35)
+                        try:
+                            code=child.wait(timeout=35)
                         except subprocess.TimeoutExpired:
                             child.kill()
-                            return child.wait()
-            if stopping or code!=75: return code
+                            code=child.wait()
+                        break
+            if stopping:
+                # Uvicorn re-raises a forwarded SIGTERM after graceful shutdown.
+                return 0 if code == -signal.SIGTERM else code
+            if code!=75: return code
         return 0
     finally:
         if child and child.poll() is None:

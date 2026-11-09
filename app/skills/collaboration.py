@@ -1,6 +1,7 @@
 import json
 from app.skills.base import Skill
 from app.schemas.coordination import Collaboration, Delegate, Decision
+from app.services.coordination_budget import CoordinationError
 
 
 class CollaborationSkill(Skill):
@@ -19,7 +20,13 @@ class CollaborationSkill(Skill):
         return context.coordination is not None and context.task_role != "worker"
 
     async def execute(self, args, context):
-        return await context.coordination.collaborate(context, args)
+        try:
+            return await context.coordination.collaborate(context, args)
+        except CoordinationError as exc:
+            if exc.code not in {'not_member', 'private_exchange'}:
+                raise
+            # These guards run before any action or queued contribution.
+            return json.dumps({'status': 'denied', 'code': exc.code, 'message': str(exc)})
 
 
 class ProjectStatusSkill(Skill):

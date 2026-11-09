@@ -83,6 +83,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.skills.notifications import NotificationsSkill
     from app.skills.stt import STTSkill
     from app.skills.system import SystemSkill
+    from app.skills.system_ops import SystemOpsSkill
     from app.skills.tts import TTSSkill
 
     await registry.register_skill(TTSSkill())
@@ -90,6 +91,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     await registry.register_skill(NotificationsSkill())
     await registry.register_skill(DocumentsSkill())
     await registry.register_skill(SystemSkill())
+    await registry.register_skill(SystemOpsSkill(app.state.damage_control_journal))
     from app.skills.budget import BudgetModeSkill
     budget_mode_skill = BudgetModeSkill()
     await registry.register_skill(budget_mode_skill)
