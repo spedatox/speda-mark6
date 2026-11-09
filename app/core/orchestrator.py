@@ -10,7 +10,7 @@ from app.core.context import AgentContext
 from app.core.registry import CapabilityRegistry
 from app.profiles.base import AgentProfile
 from app.schemas.sse import SSEEvent, SSEEventType
-from app.services.damage_control import exception_facts, tool_returned_error, turn_facts
+from app.services.damage_control import exception_facts, tool_error_details, turn_facts
 from app.services.llm_client import LLMClient
 from app.schemas.llm import ProviderError
 
@@ -126,6 +126,7 @@ class AgentOrchestrator:
         # Transport/protocol errors terminate honestly and retain completed tool exchanges.
         protocol = self.incidents
         context.extra.pop("incident_terminal", None)
+        context.extra.pop("incident_tool", None)
         incident = protocol.begin(context) if protocol else None
         completed = False
         try:
@@ -141,8 +142,12 @@ class AgentOrchestrator:
             completed = True
             code = getattr(exc, "code", "deadline" if isinstance(exc, TimeoutError) else "invalid_request")
             if protocol:
-                protocol.finish(incident, context.extra.get("incident_terminal", "turn_error"),
-                                **exception_facts(exc))
+                details = {"code": code, **exception_facts(exc)}
+                if "incident_tool" in context.extra:
+                    details["tool"] = context.extra["incident_tool"]
+                if model := turn_facts(context).get("model"):
+                    details["model"] = model
+                protocol.finish(incident, context.extra.get("incident_terminal", "turn_error"), **details)
             yield SSEEvent(type=SSEEventType.ERROR,
                 data={"code": code,
                       "message": str(exc) if isinstance(exc, (ProviderError, ValueError)) else "The model request deadline was reached"},
@@ -412,6 +417,7 @@ class AgentOrchestrator:
                         result = await self._registry.execute_recorded(tool_block, context)
                     except (ProviderError, TimeoutError):
                         context.extra["incident_terminal"] = "tool_stopped_turn"
+                        context.extra["incident_tool"] = tool_block.name
                         # Keep every completed action visible even if a later
                         # call has an unknown outcome. Close all protocol pairs.
                         tool_results.append({"type": "tool_result", "tool_use_id": tool_block.id,
@@ -422,9 +428,11 @@ class AgentOrchestrator:
                         messages.append({"role": "user", "content": tool_results})
                         context.extra["completed_messages"] = list(messages)
                         raise
-                    if self.incidents and tool_block.name != "report_incident" and tool_returned_error(result):
-                        self.incidents.capture({**turn_facts(context), "event": "tool_returned_error",
-                                                "tool": tool_block.name, "ended_turn": False})
+                    if self.incidents and tool_block.name != "report_incident":
+                        details = tool_error_details(result)
+                        if details is not None:
+                            self.incidents.capture({**turn_facts(context), **details, "event": "tool_returned_error",
+                                                    "tool": tool_block.name, "ended_turn": False})
                     yield SSEEvent(type=SSEEventType.TOOL_RESULT,
                         data={'id':tool_block.id, 'result':str(result)[:8000]}, session_id=context.session_id, request_id=context.request_id)
                     for file in context.extra.get('produced_files', [])[files_before:]:

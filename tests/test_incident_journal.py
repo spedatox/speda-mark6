@@ -30,11 +30,18 @@ async def test_owner_journal_groups_repeats_and_assessment_does_not_release_deli
     app.state.orchestrator = SimpleNamespace(analyse_incident=analyse)
     monkeypatch.setattr("app.services.incident_journal.render_report",
                         lambda recorded, text: b"%PDF-1.7 " + text.encode())
+    exported_ids = []
+    def bulk(records, *, bulk):
+        assert bulk
+        exported_ids[:] = [facts["incident_id"] for facts, _ in records]
+        return b"%PDF-1.7 bulk"
+    monkeypatch.setattr("app.services.incident_journal.render_reports", bulk)
     root = "/iacon/hall-of-records/incidents"
     endpoint = f"{root}/{identity}"
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get(root)).status_code == 401
+        assert (await client.post(f"{root}/export", json={})).status_code == 401
         client.headers["X-API-Key"] = settings.speda_api_key
         listing = (await client.get(root, params={"q": "ultron", "severity": "critical"})).json()
         row, = listing["incidents"]
@@ -44,6 +51,14 @@ async def test_owner_journal_groups_repeats_and_assessment_does_not_release_deli
         assert (await client.get(root, params={"q": older})).json()["incidents"][0]["id"] == older
         detail = (await client.get(endpoint)).json()
         assert [item["id"] for item in detail["recent_occurrences"]] == [identity, older]
+        assert "ended" in detail["facts"]["summary"]
+        all_matching = await client.post(f"{root}/export", json={"q": "ultron", "severity": "critical"})
+        assert all_matching.content == b"%PDF-1.7 bulk"
+        assert exported_ids == [identity, older]
+        selected = await client.post(f"{root}/export", json={"ids": [older]})
+        assert selected.headers["content-disposition"].endswith('"damage-control-journal.pdf"')
+        assert exported_ids == [older]
+        assert (await client.post(f"{root}/export", json={"ids": []})).status_code == 422
 
         first = asyncio.create_task(client.post(f"{endpoint}/assessment"))
         try:

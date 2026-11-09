@@ -110,7 +110,8 @@ class ModelCatalog:
                 # Do not log exception messages: provider URLs may contain credentials.
                 if provider != 'ollama':
                     self.logger.warning('provider_model_catalog_unavailable',
-                        extra={'provider': provider, 'error_type': type(exc).__name__})
+                        extra={'provider': provider, 'error_type': type(exc).__name__,
+                               'http_status': getattr(getattr(exc, 'response', None), 'status_code', None)})
                 rows = None
             self._cache[provider] = (monotonic() + 60, rows)
             return rows

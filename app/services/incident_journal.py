@@ -4,12 +4,15 @@ import json
 import time
 from datetime import datetime, timezone
 
-from app.services.damage_control import render_report
+from app.services.damage_control import render_report, render_reports
+from app.services.incident_details import explain
+
+MAX_EXPORT = 1500
 
 _fingerprint = "json_array(" + ", ".join(
     f"json_extract(facts, '$.{key}')" for key in (
         "event", "agent", "worker", "tool", "service", "component", "code", "error_code",
-        "exception", "kind", "impact", "ended_turn",
+        "exception", "kind", "impact", "ended_turn", "provider", "server", "outlet", "endpoint",
     )
 ) + ", CASE WHEN json_extract(facts, '$.event') = 'runtime_log' THEN json_extract(facts, '$.site') END)"
 _events = f"""SELECT incidents.*, {_fingerprint} AS fingerprint,
@@ -25,6 +28,20 @@ _events = f"""SELECT incidents.*, {_fingerprint} AS fingerprint,
     END AS severity
     FROM incidents LEFT JOIN incident_inspections AS inspection USING (id)
     WHERE status <> 'active'"""
+_matching = f"""WITH events AS ({_events}), grouped AS (
+    SELECT *, COUNT(*) OVER group_key AS occurrences,
+        ROW_NUMBER() OVER (PARTITION BY fingerprint ORDER BY timestamp DESC, id DESC) AS latest
+    FROM events WINDOW group_key AS (PARTITION BY fingerprint)
+), matching AS (
+    SELECT * FROM grouped WHERE (latest=1 OR id=?)
+        AND (? OR (reviewed_at IS NULL AND severity <> 'test'))
+        AND (? IS NULL OR severity=?)
+        AND (?='' OR INSTR(LOWER(facts), ?) > 0 OR id=?)
+)"""
+
+
+def filters(reviewed, severity, search):
+    return search, reviewed, severity, severity, search, search, search
 
 
 def timestamp(value):
@@ -32,7 +49,8 @@ def timestamp(value):
 
 
 def facts_for(row):
-    return {"incident_id": row["id"], "observed_at": timestamp(row["timestamp"]), **json.loads(row["facts"])}
+    return explain({"incident_id": row["id"], "observed_at": timestamp(row["timestamp"]),
+                    **json.loads(row["facts"])})
 
 
 def assessment_for(row):
@@ -54,17 +72,8 @@ class JournalView:
 
     def list(self, *, reviewed, severity, search, limit, offset):
         with self.journal.connect() as db:
-            rows = db.execute(f"""WITH events AS ({_events}), grouped AS (
-                SELECT *, COUNT(*) OVER group_key AS occurrences,
-                    ROW_NUMBER() OVER (PARTITION BY fingerprint ORDER BY timestamp DESC, id DESC) AS latest
-                FROM events WINDOW group_key AS (PARTITION BY fingerprint)
-            )
-            SELECT * FROM grouped WHERE (latest=1 OR id=?)
-                AND (? OR (reviewed_at IS NULL AND severity <> 'test'))
-                AND (? IS NULL OR severity=?)
-                AND (?='' OR INSTR(LOWER(facts), ?) > 0 OR id=?)
-            ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?""",
-                (search, reviewed, severity, severity, search, search, search, limit + 1, offset)).fetchall()
+            rows = db.execute(_matching + " SELECT * FROM matching ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?",
+                (*filters(reviewed, severity, search), limit + 1, offset)).fetchall()
         incidents = []
         for row in rows[:limit]:
             facts = json.loads(row["facts"])
@@ -73,6 +82,7 @@ class JournalView:
                 "source": facts.get("agent") or facts.get("service") or facts.get("component"),
                 "observed_at": timestamp(row["timestamp"]),
                 "occurrences": row["occurrences"], "reviewed": row["reviewed_at"] is not None,
+                "summary": explain(facts)["summary"],
             })
         return {"incidents": incidents, "next_offset": offset + limit if len(rows) > limit else None}
 
@@ -135,4 +145,21 @@ class JournalView:
         incident = self.detail(identity)
         if incident is None:
             return None
-        return render_report(incident["facts"], incident["assessment"] or "The journal contains recorded observations for this incident.")
+        return render_report(incident["facts"], incident["assessment"])
+
+    def bulk_pdf(self, *, ids, reviewed, severity, search):
+        with self.journal.connect() as db:
+            if ids:
+                rows = db.execute(f"""SELECT * FROM ({_events})
+                    WHERE id IN (SELECT value FROM json_each(?)) ORDER BY timestamp DESC, id DESC""",
+                    (json.dumps(ids),)).fetchall()
+            else:
+                rows = db.execute(_matching + """ SELECT * FROM events
+                    WHERE fingerprint IN (SELECT fingerprint FROM matching)
+                    ORDER BY timestamp DESC, id DESC LIMIT ?""",
+                    (*filters(reviewed, severity, search), MAX_EXPORT + 1)).fetchall()
+        if len(rows) > MAX_EXPORT:
+            raise ValueError(f"Export exceeds {MAX_EXPORT} occurrences. Narrow the filters or select specific incidents.")
+        if ids and len(rows) != len(set(ids)):
+            raise ValueError("One or more selected incidents are unavailable. Refresh the journal and try again.")
+        return render_reports([(facts_for(row), assessment_for(row)[1]) for row in rows], bulk=True) if rows else None

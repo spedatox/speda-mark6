@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from app.models.delivery import TelegramLink, TelegramOwner
 from app.schemas.llm import ProviderError
+from app.services.incident_details import clean_message, explain, log_details, stack_locations
 
 logger = logging.getLogger(__name__)
 _reporting = ContextVar("damage_control_reporting", default=False)
@@ -30,6 +31,7 @@ def turn_facts(context):
     for field, value in {
         "agent": context.agent_id, "role": context.task_role,
         "worker": context.extra.get("incident_worker_role", context.extra.get("worker_role")),
+        "model": context.model, "trigger": context.triggered_by,
     }.items():
         if isinstance(value, str) and _identifier.fullmatch(value):
             facts[field] = value
@@ -37,6 +39,8 @@ def turn_facts(context):
         value = getattr(context, field)
         if isinstance(value, str) and _trace_id.fullmatch(value):
             facts[field] = value
+    if type(context.session_id) is int and context.session_id > 0:
+        facts["session_id"] = context.session_id
     return facts
 
 
@@ -45,6 +49,8 @@ def exception_facts(exc):
     code = getattr(exc, "code", None)
     if isinstance(code, str) and _identifier.fullmatch(code):
         facts["code"] = code
+    if isinstance(exc, ProviderError) and (message := clean_message(str(exc))):
+        facts["diagnostic_message"] = message
     cause = exc.__cause__ or exc
     trace = cause.__traceback__
     if trace:
@@ -52,22 +58,33 @@ def exception_facts(exc):
             trace = trace.tb_next
         facts["site"] = f"{Path(trace.tb_frame.f_code.co_filename).name}:{trace.tb_lineno}"
         facts["cause_type"] = type(cause).__name__
+        facts["stack"] = "\n".join(stack_locations(cause.__traceback__))
     return facts
 
 
-def tool_returned_error(result):
+def tool_error_details(result):
     if not isinstance(result, str):
-        return False
+        return None
     if _tool_failure.match(result):
-        return True
+        return {"diagnostic_message": clean_message(result.split("\n", 1)[0])}
     if not result.startswith("{"):
-        return False
+        return None
     try:
         payload = json.loads(result)
     except (ValueError, RecursionError):
-        return False
-    return isinstance(payload, dict) and (payload.get("isError") is True
-        or payload.get("is_error") is True or payload.get("status") in ("failed", "error", "unavailable", "unknown"))
+        return None
+    if not isinstance(payload, dict):
+        return None
+    status = payload.get("status")
+    if not (payload.get("isError") is True or payload.get("is_error") is True
+            or status in ("failed", "error", "unavailable", "unknown")):
+        return None
+    details = {"tool_status": status if status in ("failed", "error", "unavailable", "unknown") else "error"}
+    for key in ("error", "message", "detail"):
+        if message := clean_message(payload.get(key)):
+            details["diagnostic_message"] = message
+            break
+    return details
 
 
 class IncidentJournal:
@@ -105,9 +122,11 @@ class IncidentJournal:
             if not event:
                 db.execute("DELETE FROM incidents WHERE id=? AND status='active'", (identity,))
                 return
-            row = db.execute("SELECT facts FROM incidents WHERE id=? AND status='active'", (identity,)).fetchone()
+            row = db.execute("SELECT facts, timestamp FROM incidents WHERE id=? AND status='active'", (identity,)).fetchone()
             if row:
-                facts = {**json.loads(row["facts"]), **(details or {}), "event": event, "ended_turn": True}
+                started = datetime.fromtimestamp(row["timestamp"], timezone.utc).isoformat(timespec="seconds")
+                facts = {**json.loads(row["facts"]), **(details or {}), "event": event, "ended_turn": True,
+                         "started_at": started, "duration_ms": round(max(0, time.time() - row["timestamp"]) * 1000)}
                 db.execute("UPDATE incidents SET facts=?, status='pending', timestamp=? WHERE id=? AND status='active'",
                            (json.dumps(facts), time.time(), identity))
 
@@ -187,8 +206,9 @@ class DamageControl(logging.Handler):
                              for line in range(record.lineno, record.lineno + 4))
             if repr(record.msg) in source or f'"{record.msg}"' in source:
                 facts["event"] = record.msg
-        if record.exc_info and record.exc_info[0]:
-            facts["exception"] = record.exc_info[0].__name__
+        if record.exc_info and record.exc_info[1]:
+            facts.update(exception_facts(record.exc_info[1]))
+        facts.update(log_details(facts["event"], record.__dict__))
         for field in ("request_id", "run_id", "step_id", "job_id"):
             value = getattr(record, field, None)
             if isinstance(value, str) and _trace_id.fullmatch(value):
@@ -279,7 +299,7 @@ class DamageControl(logging.Handler):
                 return
             try:
                 async with asyncio.timeout(45):
-                    analysis = await analyse(facts)
+                    analysis = await analyse(explain(facts))
             except Exception as exc:
                 # Keep the incident deliverable during a provider outage or a budget pause.
                 analysis = f"Model analysis unavailable ({type(exc).__name__}). Review the recorded observations."
@@ -327,24 +347,56 @@ class DamageControl(logging.Handler):
 
 
 def render_report(facts, analysis):
+    return render_reports([(facts, analysis)])
+
+
+def render_reports(records, *, bulk=False):
+    # Keep WeasyPrint's layout and memory bounded when a journal spans hundreds of pages.
+    if bulk and len(records) > 40:
+        from io import BytesIO
+        from pypdf import PdfWriter
+
+        writer = PdfWriter()
+        for start in range(0, len(records), 40):
+            chunk = records[start:start + 40]
+            subtitle = f"{len(records)} incident occurrences | Records {start + 1} to {start + len(chunk)}"
+            writer.append(BytesIO(_render_sections(chunk, subtitle)), import_outline=False)
+        output = BytesIO()
+        writer.write(output)
+        return output.getvalue()
+    return _render_sections(records, f"{len(records)} incident occurrences" if bulk else "")
+
+
+def _render_sections(records, subtitle):
     from html import escape
     from weasyprint import HTML, URLFetcher
 
-    entries = "".join(f"<dt>{escape(key.replace('_', ' ').title())}</dt><dd>{escape(str(value))}</dd>"
-                      for key, value in facts.items())
+    sections = []
+    for facts, analysis in records:
+        details = explain(facts)
+        title = details.pop("summary")
+        next_check = details.pop("next_check")
+        entries = "".join(f"<p><strong>{escape(key.replace('_', ' ').title())}</strong> {escape(str(value))}</p>"
+                          for key, value in details.items() if value is not None)
+        assessment = f"<h3>Model assessment</h3><p>{escape(analysis)}</p>" if analysis else ""
+        sections.append(f"""<section><h2>{escape(title)}</h2><div class="facts">{entries}</div>
+          <p><strong>Next check</strong> {escape(next_check)}</p>{assessment}</section>""")
+    count = f"<p>{escape(subtitle)}</p>" if subtitle else ""
     return HTML(string=f"""<!doctype html>
     <html lang="en"><meta charset="utf-8"><title>Damage Control Protocol</title>
     <style>
-      @page {{ size: A4; margin: 22mm; @bottom-right {{ content: "SPEDA  /  " counter(page); font-size: 8pt; }} }}
+      @page {{ size: A4; margin: 20mm; @bottom-right {{ content: "SPEDA"; font-size: 8pt; }} }}
       body {{ font: 11pt/1.5 'DejaVu Sans', sans-serif; color: #172436; overflow-wrap: anywhere; }}
       header {{ border-bottom: 2pt solid #a43736; margin-bottom: 22pt; }}
       h1 {{ font-size: 24pt; margin: 0 0 9pt; }}
-      h2 {{ font-size: 14pt; margin: 18pt 0 7pt; }}
-      dt {{ font-size: 8.5pt; font-weight: bold; color: #516074; break-after: avoid; }}
-      dd {{ margin: 0 0 8pt; }}
+      h2 {{ font-size: 13pt; margin: 12pt 0 6pt; break-after: avoid; }}
+      h3 {{ font-size: 10pt; margin: 7pt 0 3pt; break-after: avoid; }}
+      section {{ border-bottom: 0.5pt solid #d0d8e0; margin-bottom: 12pt; padding-bottom: 9pt; }}
+      .facts {{ margin: 0 0 6pt; font-size: 9pt; }}
+      .facts strong {{ color: #516074; }}
       p {{ white-space: pre-wrap; margin: 0; }}
     </style>
-    <header><h1>Damage Control Protocol</h1></header>
-    <h2>Recorded observations</h2><dl>{entries}</dl>
-    <h2>Incident assessment</h2><p>{escape(analysis)}</p>
+    <body>
+    <header><h1>Damage Control Protocol</h1>{count}</header>
+    {''.join(sections)}</body>
     </html>""", url_fetcher=URLFetcher(allowed_protocols=())).write_pdf()

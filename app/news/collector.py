@@ -46,7 +46,10 @@ async def _fetch(client: httpx.AsyncClient, outlet: str, category: str, url: str
         resp = await client.get(url, headers={"User-Agent": _UA})
         resp.raise_for_status()
     except Exception as e:  # noqa: BLE001
-        logger.warning("news_feed_failed", extra={"outlet": outlet, "url": url, "error": str(e)})
+        logger.warning("news_feed_failed", extra={
+            "outlet": outlet, "url": url, "error_type": type(e).__name__,
+            "http_status": e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None,
+        })
         return []
     # feedparser is synchronous — keep it off the event loop.
     parsed = await asyncio.to_thread(feedparser.parse, resp.content)

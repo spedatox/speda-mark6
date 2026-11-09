@@ -32,6 +32,7 @@ async def test_automatic_terminal_capture_and_agent_report(tmp_path, memory):
     assert "secret" not in terminal["facts"]
     facts = json.loads(terminal["facts"])
     assert (facts["agent"], facts["code"], facts["ended_turn"]) == ("ultron", "interrupted", True)
+    assert facts["diagnostic_message"] == "[redacted]" and facts["started_at"]
     protocol.journal.transition(terminal["id"], "pending", "sent")
 
     async with aclosing(orchestrator.run(context)) as events:
@@ -113,3 +114,17 @@ async def test_docker_replay_and_secret_bearing_log(tmp_path):
         facts = [json.loads(row[0]) for row in db.execute("SELECT facts FROM incidents ORDER BY timestamp")]
     assert [f["event"] for f in facts] == ["service_unexpected_exit", "runtime_log"]
     assert "secret-value" not in json.dumps(facts)
+
+
+def test_diagnostic_details_keep_only_bounded_evidence():
+    from app.services.incident_details import clean_message, log_details
+    from app.services.damage_control import tool_error_details
+
+    assert log_details("news_feed_failed", {
+        "outlet": "Example", "url": "https://user:password@feed.test/news?token=secret",
+        "error": "Client error '429 Too Many Requests'", "payload": "private",
+    }) == {"outlet": "Example", "feed_host": "feed.test", "http_status": 429}
+    assert clean_message("Bearer private-value at https://user:pw@api.test/x?secret=x") == "[redacted] at api.test"
+    assert tool_error_details('{"status":"failed","detail":"Search exceeded deadline"}') == {
+        "tool_status": "failed", "diagnostic_message": "Search exceeded deadline",
+    }

@@ -2,11 +2,21 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
+from pydantic import BaseModel, Field, StringConstraints
 
 from app.services.incident_journal import JournalView
 
 router = APIRouter(prefix="/iacon/hall-of-records/incidents", tags=["iacon"])
 IncidentId = Annotated[str, Path(pattern=r"^[a-f0-9]{32}$")]
+Severity = Literal["critical", "error", "warning", "test"]
+
+
+class BulkExport(BaseModel):
+    ids: list[Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{32}$")]] | None = Field(
+        default=None, min_length=1, max_length=1000)
+    reviewed: bool = False
+    severity: Severity | None = None
+    q: str = Field("", max_length=120)
 
 
 def view(request: Request):
@@ -24,10 +34,24 @@ def found(record):
 
 @router.get("")
 def list_incidents(response: Response, journal: Annotated[JournalView, Depends(view)],
-                   reviewed: bool = False, severity: Literal["critical", "error", "warning", "test"] | None = None,
+                   reviewed: bool = False, severity: Severity | None = None,
                    q: str = Query("", max_length=120), offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100)):
     response.headers["Cache-Control"] = "no-store"
     return journal.list(reviewed=reviewed, severity=severity, search=q.strip().lower(), limit=limit, offset=offset)
+
+
+@router.post("/export")
+def bulk_export(body: BulkExport, journal: Annotated[JournalView, Depends(view)]):
+    try:
+        pdf = journal.bulk_pdf(ids=body.ids, reviewed=body.reviewed, severity=body.severity,
+                               search=body.q.strip().lower())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if pdf is None:
+        raise HTTPException(404, "No incidents match this export")
+    return Response(pdf, media_type="application/pdf", headers={
+        "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="damage-control-journal.pdf"',
+    })
 
 
 @router.get("/{identity}")
