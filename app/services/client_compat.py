@@ -126,7 +126,8 @@ class ClientCompatibility:
         _, spending = await self.coordinator.budget.policy(owner)
         if spending.paused:
             raise CoordinationError("budget_paused", "Configure and unpause the coordination budget before paid work")
-        await self.coordinator.preflight_shared_spending(owner, aid, body, images=bool(body.attachments))
+        addressed = self.coordinator.input_agent(aid, body.addressed_agent_id, body.message)
+        await self.coordinator.preflight_shared_spending(owner, addressed, body, images=bool(body.attachments))
         project_id=await self.selected_project(owner,body,presentation_id)
         if project_id and self.coordinator.projects:
             async with self.sessions() as db:
@@ -210,6 +211,11 @@ class ClientCompatibility:
                             original = next((m for m in reversed(visible) if m.role == 'user' and self.text(m.content)), None)
                             if original is None:
                                 raise CoordinationError('regenerate_empty', 'No owner message remains to regenerate', 422)
+                            if not prepared and isinstance(original.content, list) and any(
+                                block.get('type') == 'image' for block in original.content
+                            ):
+                                replay_agent = self.coordinator.input_agent(aid, body.addressed_agent_id, self.text(original.content))
+                                await self.coordinator.preflight_shared_spending(owner, replay_agent, body, images=True, db=db)
                             replay_id = original.id
                     if replay_id:
                         db.add(ClientReplay(user_id=owner, request_id=request_id, message_id=replay_id))

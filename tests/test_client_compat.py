@@ -341,6 +341,75 @@ async def test_client_attachments_native_images_and_evidence_separation(memory):
     await bits.coordinator.shutdown()
 
 
+@pytest.mark.parametrize("structured", [False, True])
+@pytest.mark.parametrize(("vision_model", "wire_key"), [
+    ("openai:gpt-6.1-terra", "input_image"),
+    ("zai:glm-5.3-flash", "image_url"),
+    ("zai:glm-5.3-flashx", "image_url"),
+])
+async def test_image_rejection_retry_and_model_switch(memory, structured, vision_model, wire_key):
+    from base64 import b64encode
+    from io import BytesIO
+    from httpx import ASGITransport, AsyncClient
+    from PIL import Image
+    from app.main import create_app
+    from app.schemas.coordination import Price
+    from app.services.llm_protocol import request_body
+
+    buffer = BytesIO()
+    Image.new("RGB", (32, 32), "blue").save(buffer, format="PNG")
+    image = {"media_type": "image/png", "data": b64encode(buffer.getvalue()).decode()}
+    text_model = "zai:glm-5.3"
+    bits = await setup(memory, [reply("Blue square"), reply("Image replay"), reply("Text follow-up"), reply("Still blue")])
+    version, spending = await bits.budget.policy(1)
+    spending.prices[text_model] = Price(microdollars_per_token=1)
+    spending.prices[vision_model] = Price(microdollars_per_token=1, image_token_ceiling=10000)
+    await bits.budget.save(1, version, spending)
+    app = create_app()
+    app.state.client_compat = ClientCompatibility(bits.coordinator)
+    headers = {"X-API-Key": "test-only-key"}
+    if structured:
+        headers["X-Chat-Format"] = "room-v1"
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as http:
+            body = {"message": "Read the image", "model": text_model,
+                    "attachments": [image], "request_id": str(uuid4())}
+            rejected = await http.post("/chat/ultron", json=body)
+            assert rejected.status_code == 422
+            assert "Select a model with vision" in rejected.text
+            assert not bits.client.calls
+            assert (await http.get("/sessions", params={"agent_id": "ultron"})).json() == []
+
+            accepted = await http.post("/chat/ultron", json={**body, "model": vision_model})
+            assert accepted.status_code == 200 and "Blue square" in accepted.text
+            session_id = (await http.get("/sessions", params={"agent_id": "ultron"})).json()[0]["id"]
+            replay = {"session_id": session_id, "message": "", "keep_messages": 1, "regenerate": True}
+            rejected_replay = await http.post("/chat/ultron", json={**replay, "model": text_model})
+            assert rejected_replay.status_code == 422
+            transcript = await app.state.client_compat.messages(1, session_id, structured=structured)
+            assert transcript[1]["content"] == "Blue square"
+            accepted_replay = await http.post("/chat/ultron", json={**replay, "model": vision_model})
+            assert accepted_replay.status_code == 200 and "Image replay" in accepted_replay.text
+
+            followup = {"session_id": session_id, "message": "Continue"}
+            text = await http.post("/chat/ultron", json={**followup, "model": text_model})
+            assert text.status_code == 200 and "Text follow-up" in text.text
+            vision = await http.post("/chat/ultron", json={**followup, "model": vision_model})
+            assert vision.status_code == 200 and "Still blue" in vision.text
+            transcript = await app.state.client_compat.messages(1, session_id, structured=structured)
+            assert transcript[0]["images"][0].startswith("data:image/png;base64,")
+
+        initial_call, replay_call, text_call, vision_call = bits.client.calls
+        assert "[Image attachment unavailable to this model.]" in json.dumps(text_call["messages"])
+        for call in (initial_call, replay_call, vision_call):
+            wire = request_body(call["policy"], call["system"], call["messages"], [], 1024)
+            assert f'"type": "{wire_key}"' in json.dumps(wire)
+        wire = request_body(text_call["policy"], text_call["system"], text_call["messages"], [], 1024)
+        assert "data:image" not in json.dumps(wire)
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_edit_and_regenerate_preserve_originals_and_do_not_repeat_evidence(memory):
     from app.models.memory_serving import MemoryChange
     bits = await setup(memory, [reply('First answer'), reply('Better answer'), reply('Edited answer')])
