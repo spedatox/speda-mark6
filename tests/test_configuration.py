@@ -33,21 +33,28 @@ def test_catalog_covers_every_actual_setting_once():
 async def test_atomic_settings_save_cas_clear_reset_and_startup_precedence(tmp_path,monkeypatch):
     service=configuration(tmp_path,openai_api_key='deployment-secret')
     value={'openai_api_key':'new-private-secret','owner_home_lat':41.23,'news_poll_enabled':False,'telegram_bot_tokens':'{"sentinel":"fixture-token"}'}
+    value['optimus_github_workspace_token']='new-optimus-token'
     saved=await service.save(value,0,'save-one')
     assert saved['revision']==1 and not saved['applied_live'] and 'openai_api_key' in saved['restart_required']
+    assert 'optimus_github_workspace_token' in saved['restart_required']
     encoded=json.dumps(service.snapshot())
+    assert 'new-optimus-token' not in encoded
     assert 'new-private-secret' not in encoded and 'fixture-token' not in encoded and 'deployment-secret' not in encoded
     assert (await service.save(value,0,'save-one'))['duplicate']
     with pytest.raises(CoordinationError): await service.save({'debug':True},0,'stale')
     monkeypatch.setenv('SPEDA_DATA_DIR',str(tmp_path)); monkeypatch.setenv('OPENAI_API_KEY','environment-secret')
+    monkeypatch.setenv('OPTIMUS_GITHUB_WORKSPACE_TOKEN','deployment-optimus-token')
     fresh=Settings(_env_file=None)
+    assert fresh.optimus_github_workspace_token.get_secret_value()=='new-optimus-token'
     assert fresh.openai_api_key=='new-private-secret' and fresh.owner_home_lat==41.23 and fresh.news_poll_enabled is False
     assert Settings(_env_file=None,openai_api_key='explicit-init').openai_api_key=='explicit-init'
     fresh_service=Configuration(fresh,store=service.store)
     assert not fresh_service.snapshot()['restart_required']
-    await fresh_service.save({'openai_api_key':''},1,'clear')
+    await fresh_service.save({'openai_api_key':'','optimus_github_workspace_token':''},1,'clear')
     assert Settings(_env_file=None).openai_api_key==''
-    await fresh_service.save({},2,'reset',reset=['openai_api_key'])
+    assert Settings(_env_file=None).optimus_github_workspace_token.get_secret_value()==''
+    await fresh_service.save({},2,'reset',reset=['openai_api_key','optimus_github_workspace_token'])
+    assert Settings(_env_file=None).optimus_github_workspace_token.get_secret_value()=='deployment-optimus-token'
     assert Settings(_env_file=None).openai_api_key=='environment-secret'
     assert 'openai_api_key' in fresh_service.snapshot()['restart_required']
     assert (tmp_path/'configuration-history'/'revision-1.json').exists()

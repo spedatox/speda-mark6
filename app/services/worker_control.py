@@ -369,7 +369,7 @@ class WorkerControl:
             'last_sequence':snapshot['last_sequence'],'next_cursor':events[-1].sequence if events else after}
 
     async def subscribe(self, owner, execution_id, after=0):
-        while True:
+        while not self.coordinator.restarting:
             page = await self.events(owner,execution_id,after)
             for payload in page['events']:
                 yield 'data: ' + json.dumps({'type':'subagent','data':payload,'session_id':page['execution']['session_id'],
@@ -384,8 +384,7 @@ class WorkerControl:
                     'phase':'executor_unavailable','status':'unknown'},'request_id':execution_id}) + '\n\n'
                 return
             try:
-                async with self.coordinator._changed:
-                    await asyncio.wait_for(self.coordinator._changed.wait(),1)
+                await self.coordinator.wait_for_event(1)
             except TimeoutError:
                 yield ': keepalive\n\n'
 
@@ -460,7 +459,7 @@ class WorkerControl:
     async def subscribe_session(self, owner, session_id, after=0):
         """One connection for all room workers, independent of public reply streams."""
         room_id = await self.session_room(owner, session_id)
-        while True:
+        while not self.coordinator.restarting:
             page = await self.coordinator.events(owner, room_id, after)
             from app.models.client_compat import HiddenMessage
             async with self.sessions() as db:
@@ -486,8 +485,7 @@ class WorkerControl:
             if page['events']:
                 continue
             try:
-                async with self.coordinator._changed:
-                    await asyncio.wait_for(self.coordinator._changed.wait(), 1)
+                await self.coordinator.wait_for_event(1)
             except TimeoutError:
                 yield ': keepalive\n\n'
 

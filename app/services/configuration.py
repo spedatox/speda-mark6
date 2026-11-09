@@ -7,7 +7,7 @@ import math
 from uuid import uuid4
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
-from pydantic import TypeAdapter,ValidationError
+from pydantic import SecretStr,TypeAdapter,ValidationError
 from sqlalchemy.exc import ArgumentError
 from app.config import Settings,DeploymentSettings
 from app.config_schema import catalog,secret_field
@@ -15,12 +15,16 @@ from app.services.config_store import ConfigStore,ConfigConflict,ConfigUnavailab
 from app.services.coordination_budget import CoordinationError
 
 
+def _config_value(value):
+    return value.get_secret_value() if isinstance(value, SecretStr) else value
+
+
 class Configuration:
     def __init__(self,settings,*,store=None,instance_id=None):
         self.settings,self.store=settings,store or ConfigStore()
-        self.running=settings.model_dump()
+        self.running={key:_config_value(value) for key,value in settings.model_dump().items()}
         self.boot_overrides=set(self.store.read()['values'])
-        self.deployment=DeploymentSettings().model_dump()
+        self.deployment={key:_config_value(value) for key,value in DeploymentSettings().model_dump().items()}
         self.instance_id=instance_id or uuid4().hex
 
     def desired(self,state):
@@ -58,7 +62,7 @@ class Configuration:
             try:
                 field=Settings.model_fields[key]
                 schema=field.annotation
-                value=TypeAdapter(schema).validate_python(raw)
+                value=_config_value(TypeAdapter(schema).validate_python(raw))
                 if isinstance(value,float) and not math.isfinite(value): raise ValueError()
                 if isinstance(value,str) and (len(value.encode())>64000 or '\x00' in value): raise ValueError()
                 if isinstance(value,str) and value and key.endswith(('_url','_redirect')) and key!='database_url':

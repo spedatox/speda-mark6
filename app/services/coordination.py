@@ -54,6 +54,11 @@ class Coordinator:
         async with self._changed:
             self._changed.notify_all()
 
+    async def wait_for_event(self, timeout):
+        async with self._changed:
+            if not self.restarting:
+                await asyncio.wait_for(self._changed.wait(), timeout)
+
     async def owned_room(self, db, owner, room_id, *, lock=False):
         if lock:
             await db.execute(update(Room).where(Room.id == room_id, Room.user_id == owner)
@@ -128,7 +133,7 @@ class Coordinator:
                 "next_cursor": rows[-1].sequence if rows else after}
 
     async def subscribe(self, owner, room_id, after=0):
-        while True:
+        while not self.restarting:
             page = await self.events(owner, room_id, after)
             for event in page["events"]:
                 after = event["sequence"]
@@ -136,8 +141,7 @@ class Coordinator:
             if page["events"]:
                 continue
             try:
-                async with self._changed:
-                    await asyncio.wait_for(self._changed.wait(), 10)
+                await self.wait_for_event(10)
             except TimeoutError:
                 yield ": keepalive\n\n"
 

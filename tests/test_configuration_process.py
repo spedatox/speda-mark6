@@ -1,7 +1,9 @@
 """Disposable backend children only; never connects to an existing backend."""
+from contextlib import ExitStack, closing
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -38,19 +40,32 @@ def test_managed_child_restart_persists_settings_and_changes_instance(tmp_path):
         child=launch(); first=ready()
         snapshot=client.get('/config').json()
         response=client.put('/config',json={'expected_revision':snapshot['revision'],'request_id':'persist',
-            'values':{'owner_timezone':'UTC','news_quota_digest':17}})
+            'values':{'owner_timezone':'UTC','news_quota_digest':17,
+                      'optimus_github_workspace_token':'fixture-github-token'}})
         assert response.status_code==200,response.text
         revision=response.json()['revision']
         assert response.json()['restart_required']
         restart={'expected_revision':revision,'request_id':'restart-fixture'}
-        assert client.post('/config/restart',json=restart).status_code==202
-        assert child.wait(timeout=35)==75
+        room = client.post('/coordination/rooms', json={'title': 'Restart fixture', 'lead': 'optimus'})
+        assert room.status_code == 201, room.text
+        room_id = room.json()['id']
+        with closing(sqlite3.connect(tmp_path/'fixture.db')) as db:
+            session_id, = db.execute('SELECT session_id FROM coord_rooms WHERE id = ?', (room_id,)).fetchone()
+        # These read-only subscriptions stay open while the owner uses Settings.
+        with ExitStack() as streams:
+            for path in (f"/coordination/rooms/{room_id}/stream",
+                         f"/legion/sessions/{session_id}/attach"):
+                response = streams.enter_context(client.stream('GET', path))
+                assert response.status_code == 200
+            assert client.post('/config/restart',json=restart).status_code==202
+            assert child.wait(timeout=8)==75
         child=launch(); second=ready()
         assert first!=second
         fresh=client.get('/config').json()
         assert fresh['revision']==revision and not fresh['restart_required']
         fields={f['key']:f for g in fresh['groups'] for f in g['fields']}
         assert fields['owner_timezone']['value']=='UTC' and fields['news_quota_digest']['value']==17
+        assert fields['optimus_github_workspace_token']['is_set']
         # A lost-response retry after boot must not start another restart.
         result=client.post('/config/restart',json=restart)
         assert result.status_code==202 and result.json()['status']=='already_restarted'
