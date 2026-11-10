@@ -40,9 +40,16 @@ function cells(line: string): string[] {
 export function parseTable(raw: string): TableData | null {
   const lines = raw.trim().split('\n').map(s => s.trim()).filter(Boolean)
   if (lines.length < 2 || !lines.every(s => s.includes('|'))) return null
-  const [headers, ...body] = lines.map(cells)
+  const headers = cells(lines[0])
   if (headers.length < 2) return null
-  const rows = body.filter(row => !row.every(s => /^:?-{3,}:?$/.test(s)))
+  const rows = lines.slice(1).map(line => {
+    const row = cells(line)
+    if (row.length <= headers.length) return row
+    // Recover an unescaped pipe in notation like P(A | B) only if it fixes the width.
+    const repaired = line.replace(/\([^()]*\)/g, group => group.replace(/(?<!\\)\|/g, '\\|'))
+    const repairedRow = cells(repaired)
+    return repairedRow.length === headers.length ? repairedRow : row
+  }).filter(row => !row.every(s => /^:?-{3,}:?$/.test(s)))
   if (!rows.length || rows.some(row => row.length !== headers.length)) return null
   return { headers, rows }
 }

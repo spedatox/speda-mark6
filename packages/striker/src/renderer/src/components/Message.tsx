@@ -654,7 +654,7 @@ const mdComponents: any = {
       // The presentation kinds. They exist for voice mode's board, but an agent
       // can write one in an ordinary reply and before this they fell through to
       // the code block — a dossier arriving as raw text with colons in it.
-      if (BOARD_KINDS.has(lang as PanelKind)) {
+      if (lang === 'table' || BOARD_KINDS.has(lang as PanelKind)) {
         return (
           <ErrorBoundary label={lang.toUpperCase()}>
             <BoardChatBlock kind={lang as PanelKind} source={code} />

@@ -5,9 +5,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
-function load(name) {
+function load(name, client = 'heartbreaker') {
   const exports = {}
-  const source = fs.readFileSync(path.join(__dirname, '../src/renderer/src/lib', name + '.ts'), 'utf8')
+  const source = fs.readFileSync(path.join(__dirname, '../..', client, 'src/renderer/src/lib', name + '.ts'), 'utf8')
   const requireRaw = specifier => ({
     default: fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/lib', specifier.replace(/\?raw$/, '')), 'utf8'),
   })
@@ -36,6 +36,23 @@ test('tables preserve code-span pipes, escaped pipes, alignment and empty cells'
   assert.equal(parseTable('A | B\nonly one'), null)
   assert.equal(parseTable('A | B\n--- | ---'), null)
 })
+test('canvas tables keep conditional probability notation and all three cells', () => {
+  const raw = '| Question | Setup | Answer |\n|---|---|---|\n| P(2nd King | 1st was King) | 3 kings left, 51 cards | 3/51 = 1/17 |'
+  const expected = [['P(2nd King | 1st was King)', '3 kings left, 51 cards', '3/51 = 1/17']]
+  const { splitPanels } = load('voicePanels')
+  const [panel] = splitPanels('```table | Worked example: decks and dice logic\n' + raw + '\n```')
+  assert.equal(panel.kind, 'table')
+  assert.deepEqual(plain(parseTable(panel.source).rows), expected)
+
+  const { repairTablePipes } = load('voicePanels', 'striker')
+  const escaped = raw.replace('King | 1st', 'King \\| 1st')
+  assert.equal(repairTablePipes(raw), escaped)
+  assert.equal(repairTablePipes(escaped), escaped)
+  const valid = '| Left | Right |\n|---|---|\n| (1 | 2) |'
+  assert.equal(repairTablePipes(valid), valid)
+  assert.deepEqual(plain(parseTable(valid).rows), [['(1', '2)']])
+})
+
 test('recovers timeline marker and keeps time/date punctuation intact', () => {
   const block = recoverRichBlock('text', 'timeline | REST OF TONIGHT\n14:30 — Food\n2026-10-27 — Meeting\n~05:00 – Rest')
   assert.equal(block.title, 'REST OF TONIGHT')

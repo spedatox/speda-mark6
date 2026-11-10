@@ -264,6 +264,22 @@ export function splitPanels(text: string): VoicePanel[] {
   return out
 }
 
+/** Preserve conditional notation in over-wide rows before remark-gfm truncates them. */
+export function repairTablePipes(source: string): string {
+  const lines = source.split('\n')
+  const width = (line: string) => (line.trim().replace(/^\||(?<!\\)\|$/g, '').match(/(?<!\\)\|/g)?.length ?? 0) + 1
+  const columns = width(lines[0])
+  const delimiter = lines[1]?.trim().replace(/^\||\|$/g, '')
+  if (columns < 2 || !delimiter || width(lines[1]) !== columns ||
+      !delimiter.split('|').every(cell => /^:?-+:?$/.test(cell.trim()))) return source
+
+  return lines.map((line, i) => {
+    if (i < 2 || width(line) <= columns) return line
+    const repaired = line.replace(/\([^()]*\)/g, group => group.replace(/(?<!\\)\|/g, '\\|'))
+    return width(repaired) === columns ? repaired : line
+  }).join('\n')
+}
+
 /** Kinds whose renderer parses the body itself and must not see fences. */
 const RAW_BODY = new Set<PanelKind>([
   'stat', 'image', 'article', 'card', 'timeline', 'quote',

@@ -35,6 +35,7 @@ Use these exact renderer formats (each fence starts and ends on its own line):
   For pie use data [{"label":"Meaning","value":1}]. Include units and distinguish
   illustrative numbers from measured evidence. Prefer native charts for data.
 - `table | Descriptive title`: Markdown pipe table with a header separator.
+  Escape a literal pipe inside a cell as \|, for example P(A \| B).
   Use for comparisons, calculations and example inputs/outputs, not as a catch-all.
 - `math | Descriptive title`: LaTeX without surrounding dollar delimiters for
   equations and worked derivations. Explain what each symbol means in the narration.

@@ -74,6 +74,27 @@ object MarkdownPrep {
     /* ── Table leniency (no TS counterpart — see ProseText) ──────────────── */
 
     private val DELIM_CELL = Regex(":?-+:?")
+    private val OUTER_PIPE = Regex("""^\||(?<!\\)\|$""")
+    private val CELL_PIPE = Regex("""(?<!\\)\|""")
+    private val PARENTHETICAL = Regex("""\([^()]*\)""")
+
+    /** Preserve conditional notation in over-wide rows before CommonMark truncates them. */
+    fun repairTablePipes(source: String): String {
+        fun width(line: String) = CELL_PIPE.findAll(OUTER_PIPE.replace(line.trim(), "")).count() + 1
+
+        val lines = source.lines()
+        val columns = width(lines.first())
+        val delimiter = lines.getOrNull(1) ?: return source
+        if (columns < 2 || width(delimiter) != columns || !isDelimiterRow(delimiter)) return source
+
+        return lines.mapIndexed { index, line ->
+            if (index < 2 || width(line) <= columns) return@mapIndexed line
+            val repaired = PARENTHETICAL.replace(line) { group ->
+                CELL_PIPE.replace(group.value) { """\|""" }
+            }
+            if (width(repaired) == columns) repaired else line
+        }.joinToString("\n")
+    }
 
     /** A line the GFM table parser would take as a row: leading pipe, and one more. */
     private fun isPipeRow(line: String): Boolean {

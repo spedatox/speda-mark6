@@ -47,6 +47,41 @@ async def test_sdk_discovery_structured_resources_namespace_and_authority(memory
     assert not client._connected and client._task.done()
 
 
+async def test_calendar_search_prefers_event_reader_and_respects_owner_grant(memory):
+    from app.mcp.google_rest import GoogleRestClient, _CALENDAR_TOOLS
+    from app.skills.schedule import ReadScheduleSkill
+
+    class Token:
+        async def get(self):
+            return "fixture"
+
+    async def calendar(name, args, token):
+        assert name == "calendar_list_events"
+        assert args["query"] == "midterm"
+        return "EXAM — MIS 215 Statistics I"
+
+    client = GoogleRestClient("google_calendar", _CALENDAR_TOOLS, calendar, Token())
+    client.allowed_agents = {"ultron"}
+    registry = CapabilityRegistry(memory.sessions)
+    try:
+        await registry.register_skill(ReadScheduleSkill())
+        await registry.register_mcp(client)
+        ctx = memory.context(agent_id="ultron")
+        schedule = registry.search_tools("read_schedule calendar exams midterms", ctx)
+        assert schedule[0]["name"] == "read_schedule"
+        for query in ("calendar_list_events", "google calendar list events"):
+            name = registry.search_tools(query, ctx)[0]["name"]
+            assert name.startswith("mcp_google_calendar_calendar_list_events_")
+        ctx.extra["loaded_tools"] = {name}
+        result = await registry.execute_recorded(Block(id="exam-read", name=name, input={"query": "midterm"}), ctx)
+        assert result == "EXAM — MIS 215 Statistics I"
+        other = memory.context(agent_id="ultron", user_id=2)
+        assert all(not tool["name"].startswith("mcp_google_calendar_")
+                   for tool in registry.search_tools("calendar_list_events", other))
+    finally:
+        await registry.shutdown_adapters()
+
+
 async def test_untrusted_read_annotation_cannot_authorize_worker(memory):
     server = MCPServer("untrusted")
     @server.tool(annotations=ToolAnnotations(read_only_hint=True))

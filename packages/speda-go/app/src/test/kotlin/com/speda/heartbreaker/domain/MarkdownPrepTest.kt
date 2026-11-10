@@ -58,6 +58,21 @@ class MarkdownPrepTest {
         }
     }
 
+    @Test
+    fun repairs_conditional_probability_in_over_wide_table_rows() {
+        val raw = """
+            | Question | Setup | Answer |
+            |---|---|---|
+            | P(2nd King | 1st was King) | 3 kings left, 51 cards | 3/51 = 1/17 |
+        """.trimIndent()
+        val escaped = raw.replace("King | 1st", """King \| 1st""")
+        assertEquals(escaped, MarkdownPrep.repairTablePipes(raw))
+        assertEquals(escaped, MarkdownPrep.repairTablePipes(escaped))
+
+        val valid = "| Left | Right |\n|---|---|\n| (1 | 2) |"
+        assertEquals(valid, MarkdownPrep.repairTablePipes(valid))
+    }
+
     /* ── stitchTables — Android-only, no TS counterpart to gate against ───── */
 
     @Test

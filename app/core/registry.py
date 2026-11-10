@@ -239,12 +239,18 @@ class CapabilityRegistry:
         terms = set(re.findall(r"\w+", query.casefold()))
         ranked = []
         for definition in self.list_tools(context, include_deferred=True):
-            skill = self._skills.get(definition["name"])
-            words = f"{definition['name']} {definition['description']} {getattr(skill, 'search_keywords', '')}".casefold()
+            name = definition["name"]
+            skill = self._skills.get(name)
+            original = self._mcp_original_names.get(name, name)
+            identities = {name.casefold(), original.casefold()}
+            exact = len(terms & identities)
+            name_words = set(re.findall(r"[a-z0-9]+", f"{name} {original}".casefold()))
+            name_matches = len(terms & name_words)
+            words = f"{name} {original} {definition['description']} {getattr(skill, 'search_keywords', '')}".casefold()
             score = sum(term in words for term in terms)
             if score:
-                ranked.append((score, definition))
-        return [definition for _, definition in sorted(ranked, key=lambda x: (-x[0], x[1]['name']))[:5]]
+                ranked.append(((-exact, -name_matches, -score, name), definition))
+        return [definition for _, definition in sorted(ranked, key=lambda item: item[0])[:5]]
 
     def call_is_read_only(self, name, args):
         skill = self._skills.get(name)

@@ -8,6 +8,7 @@ class ToolSearchSkill(Skill):
     description = (
         "Finds authorized domain tools by name or purpose and loads their schemas for this turn. "
         "Use it when the requested capability is in the available domain index but its schema is absent. "
+        "Pass the exact tool name when known, such as calendar_list_events for reading events. "
         "Do not use it for remembering personal history; use injected memory or memory_lookup. "
         "Returns up to five matching tool definitions; it never executes them or grants new permissions."
     )

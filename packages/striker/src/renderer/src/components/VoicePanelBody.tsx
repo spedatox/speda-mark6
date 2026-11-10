@@ -5,7 +5,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { TextSegment } from './Message'
 import { loadBoardImage } from '../lib/voice'
 import { ChatContext } from '../store/chat'
-import { FRAMED, type PanelKind, type VoicePanel } from '../lib/voicePanels'
+import { FRAMED, repairTablePipes, type PanelKind, type VoicePanel } from '../lib/voicePanels'
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -357,10 +357,10 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
       ? <Custom src={panel.source} />
       : (
         <div className="prose" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>
-          <TextSegment text={panel.source} />
+          <TextSegment text={panel.kind === 'table' ? repairTablePipes(panel.source) : panel.source} />
         </div>
       )),
-    [Custom, panel.source],
+    [Custom, panel.kind, panel.source],
   )
 
   return (

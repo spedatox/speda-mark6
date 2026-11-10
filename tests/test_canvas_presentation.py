@@ -27,6 +27,10 @@ def test_all_agents_get_visual_first_canvas_only_when_selected():
     for requirement in ('6–10 purposeful panels', 'worked', 'sliders', 'misconception', 'wait; adapt'):
         assert requirement in tutoring
     assert "Spader's cadence" in tutoring
+    assert r"P(A \| B)" in tutoring
+    normal = profiles.build(profiles.require('ultron').snapshot(), variables)
+    assert 'use the\nlive calendar before asking the owner for dates' in normal
+    assert '`calendar_list_events` with `tool_search` by its exact name' in normal
     assert 'CANVAS MODE IS ACTIVE' not in profiles.build_worker({**variables, 'canvas': True})
 
 

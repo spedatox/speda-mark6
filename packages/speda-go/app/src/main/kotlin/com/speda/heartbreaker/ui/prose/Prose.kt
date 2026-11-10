@@ -241,7 +241,7 @@ fun FenceBlock(language: String, code: String) {
         // named a renderer nothing claims, so every one of them fell through to
         // the code block and arrived as raw pipes with a Copy button. Handed
         // back to the markdown pipeline it is the table it always was.
-        lang == "table" -> ProseText(code)
+        lang == "table" -> ProseText(MarkdownPrep.repairTablePipes(code))
         lang == "chart" -> ChartBlock(code)
         lang == "calendar" -> CalendarBlock(code)
         lang == "map" -> MapBlock(code)
