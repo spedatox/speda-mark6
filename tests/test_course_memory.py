@@ -70,3 +70,38 @@ async def test_course_reads_disambiguate_terms_page_content_and_respect_evidence
     async with memory.sessions() as db:
         context.db = db
         assert json.loads(await skill.execute(args, context)) == {"status": "withdrawn"}
+
+
+async def test_course_name_uses_timetable_and_archive_heading(memory):
+    from app.models.academic import CourseSlot
+    from app.services.iacon_catalogue import Catalogue
+
+    catalogue = Catalogue(memory.store)
+    skill = ReadCourseMemorySkill(catalogue)
+    term = "2026-2027-fall"
+    text = "# MIS243 — Financial Accounting\n\n## Overview\n\nCourse name is General Accounting."
+    saved = await save_course(memory, catalogue, term, text, code="MIS243")
+    older = await save_course(memory, catalogue, "2025-2026-fall", text, code="MIS243")
+    await save_course(memory, catalogue, term, "# MIS215 — General Accounting", code="MIS215", owner=2)
+    await save_course(memory, catalogue, term, "# MIS251 — Marketing\n\nGeneral Accounting notes.", code="MIS251")
+
+    async with memory.sessions() as db:
+        db.add_all([
+            CourseSlot(slot_id=f"mis243-{hour}", code="MIS 243", name="General Accounting",
+                       day_of_week="MONDAY", start_time=f"{hour}:00", end_time=f"{hour}:50")
+            for hour in (10, 11)
+        ])
+        await db.commit()
+        context = memory.context(agent_id="ultron")
+        context.db = db
+        args = {"course_name": "  GENERAL   ACCOUNTING  "}
+        listing = json.loads(await skill.execute(args, context))
+        assert listing["status"] == "select_term"
+        assert [record["record_id"] for record in listing["records"]] == [saved["id"], older["id"]]
+        result = json.loads(await skill.execute({**args, "term": term}, context))
+        assert result["status"] == "found"
+        assert result["record_id"] == saved["id"]
+        assert result["text"] == text
+        result = json.loads(await skill.execute({"course_name": "Financial Accounting", "term": term}, context))
+        assert result["record_id"] == saved["id"]
+        assert json.loads(await skill.execute({"course_name": "Accounting"}, context))["status"] == "no_matches"

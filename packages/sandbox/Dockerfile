@@ -36,7 +36,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get install -y --no-install-recommends \
         # Everyday shell and source-control tools.
         curl wget git openssh-client jq ripgrep fd-find \
-        file less nano vim-tiny unzip zip \
+        file less nano vim-tiny unzip zip poppler-utils \
         # Build, Python, JavaScript, Go, and local-data essentials.
         build-essential pkg-config make cmake \
         python3 python3-pip python3-venv python-is-python3 pipx golang-go \
