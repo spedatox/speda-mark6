@@ -1,4 +1,4 @@
-"""Owner-scoped operational diagnostics over the local Docker Engine and journal."""
+"""Orion host maintenance and operational diagnostics."""
 
 import asyncio
 import json
@@ -6,6 +6,7 @@ import re
 
 import httpx
 
+from app.services.host_operations import host_operation
 from app.skills.base import Skill
 
 
@@ -17,24 +18,33 @@ _SERVICE_NAME = re.compile(
 class SystemOpsSkill(Skill):
     name = "system_ops"
     deferred = True
-    read_only = True
+    read_only = False
     memoize = False
     restricted_to = frozenset({"orion"})
     search_keywords = "host server system operations Docker service status incidents health maintenance"
     description = (
-        "Inspect Mark VI host capacity, SPEDA service states and recorded service incidents. "
-        "Use it for an owner-requested check of container health, the Docker host or a recent outage. "
-        "Use system_info for disk, available memory and uptime readings from the backend runtime. "
-        "Returns bounded read-only data. It cannot run commands or change services."
+        "Maintain the actual Mark VI server for the owner. Use exec for host shell commands and read_file "
+        "for accessible files. Use write_file for files under /var/lib/speda-orion-ops/workspace. "
+        "Use services, incidents and service_logs to diagnose problems and restart_service for a named service "
+        "when the owner asks or delegates the repair. For app restart, give the owner the operation ID and finish "
+        "the turn. Confirm a scheduled or uncertain result with operation_status before repeating an operation."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["status", "services", "incidents"],
+                "enum": ["status", "services", "incidents", "exec", "read_file", "write_file",
+                         "service_logs", "restart_service", "operation_status"],
                 "default": "status",
             },
+            "command": {"type": "string", "minLength": 1, "maxLength": 4000},
+            "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "content": {"type": "string", "maxLength": 16000},
+            "timeout": {"type": "integer", "minimum": 1, "maximum": 40, "default": 20},
+            "service": {"type": "string", "enum": ["app", "n8n", "caddy", "sandbox",
+                        "browser", "playwright-mcp", "hisar", "orion-spark"]},
+            "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
         },
         "additionalProperties": False,
     }
@@ -59,7 +69,8 @@ class SystemOpsSkill(Skill):
                                              severity="critical", search="service_", limit=10, offset=0)
             return json.dumps({"status": "ok", **report}, ensure_ascii=False)
         if action not in {"status", "services"}:
-            return json.dumps({"status": "denied", "reason": "Unknown System Ops action."})
+            response = await host_operation(args, context)
+            return json.dumps(response, ensure_ascii=False)
         try:
             async with asyncio.timeout(4), httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(uds="/var/run/docker.sock"),

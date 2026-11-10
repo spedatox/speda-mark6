@@ -1,0 +1,15 @@
+[Unit]
+Description=SPEDA Orion host maintenance broker
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/libexec/speda-orion-host-ops serve
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
