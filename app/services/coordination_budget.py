@@ -139,7 +139,10 @@ class CoordinationBudget:
             if price:
                 tokens += price.extra_output_ceiling + images * price.image_token_ceiling
             cost = math.ceil(tokens * price.microdollars_per_token) if price else 0
-            if (run.calls + 1 > fixed.run.calls or run.tokens + tokens > fixed.run.tokens or
+            call_cap_exceeded = (
+                not run.policy.get("shared_call_cap_exempt", False) and run.calls + 1 > fixed.run.calls
+            )
+            if (call_cap_exceeded or run.tokens + tokens > fixed.run.tokens or
                     (fixed.enforce_limits and run.microdollars + cost > fixed.run.microdollars)):
                 raise CoordinationError("run_budget", "The shared run budget is exhausted")
             active = await db.scalar(select(func.count()).select_from(ModelCallReceipt).where(

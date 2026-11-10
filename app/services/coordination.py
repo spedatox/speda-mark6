@@ -329,6 +329,7 @@ class Coordinator:
                 policy={"revision": revision, "document": document.model_dump(mode="json"),
                     "model": body.model, "thinking": body.thinking.model_dump() if body.thinking else None,
                     "output_tokens": self.policy.settings.chat_max_output_tokens,
+                    "shared_call_cap_exempt": self.profiles.require(aid).shared_call_cap_exempt,
                     'origin':origin, 'output_mode':output_mode, 'trigger_payload':trigger_payload or {}},
                 limits=spending.model_dump(), deadline=time.time() + spending.run.seconds)
             db.add(run)

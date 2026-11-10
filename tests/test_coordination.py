@@ -45,7 +45,7 @@ class ScriptedClient:
         yield ReplayStream(payload, result.policy)
 
 
-async def setup(memory, script, *, contributions=6, calls=16):
+async def setup(memory, script, *, contributions=6, calls=16, tokens=2000000):
     config = Settings(_env_file=None, chat_max_output_tokens=1024)
     base, profiles = SPEDAProfile(), ProfileRegistry()
     policy = ModelPolicy(memory.sessions, base, config)
@@ -59,7 +59,7 @@ async def setup(memory, script, *, contributions=6, calls=16):
     registry._task_runner = TaskRunner(engine, policy)
     budget = CoordinationBudget(memory.sessions, client)
     spending = SpendingPolicy(paused=False, daily_calls=100, daily_tokens=10000000,
-        daily_microdollars=10000000, run={"calls": calls, "tokens": 2000000,
+        daily_microdollars=10000000, run={"calls": calls, "tokens": tokens,
         "microdollars": 2000000, "seconds": 300, "contributions": contributions},
         prices={"kimi:kimi-k2.6": {"microdollars_per_token": 1}})
     await budget.save(1, 0, spending)
@@ -194,16 +194,21 @@ async def test_unknown_paid_response_is_held_never_resent(memory):
     await bits.coordinator.shutdown()
 
 
-async def test_shared_worker_budget_and_anonymous_prompt(memory):
+@pytest.mark.parametrize(("lead", "expected_calls", "expected_status"), [
+    ("speda", 2, "reconciling"),
+    ("optimus", 3, "succeeded"),
+    ("scourge", 3, "succeeded"),
+])
+async def test_shared_worker_budget_and_anonymous_prompt(memory, lead, expected_calls, expected_status):
     task = LLMMessage([Block(type="tool_use", id="worker", name="Task", input={
         "description": "Read evidence", "prompt": "Read the evidence", "subagent_type": "general-purpose"})], "tool_use")
-    bits = await setup(memory, [task, reply("Evidence read.")], calls=2)
-    room = await bits.coordinator.create(1, CreateRoom())
+    bits = await setup(memory, [task, reply("Evidence read."), reply("Here is the evidence.")], calls=2)
+    room = await bits.coordinator.create(1, CreateRoom(lead=lead))
     result = await send(bits, room)
-    assert len(bits.client.calls) == 2, await bits.coordinator.events(1, room["id"])
+    assert len(bits.client.calls) == expected_calls, await bits.coordinator.events(1, room["id"])
     assert "anonymous read-only task worker" in bits.client.calls[1]["system"]
     assert not any(t["name"] in {"Task", "collaborate"} for t in bits.client.calls[1]["tools"])
-    assert result["status"] == "reconciling" and result["reserved"]["calls"] == 2
+    assert result["status"] == expected_status and result["reserved"]["calls"] == expected_calls
     await bits.coordinator.shutdown()
 
 
@@ -294,9 +299,10 @@ async def test_consult_returns_to_caller_without_changing_membership(memory):
     await bits.coordinator.shutdown()
 
 
-async def test_parallel_model_reservations_never_exceed_root(memory):
-    bits = await setup(memory, [], calls=1)
-    room = await bits.coordinator.create(1, CreateRoom())
+@pytest.mark.parametrize(("lead", "tokens"), [("speda", 2000000), ("optimus", 100)])
+async def test_parallel_model_reservations_never_exceed_root(memory, lead, tokens):
+    bits = await setup(memory, [], calls=1, tokens=tokens)
+    room = await bits.coordinator.create(1, CreateRoom(lead=lead))
     bits.coordinator.launch = lambda _: None
     receipt = await bits.coordinator.start(1, room["id"], RoomInput(input_id="one", message="hello"))
     async with memory.sessions() as db, db.begin():

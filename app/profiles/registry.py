@@ -27,6 +27,7 @@ class Persona:
     tools: frozenset[str]
     worker_roles: frozenset[str]
     document_theme: tuple[str, str]
+    shared_call_cap_exempt: bool = False
 
     def snapshot(self, settings=None, preference_version=0):
         style = PersonaStyle.model_validate(settings or {})
@@ -70,7 +71,8 @@ class ProfileRegistry:
             theme = DOCUMENT_THEMES[aid]
             revision = hashlib.sha256(json.dumps([aid, reference, domain, character, sorted(tools), sorted(roles), theme, CANVAS_REVISION, ROOM_DIALOGUE_REVISION]).encode()).hexdigest()
             self.profiles[aid] = Persona(aid, "nightcrawler" if aid == "friday" else aid,
-                name, reference, domain, character, revision, tools, roles, theme)
+                name, reference, domain, character, revision, tools, roles, theme,
+                shared_call_cap_exempt=aid in {"optimus", "scourge"})
 
     def canonical(self, name):
         name = name.lower().strip()

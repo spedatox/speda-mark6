@@ -24,6 +24,9 @@ Run and worker limits includes a Per-run limits group with a Reserved token
 limit field. Its help explains that reservations include request size, maximum
 response and reasoning allowance, and that per-run bounds still apply with
 spending checks disabled. Currency fields state their microdollar unit.
+Optimus and Scourge runs, including their delegated workers, skip the shared
+per-run model call cap. Token, time, concurrency, and configured spending
+limits still apply. The exemption is pinned when a run is admitted.
 Invalid numbers cannot be saved. Failed saves and reloads retain drafts together
 with their original revision; a revision conflict requires discarding the stale
 draft and using the latest saved values, so a reload cannot silently authorize
