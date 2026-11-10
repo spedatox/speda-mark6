@@ -29,7 +29,10 @@ def test_all_agents_get_visual_first_canvas_only_when_selected():
     assert "Spader's cadence" in tutoring
     assert r"P(A \| B)" in tutoring
     normal = profiles.build(profiles.require('ultron').snapshot(), variables)
-    assert 'use the\nlive calendar before asking the owner for dates' in normal
+    assert "Google Calendar is the single source of truth for the owner's timetable" in normal
+    assert 'both recurring and one-off commitments' in normal
+    assert 'Only commitments recorded in Google Calendar belong in the timetable' in normal
+    assert 'Confirm scheduling only after the calendar\nwrite succeeds' in normal
     assert '`calendar_list_events` with `tool_search` by its exact name' in normal
     assert 'CANVAS MODE IS ACTIVE' not in profiles.build_worker({**variables, 'canvas': True})
 

@@ -5,18 +5,16 @@ description: Create or change calendar commitments, recurrence and attendees acc
 
 ## THE CALENDAR IS THE RECORD
 
-His calendar is not one tool among many. It is the only place the system and the
-owner both write down his commitments, and it is the thing that makes an
-answer about his week true rather than plausible. Every agent reads it. Every
-agent writes it. The whole roster shares one record of one man's time, which is
-exactly why what goes in it has to be complete enough for another agent — or him,
-in March — to act on without asking anybody.
+Google Calendar is the single source of truth for the owner's timetable,
+including recurring and one-off commitments. Treat an item as scheduled only
+when it has a calendar entry. Course records, the attendance ledger, memory
+and messages can supply details for an entry.
 
 ### Read it before you answer
 
-When the answer depends on live commitments or availability, load the calendar
-(`use_toolset` → `google_calendar`) and read the window with
-`calendar_list_events` before concluding. Examples include:
+When the answer depends on live commitments or availability, use `tool_search`
+with the exact name `calendar_list_events` and read the relevant window before
+concluding. Examples include:
 
 - checking a day or week, scheduling a commitment, "do I have time for", "am I free"
 - checking a deadline or a plan against his other commitments
@@ -42,26 +40,20 @@ block over real fetched events, never prose you assembled.
 
 ### Reconcile concrete commitment changes
 
-"I'm not going to work tomorrow." "The exam moved to Friday." "I'll be in Ankara
-next week." When he communicates a concrete commitment or cancellation,
-reconcile the affected record. Distinguish that from recounting an event,
-expressing a boundary or discussing a possibility. Do not turn every mention
-of a day into an unsolicited calendar mutation. For an authorized update:
+When the owner makes a definite commitment or gives a scheduling instruction,
+find the relevant event and check for duplicates and conflicts. Create a
+missing confirmed commitment or update the existing entry once its details
+and authority are clear. For a cancellation, identify the affected entry and
+scope before changing it. Keep tentative ideas unscheduled. Confirm the
+change only after the calendar write succeeds.
 
-**read → find what it touches → if it isn't there, ASK → write → one line back.**
+### When details are missing
 
-### When the calendar doesn't have it, ask
-
-He says he isn't going to work tomorrow and there is no work on tomorrow. You do
-not have what you need to write anything correct, and you do not get to fill the
-hole: not with a guessed shift, not with a silent "noted", not with a reply that
-pretends the sentence was small talk.
-
-Ask one short question for exactly the missing piece — what the thing is, what
-hours it runs, whether it repeats. Then write it properly, the commitment AND the
-absence, so the second time he says it you already know. Never ask for something
-the calendar could have told you if you had read it first, and never stack
-questions: the smallest one that unblocks the write, then act.
+Check the relevant calendar first. Ask one short question for the smallest
+detail that would let you record the commitment correctly, such as the time
+window, recurrence, or which occurrence changed. For a change or cancellation
+with no matching entry, verify what the owner meant before creating anything.
+Leave the item unscheduled until a verified entry exists.
 
 ### Write it thoroughly
 

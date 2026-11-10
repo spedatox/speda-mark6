@@ -2,13 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Ultron's timetable read and authoring tools.
+Ultron Wear attendance configuration tools.
 
-The owner tells Ultron his timetable in chat; this saves it as the source of
-truth in the same shape services/academic.py and routers/academic.py already
-speak (see schemas/academic.py, mirrored on the watch by data/ScheduleWire.kt),
-then pushes every registered Ultron Wear watch to refresh immediately rather
-than waiting on its own six-hour background sync (sync/SyncScheduler.kt).
+These tools manage the term settings and teaching slots used for attendance
+tracking. Google Calendar is authoritative for the owner's timetable.
+Saving attendance configuration requests a watch refresh.
 """
 
 import logging
@@ -34,12 +32,11 @@ class ReadScheduleSkill(Skill):
     read_only = True
     memoize = False  # A save in the same turn must be visible to the next read.
     description = (
-        "Reads the owner's complete current course timetable and active term configuration "
-        "directly from the academic ledger used by Ultron Wear. Use it to look up classes "
-        "and before editing an existing timetable with save_schedule; preserve every unchanged "
-        "slot and its stable id rather than reconstructing configuration from attendance "
-        "summaries, memory or chat history. Do NOT use it to calculate absence budgets, "
-        "record attendance, change the timetable or request a watch refresh. Returns JSON "
+        "Reads the term configuration and teaching slots used by Ultron Wear to track attendance. "
+        "Use it to resolve attendance slot IDs or before editing the watch configuration with "
+        "save_schedule; preserve every unchanged slot and its stable id. Use Google Calendar "
+        "for actual class occurrences, the owner's timetable and availability. This tool does "
+        "not calculate absence budgets, record attendance, or request a watch refresh. Returns JSON "
         "with term start_date, total_weeks, required_rate and holidays, plus every active "
         "course slot's id, code, name, instructor, roomNumber, dayOfWeek, startTime and endTime; "
         "term is null when unconfigured and courses is empty when no active slots exist. "
@@ -59,19 +56,13 @@ class SaveScheduleSkill(Skill):
     search_keywords = "timetable ders programı schedule courses classes term semester watch wear sync push"
     requires_network = True  # the DB write is local, but the point of this tool is the FCM push after it
     description = (
-        "Replaces the owner's whole course timetable — term dates plus every weekly teaching "
-        "hour — and immediately pushes Ultron Wear (his Galaxy Watch 6) to refresh, instead of "
-        "the watch waiting up to six hours for its own background sync. Use this whenever he "
-        "gives you his schedule for the term, or a room/time/instructor change to an existing "
-        "one — first use read_schedule to get the current slots, stable ids and term settings "
-        "before editing an existing schedule. It is a full replace, so always pass every course "
-        "still in effect, not just the "
-        "one that changed. Do NOT use it to record an absence or answer 'derse girdin mi?' (that "
-        "ledger is written from the watch or record_attendance on the owner's instruction, "
-        "and read back by check_attendance), and do NOT "
-        "use it just to look up the current timetable. Returns the number of course slots saved "
-        "and how many watches were reached, or an explanation when no watch is registered yet — "
-        "the save itself still succeeds in that case, and the watch picks it up next time it opens."
+        "Replaces Ultron Wear's attendance configuration and requests an immediate watch refresh. "
+        "Use it to configure term settings and teaching slots for attendance tracking. If the teaching "
+        "schedule changes, reconcile the actual timetable in Google Calendar first. Read the existing "
+        "watch configuration with read_schedule, then include every teaching slot still in effect "
+        "and preserve unchanged IDs. Use record_attendance to record an absence and check_attendance "
+        "to read attendance. This tool writes no calendar events. It returns the number of slots "
+        "saved and the outcome of the watch refresh request."
     )
     input_schema = {
         "type": "object",
