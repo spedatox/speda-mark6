@@ -21,6 +21,7 @@ DOMAIN_SKILLS = {
         "ShodanLookupSkill", "EmailDiscoverySkill", "CryptoTraceSkill", "IntelXSearchSkill"),
     "save_file": ("SaveFileSkill",),
     "read_skill": ("ReadSkillSkill",),
+    "read_chat_attachment": ("ReadChatAttachmentSkill",),
     "health_data": ("HealthDataSkill",),
     "browser": ("BrowsePageSkill", "BrowserActSkill", "PortalLoginSkill"),
     "news": ("NewsHeadlinesSkill", "NewsWatchSkill", "NewsDeepDiveSkill", "ReadArticleSkill"),

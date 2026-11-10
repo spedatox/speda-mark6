@@ -82,6 +82,57 @@ async def test_project_folder_chats_restart_private_instructions_and_originals(m
     await bits.coordinator.shutdown()
 
 
+async def test_project_pdf_page_read_is_agent_and_project_scoped(memory, tmp_path, monkeypatch):
+    import io
+
+    from pypdf import PdfWriter
+
+    from app.schemas.llm import Block, LLMMessage
+    from app.skills.read_chat_attachment import ReadChatAttachmentSkill
+
+    writer = PdfWriter()
+    for _ in range(21):
+        writer.add_blank_page(width=612, height=792)
+    data = io.BytesIO()
+    writer.write(data)
+
+    bits = await fixture(memory, tmp_path)
+    skill = ReadChatAttachmentSkill()
+    await bits.engine._registry.register_skill(skill)
+    try:
+        uploaded = await bits.workspace.upload(1, "optimus", bits.ui["id"],
+            DocumentAttachment(name="scanned.pdf", data=base64.b64encode(data.getvalue()).decode()))
+        arguments = {"id": f"project:{uploaded['id']}", "page": 21}
+        bits.client.script.extend([LLMMessage([Block(type="tool_use", id="project-pdf-page",
+            name=skill.name, input=arguments)], "tool_use"), reply("Page 21 has no extractable text.")])
+        run = await chat(bits, project_id=bits.ui["id"])
+        assert "pdf_id" in bits.client.calls[0]["system"]
+        results = [json.loads(block["content"])
+            for message in bits.client.calls[1]["messages"] if isinstance(message["content"], list)
+            for block in message["content"] if block.get("tool_use_id") == "project-pdf-page"]
+        assert results[0]["status"] == "no_extractable_text" and results[0]["total_pages"] == 21
+
+        project = await bits.workspace.context(1, "optimus", bits.ui["workshop_project_id"])
+        async with memory.sessions() as db:
+            room_id = (await db.get(CoordinationRun, run["run_id"])).room_id
+        ctx = memory.context(agent_id="scourge", room_id=room_id, run_id=run["run_id"], coordination=bits.coordinator)
+        ctx.extra["project_context"] = project
+        assert json.loads(await skill.execute(arguments, ctx))["status"] == "unavailable"
+        ctx.agent_id = "optimus"
+        from app.services import pdf_navigation
+        search = {"id": arguments["id"], "query": "test"}
+        with monkeypatch.context() as patch:
+            patch.setattr(pdf_navigation, "INDEX_SLICE_SECONDS", 0)
+            partial = json.loads(await skill.execute(search, ctx))
+            assert not partial["index_complete"] and partial["indexed_through_page"] == 1
+        complete = json.loads(await skill.execute(search, ctx))
+        assert complete["index_complete"] and complete["pages_without_indexed_text"] == 21
+        await bits.workspace.remove_file(1, "optimus", bits.ui["id"], uploaded["id"])
+        assert json.loads(await skill.execute(arguments, ctx))["status"] == "unavailable"
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_new_chat_inherits_checkpoint_tasks_and_exact_artifact_dependency(memory, tmp_path):
     bits = await fixture(memory, tmp_path, [delegate(), reply('Worker started')])
     await bits.projects.checkpoint(1,bits.ui['workshop_project_id'],Checkpoint(expected_revision=0,

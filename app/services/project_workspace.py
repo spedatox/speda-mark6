@@ -17,7 +17,7 @@ from app.models.session import Session
 from app.schemas.coordination import CreateProject, IntegrateProject
 from app.services.coordination_budget import CoordinationError
 from app.services.projects import inventory, IGNORED
-from app.services.room_attachments import prepare_client_attachment
+from app.services.room_attachments import PDF, prepare_client_attachment
 
 
 class ProjectWorkspace:
@@ -149,9 +149,13 @@ class ProjectWorkspace:
             remaining, documents = 16000, []
             for item in files:
                 excerpt = item.extracted[:remaining]
-                if not excerpt:
-                    break
-                documents.append({'name': item.name, 'text': excerpt, 'truncated': len(excerpt) < len(item.extracted)})
+                if not excerpt and item.mime != PDF:
+                    continue
+                document = {'name': item.name, 'text': excerpt, 'truncated': len(excerpt) < len(item.extracted)}
+                if item.mime == PDF:
+                    document['pdf_id'] = f'project:{item.id}'
+                    document['coverage'] = 'PDF text preview. Use read_chat_attachment with pdf_id to search or read pages.'
+                documents.append(document)
                 remaining -= len(excerpt)
             return {'id': row.id, 'name': row.name, 'instructions': row.instructions,
                 'cwd': native.path, 'host_id': native.host_id, 'native_id': native_id,

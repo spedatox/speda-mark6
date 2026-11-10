@@ -210,6 +210,16 @@ class RoomAttachment(Base):
     extracted: Mapped[str] = mapped_column(Text)
 
 
+class PdfSearchIndex(Base):
+    """Disposable local text index for an immutable, access-checked PDF source."""
+    __tablename__ = "coord_pdf_search_indexes"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    page_count: Mapped[int]
+    indexed_pages: Mapped[int]
+    pages: Mapped[list] = mapped_column(JSON)
+
+
 class SupervisorInput(Base):
     __tablename__ = 'coord_supervisor_inputs'
     __table_args__ = (UniqueConstraint('step_id', 'input_id'),)
