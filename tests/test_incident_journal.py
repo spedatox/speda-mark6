@@ -77,3 +77,48 @@ async def test_owner_journal_groups_repeats_and_assessment_does_not_release_deli
         assert not (await client.get(root)).json()["incidents"]
         repeat = journal.add(facts, "held_pending")
         assert (await client.get(root)).json()["incidents"][0]["id"] == repeat
+
+
+async def test_bulk_review_uses_matching_groups_and_preserves_exact_records(tmp_path):
+    journal = IncidentJournal(tmp_path / "journal.sqlite3")
+    facts = {"event": "turn_error", "agent": "ultron", "ended_turn": True}
+    older = journal.add(facts, "held_pending")
+    latest = journal.add(facts, "held_pending")
+    other = journal.add({**facts, "agent": "orion"}, "held_pending")
+    active = journal.add({**facts, "agent": "spark"}, "active")
+    journal.add({"event": "synthetic_protocol_test"}, "sent")
+    with journal.connect() as db:
+        db.execute("""INSERT INTO incident_inspections(id, assessment_state, assessment)
+            VALUES (?, 'complete', 'Recorded assessment')""", (latest,))
+    app = create_app()
+    app.state.damage_control_journal = journal
+    root = "/iacon/hall-of-records/incidents"
+    scope = {"severity": "critical"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.put(f"{root}/review", json={"mark_reviewed": True})).status_code == 401
+        assert (await client.post(f"{root}/selection", json=scope)).status_code == 401
+        client.headers["X-API-Key"] = settings.speda_api_key
+        assert (await client.put(f"{root}/review", json=scope)).status_code == 422
+        assert (await client.get(root, params={"limit": 1})).json()["next_offset"] == 1
+        selected = (await client.post(f"{root}/selection", json=scope)).json()["incidents"]
+        assert {row["id"]: row["assessment_state"] for row in selected} == {latest: "complete", other: "available"}
+        for unavailable in (active, "a" * 32):
+            invalid = await client.put(f"{root}/review", json={"ids": [latest, unavailable], "mark_reviewed": True})
+            assert invalid.status_code == 422
+            assert not (await client.get(f"{root}/{latest}")).json()["reviewed"]
+
+        marked = await client.put(f"{root}/review", json={**scope, "mark_reviewed": True})
+        assert marked.json() == {"matched": 2, "changed": 2}
+        assert not (await client.get(root)).json()["incidents"]
+        assert not (await client.get(f"{root}/{older}")).json()["reviewed"]
+        assert (await client.get(f"{root}/{other}")).json()["reviewed"]
+        repeat = await client.put(f"{root}/review", json={"ids": [latest, latest], "mark_reviewed": True})
+        assert repeat.json() == {"matched": 1, "changed": 0}
+        reopened = await client.put(f"{root}/review", json={"ids": [latest], "mark_reviewed": False})
+        assert reopened.json() == {"matched": 1, "changed": 1}
+        detail = (await client.get(f"{root}/{latest}")).json()
+        assert not detail["reviewed"]
+        assert detail["assessment"] == "Recorded assessment"
+        assert detail["delivery_state"] == "held_pending"
+        new = journal.add({**facts, "agent": "orion"}, "held_pending")
+        assert (await client.get(root)).json()["incidents"][0]["id"] == new

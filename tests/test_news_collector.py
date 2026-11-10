@@ -1,9 +1,11 @@
 import httpx
+import pytest
 
 from app.news.collector import _fetch
 
 
-async def test_feed_retries_connect_timeout_but_rejects_html():
+@pytest.mark.parametrize("failure", [httpx.ConnectTimeout, httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError])
+async def test_feed_retries_transient_transport_failures_but_rejects_html(failure):
     attempts = []
 
     def publisher(request):
@@ -11,7 +13,7 @@ async def test_feed_retries_connect_timeout_but_rejects_html():
         if request.url.path == "/directory":
             return httpx.Response(200, text="<html>RSS directory</html>")
         if attempts.count("/feed") == 1:
-            raise httpx.ConnectTimeout("temporary timeout", request=request)
+            raise failure("temporary transport failure", request=request)
         return httpx.Response(200, text="""<rss version="2.0"><channel><title>News</title>
             <item><title>Verified headline</title><link>https://example.test/story</link></item>
             </channel></rss>""")

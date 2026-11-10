@@ -11,12 +11,19 @@ IncidentId = Annotated[str, Path(pattern=r"^[a-f0-9]{32}$")]
 Severity = Literal["critical", "error", "warning", "test"]
 
 
-class BulkExport(BaseModel):
+class IncidentSelection(BaseModel):
     ids: list[Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{32}$")]] | None = Field(
         default=None, min_length=1, max_length=1000)
     reviewed: bool = False
     severity: Severity | None = None
     q: str = Field("", max_length=120)
+
+    def scope(self):
+        return dict(ids=self.ids, reviewed=self.reviewed, severity=self.severity, search=self.q.strip().lower())
+
+
+class BulkReview(IncidentSelection):
+    mark_reviewed: bool
 
 
 def view(request: Request):
@@ -41,10 +48,9 @@ def list_incidents(response: Response, journal: Annotated[JournalView, Depends(v
 
 
 @router.post("/export")
-def bulk_export(body: BulkExport, journal: Annotated[JournalView, Depends(view)]):
+def bulk_export(body: IncidentSelection, journal: Annotated[JournalView, Depends(view)]):
     try:
-        pdf = journal.bulk_pdf(ids=body.ids, reviewed=body.reviewed, severity=body.severity,
-                               search=body.q.strip().lower())
+        pdf = journal.bulk_pdf(**body.scope())
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if pdf is None:
@@ -52,6 +58,23 @@ def bulk_export(body: BulkExport, journal: Annotated[JournalView, Depends(view)]
     return Response(pdf, media_type="application/pdf", headers={
         "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="damage-control-journal.pdf"',
     })
+
+
+@router.post("/selection")
+def select_incidents(body: IncidentSelection, response: Response, journal: Annotated[JournalView, Depends(view)]):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return journal.selection(**body.scope())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.put("/review")
+def review_incidents(body: BulkReview, journal: Annotated[JournalView, Depends(view)]):
+    try:
+        return journal.review_selection(mark_reviewed=body.mark_reviewed, **body.scope())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/{identity}")

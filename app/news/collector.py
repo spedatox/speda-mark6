@@ -45,8 +45,8 @@ async def _fetch(client: httpx.AsyncClient, outlet: str, category: str, url: str
     try:
         try:
             resp = await client.get(url, headers={"User-Agent": _UA})
-        except (httpx.ConnectError, httpx.ConnectTimeout):
-            # A fresh connection can recover a transient publisher or DNS failure.
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError):
+            # Retry a transient connection or response failure once.
             resp = await client.get(url, headers={"User-Agent": _UA})
         resp.raise_for_status()
     except Exception as e:  # noqa: BLE001

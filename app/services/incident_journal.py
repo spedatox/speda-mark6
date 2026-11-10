@@ -8,6 +8,7 @@ from app.services.damage_control import render_report, render_reports
 from app.services.incident_details import explain
 
 MAX_EXPORT = 1500
+MAX_SELECTION = 1500
 
 _fingerprint = "json_array(" + ", ".join(
     f"json_extract(facts, '$.{key}')" for key in (
@@ -109,6 +110,40 @@ class JournalView:
                 (time.time(), identity))
         return self.detail(identity)
 
+    def _selection(self, db, *, ids, reviewed, severity, search):
+        if ids is not None:
+            rows = db.execute(f"""SELECT * FROM ({_events})
+                WHERE id IN (SELECT value FROM json_each(?)) ORDER BY timestamp DESC, id DESC""",
+                (json.dumps(ids),)).fetchall()
+            if len(rows) != len(set(ids)):
+                raise ValueError("One or more selected incidents are unavailable. Refresh the journal and try again.")
+            return rows
+        rows = db.execute(_matching + " SELECT * FROM matching ORDER BY timestamp DESC, id DESC LIMIT ?",
+            (*filters(reviewed, severity, search), MAX_SELECTION + 1)).fetchall()
+        if len(rows) > MAX_SELECTION:
+            raise ValueError(f"Selection exceeds {MAX_SELECTION} incidents. Narrow the filters and try again.")
+        return rows
+
+    def selection(self, **scope):
+        with self.journal.connect() as db:
+            rows = self._selection(db, **scope)
+        return {"incidents": [{"id": row["id"], "assessment_state": assessment_for(row)[0]} for row in rows]}
+
+    def review_selection(self, *, mark_reviewed, **scope):
+        with self.journal.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = self._selection(db, **scope)
+            ids = json.dumps([row["id"] for row in rows])
+            if mark_reviewed:
+                changed = db.execute("""INSERT INTO incident_inspections(id, reviewed_at)
+                    SELECT value, ? FROM json_each(?) WHERE TRUE
+                    ON CONFLICT(id) DO UPDATE SET reviewed_at=excluded.reviewed_at
+                    WHERE incident_inspections.reviewed_at IS NULL""", (time.time(), ids))
+            else:
+                changed = db.execute("""UPDATE incident_inspections SET reviewed_at=NULL
+                    WHERE reviewed_at IS NOT NULL AND id IN (SELECT value FROM json_each(?))""", (ids,))
+            return {"matched": len(rows), "changed": changed.rowcount}
+
     def claim_assessment(self, identity):
         with self.journal.connect() as db:
             row = db.execute(f"SELECT * FROM ({_events}) WHERE id=?", (identity,)).fetchone()
@@ -149,10 +184,8 @@ class JournalView:
 
     def bulk_pdf(self, *, ids, reviewed, severity, search):
         with self.journal.connect() as db:
-            if ids:
-                rows = db.execute(f"""SELECT * FROM ({_events})
-                    WHERE id IN (SELECT value FROM json_each(?)) ORDER BY timestamp DESC, id DESC""",
-                    (json.dumps(ids),)).fetchall()
+            if ids is not None:
+                rows = self._selection(db, ids=ids, reviewed=reviewed, severity=severity, search=search)
             else:
                 rows = db.execute(_matching + """ SELECT * FROM events
                     WHERE fingerprint IN (SELECT fingerprint FROM matching)
@@ -160,6 +193,4 @@ class JournalView:
                     (*filters(reviewed, severity, search), MAX_EXPORT + 1)).fetchall()
         if len(rows) > MAX_EXPORT:
             raise ValueError(f"Export exceeds {MAX_EXPORT} occurrences. Narrow the filters or select specific incidents.")
-        if ids and len(rows) != len(set(ids)):
-            raise ValueError("One or more selected incidents are unavailable. Refresh the journal and try again.")
         return render_reports([(facts_for(row), assessment_for(row)[1]) for row in rows], bulk=True) if rows else None
