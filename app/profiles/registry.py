@@ -8,7 +8,7 @@ from app.schemas.coordination import PersonaStyle
 from app.profiles.presentation import DOCUMENT_THEMES
 from app.profiles.canvas import CANVAS_REVISION, canvas_guidance
 
-ROOM_DIALOGUE_REVISION = 2
+ROOM_DIALOGUE_REVISION = 3
 
 
 class UnknownPersona(ValueError):
@@ -123,8 +123,11 @@ class ProfileRegistry:
             "colleague something, choose a useful question and ask that colleague directly. When a "
             "colleague addresses you, answer them; do not redirect their question to the owner unless "
             "essential information really is missing. Use the evidence and tools available before asking "
-            "the owner to repeat context. For public address, include the actual peer question in your contribution; "
-            "for private consult, keep the exchange private and give your own appropriate public conclusion. "
+            "the owner to repeat context. When the owner asks for another agent's input or you want a visible "
+            "exchange, address a current member or invite an absent colleague with the actual question. Both "
+            "produce a separate reply in the chat. Use consult only when a private exchange is intended. "
+            "If you consult privately during a public turn, incorporate the findings in your own follow-up. "
+            "During a private contribution, answer your caller or consult privately. "
             "Avoid ceremonial 'I have asked X' dispatch announcements. Public address and private consult "
             "automatically return to the questioner after answers and nested exchanges finish. On that "
             "return, respond to the actual answers rather than repeat your request or merely acknowledge "

@@ -269,12 +269,11 @@ class ClientCompatibility:
             **({'room': self.coordinator.room_view(room), 'run_id': run.id} if structured else {})})
         cursor = 0
         private = set()
+        terminal_status = None
         while True:
-            page = await self.coordinator.events(owner, mapping.room_id, cursor)
+            page = await self.coordinator.events(owner, mapping.room_id, cursor, run_id=run.id)
             for event in page["events"]:
                 cursor = event["sequence"]
-                if event["run_id"] != run.id:
-                    continue
                 kind, payload = event["kind"], event["payload"]
                 if structured:
                     if kind == 'speaker_started' and payload.get('mode') == 'consult':
@@ -309,12 +308,17 @@ class ClientCompatibility:
                     return
             if page["events"]:
                 continue
+            if terminal_status is not None:
+                if terminal_status not in {"succeeded", "waiting_tasks"}:
+                    yield encode("error", {"message": "Turn ended: " + terminal_status, "code": terminal_status})
+                yield encode("done", {"status": terminal_status})
+                return
             _, current = await self.resolve(owner, request_id)
             if current.status in {"succeeded", "partial", "cancelled", "failed", "expired", "reconciling", "waiting_tasks"}:
-                if current.status not in {"succeeded", "waiting_tasks"}:
-                    yield encode("error", {"message": "Turn ended: " + current.status, "code": current.status})
-                yield encode("done", {"status": current.status})
-                return
+                # Completion may commit after the empty page read. Drain once
+                # more before closing so the final speaker's reply is delivered.
+                terminal_status = current.status
+                continue
             try:
                 async with self.coordinator._changed:
                     await asyncio.wait_for(self.coordinator._changed.wait(), 1)

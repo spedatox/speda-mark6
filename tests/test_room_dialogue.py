@@ -105,13 +105,13 @@ async def test_multiple_peers_share_one_caller_return_inside_contribution_cap(me
 async def test_public_exchange_reserves_caller_response_before_admitting_peer(memory):
     bits = await setup(memory, [
         tool({"action": "address", "agent_id": "ultron", "message": "Assess the evidence"}),
+        reply("Here is my assessment of the available evidence."),
     ], contributions=2)
     room = await bits.coordinator.create(1, CreateRoom(members=["ultron"]))
     result = await send(bits, room)
-    assert result["status"] == "reconciling" and len(result["steps"]) == 1
-    assert len(bits.client.calls) == 1
-    events = (await bits.coordinator.events(1, room["id"]))["events"]
-    assert "contribution limit" in str(events)
+    assert result["status"] == "succeeded" and len(result["steps"]) == 1
+    assert len(bits.client.calls) == 2
+    assert "round_limit" in str(bits.client.calls[-1]["messages"])
     await bits.coordinator.shutdown()
 
 

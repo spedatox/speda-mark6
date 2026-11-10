@@ -1,4 +1,6 @@
 import json
+from pydantic import ValidationError
+from app.profiles.registry import UnknownPersona
 from app.skills.base import Skill
 from app.schemas.coordination import Collaboration, Delegate, Decision
 from app.services.coordination_budget import CoordinationError
@@ -7,13 +9,13 @@ from app.services.coordination_budget import CoordinationError
 class CollaborationSkill(Skill):
     name = "collaborate"
     read_only = False
-    description = ("Talk directly with another persona in this shared conversation: invite them, address a "
-        "question to them, or consult privately. Use address for a public peer exchange; the participant "
-        "answers you and you automatically receive a turn to respond after their exchanges finish. "
+    description = ("Ask another persona to contribute to this conversation. For a reply the owner can see, "
+        "use invite when the colleague is absent and address when they already belong to the room. "
+        "Address also gives you a follow-up turn after the colleague finishes. Use consult only for a "
+        "deliberately private exchange whose answer you will summarize in your own reply. "
         "Write the actual question to your colleague, not an instruction for them to question the owner; "
         "finish your contribution without a dispatch announcement or an invented reply. "
-        "Invite adds a participant without requiring a follow-up; consult keeps their answer private. "
-        "Returns a queued-turn receipt, not their answer. Only the lead may hand off leadership or dismiss.")
+        "Returns a queued-turn receipt or a denial. Only the lead may hand off leadership or dismiss.")
     input_schema = Collaboration.model_json_schema()
 
     def available(self, context):
@@ -21,12 +23,22 @@ class CollaborationSkill(Skill):
 
     async def execute(self, args, context):
         try:
-            return await context.coordination.collaborate(context, args)
+            request = Collaboration.model_validate(args)
+        except ValidationError:
+            return json.dumps({'status': 'denied', 'code': 'invalid_collaboration',
+                'message': 'Include a concrete question or task for the colleague.'})
+        try:
+            return await context.coordination.collaborate(context, request)
+        except UnknownPersona:
+            code, message = 'unknown_persona', 'Use an agent ID from the collaborator roster.'
         except CoordinationError as exc:
-            if exc.code not in {'not_member', 'private_exchange'}:
+            if exc.code not in {'not_member', 'private_exchange', 'self_address', 'reply_target',
+                                'lead_only', 'lead', 'round_limit', 'no_progress'}:
                 raise
-            # These guards run before any action or queued contribution.
-            return json.dumps({'status': 'denied', 'code': exc.code, 'message': str(exc)})
+            code, message = exc.code, str(exc)
+        # Known request rejections have no committed effects. Record the
+        # denial so the model can correct the request or finish its reply.
+        return json.dumps({'status': 'denied', 'code': code, 'message': message})
 
 
 class ProjectStatusSkill(Skill):

@@ -133,14 +133,16 @@ class Coordinator:
             rows = (await db.execute(select(Room).where(Room.user_id == owner).order_by(Room.created_at.desc()))).scalars()
             return [self.room_view(r) for r in rows]
 
-    async def events(self, owner, room_id, after=0):
+    async def events(self, owner, room_id, after=0, *, run_id=None):
+        from app.services.client_room_projection import event_view
+
         async with self.sessions() as db:
             room = await self.owned_room(db, owner, room_id)
-            rows = (await db.execute(select(RoomEvent).where(RoomEvent.room_id == room_id,
-                RoomEvent.sequence > after).order_by(RoomEvent.sequence).limit(200))).scalars().all()
-            return {"room": self.room_view(room), "events": [{"schema_version": 1, "room_id": r.room_id,
-                "sequence": r.sequence, "run_id": r.run_id, "step_id": r.step_id, "speaker": r.speaker,
-                "kind": r.kind, "payload": r.payload, "created_at": r.created_at.isoformat() + "Z"} for r in rows],
+            query = select(RoomEvent).where(RoomEvent.room_id == room_id, RoomEvent.sequence > after)
+            if run_id is not None:
+                query = query.where(RoomEvent.run_id == run_id)
+            rows = (await db.scalars(query.order_by(RoomEvent.sequence).limit(200))).all()
+            return {"room": self.room_view(room), "events": [event_view(row) for row in rows],
                 "next_cursor": rows[-1].sequence if rows else after}
 
     async def subscribe(self, owner, room_id, after=0):
@@ -454,8 +456,7 @@ class Coordinator:
             ToolExecutionReceipt.request_id.in_(requests), ToolExecutionReceipt.status != "completed"))
         return calls + effects
 
-    async def collaborate(self, context, args):
-        body = Collaboration.model_validate(args)
+    async def collaborate(self, context, body: Collaboration):
         aid = self.profiles.canonical(body.agent_id)
         await self.ensure_active(context)
         async with write_session(self.sessions) as db:
@@ -478,7 +479,7 @@ class Coordinator:
                 raise CoordinationError("lead_only", "Only the room lead or owner may dismiss or transfer leadership")
             if body.action != "consult":
                 if body.action == "address" and aid not in room.members:
-                    raise CoordinationError("not_member", "Invite this persona before addressing it")
+                    raise CoordinationError("not_member", "Use invite with your question to get a public reply from this persona")
                 if body.action in {"invite", "dismiss", "handoff"}:
                     self.change_members(room, body.action, aid)
                     await self.event(db, room, "membership", context.agent_id,
@@ -493,7 +494,8 @@ class Coordinator:
             needs_return = body.action in {"address", "consult"} and continuation is None
             needed = 2 if needs_return else 1
             if count + needed > limit:
-                raise CoordinationError("round_limit", "The collaboration round has reached its contribution limit")
+                raise CoordinationError("round_limit",
+                    "The collaboration round has reached its contribution limit. Finish with the available evidence.")
             repeated = await db.scalar(select(AgentStep.id).where(AgentStep.run_id == run.id,
                 AgentStep.agent_id == aid, AgentStep.prompt == body.message))
             if repeated:

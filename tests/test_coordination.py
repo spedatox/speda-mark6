@@ -208,11 +208,15 @@ async def test_shared_worker_budget_and_anonymous_prompt(memory):
 
 
 async def test_consult_reserves_return_slot(memory):
-    bits = await setup(memory, [tool({"action": "consult", "agent_id": "scourge", "message": "Review this"})], contributions=2)
+    bits = await setup(memory, [
+        tool({"action": "consult", "agent_id": "scourge", "message": "Review this"}),
+        reply("I can review the available evidence myself."),
+    ], contributions=2)
     room = await bits.coordinator.create(1, CreateRoom())
     result = await send(bits, room)
-    assert len(result["steps"]) == 1 and len(bits.client.calls) == 1
-    assert result["status"] == "reconciling"
+    assert len(result["steps"]) == 1 and len(bits.client.calls) == 2
+    assert result["status"] == "succeeded"
+    assert "round_limit" in str(bits.client.calls[-1]["messages"])
     await bits.coordinator.shutdown()
 
 

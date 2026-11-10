@@ -3,6 +3,8 @@ import json
 from uuid import uuid4
 import pytest
 from httpx import AsyncClient, ASGITransport
+from app.database import write_session
+from app.models.coordination import RoomEvent
 from app.schemas.client_compat import ClientChat
 from app.schemas.coordination import Membership
 from app.services.client_compat import ClientCompatibility
@@ -43,6 +45,56 @@ async def test_named_speakers_membership_and_reconnect_share_durable_identity(me
     assert await frames(adapter, result['request_id']) == first
     assert len(bits.client.calls) == 3, 'reconnect does not make another provider call'
     await bits.coordinator.shutdown()
+
+
+async def test_late_room_stream_drains_collaborator_reply_before_terminal_fallback(memory, monkeypatch):
+    invite = tool({'action': 'invite', 'agent_id': 'ultron', 'message': 'Review the plan'})
+    invite.content[0].id = 'invite_call'
+    bits = await setup(memory, [reply('Earlier reply'),
+        tool({'action': 'address', 'agent_id': 'ultron', 'message': 'Review the plan'}),
+        invite, reply('Ultron, what should change?'), reply('Move the deadline.')])
+    adapter = ClientCompatibility(bits.coordinator)
+    try:
+        first = await completed(bits, adapter)
+        room = await adapter.room_for_session(1, first['session_id'])
+        async with write_session(memory.sessions) as db:
+            row = await bits.coordinator.owned_room(db, 1, room['id'], lock=True)
+            db.add_all(RoomEvent(room_id=row.id, sequence=sequence, run_id=first['run_id'],
+                speaker='speda', kind='delta', payload={'text': 'Previous turn'})
+                for sequence in range(row.sequence + 1, row.sequence + 206))
+            row.sequence += 205
+
+        request_id = str(uuid4())
+        with monkeypatch.context() as patch:
+            patch.setattr(bits.coordinator, 'launch', lambda _: None)
+            second = await adapter.start(1, 'speda', ClientChat(request_id=request_id,
+                session_id=first['session_id'], message='Ask Ultron to review the plan.'), structured=True)
+
+        original_events = bits.coordinator.events
+        reads = []
+
+        async def finish_after_empty_read(*args, **kwargs):
+            page = await original_events(*args, **kwargs)
+            if not page['events'] and 0 not in reads:
+                await bits.coordinator.execute(second['run_id'])
+            reads.append(len(page['events']))
+            return page
+
+        with monkeypatch.context() as patch:
+            patch.setattr(bits.coordinator, 'events', finish_after_empty_read)
+            stream = await frames(adapter, request_id)
+        assert reads[:2] == [1, 0], 'the stream skips earlier rounds'
+        assert [frame['data']['speaker'] for frame in stream if frame['type'] == 'room_event'
+                and frame['data']['kind'] == 'message'] == ['speda', 'ultron']
+        assert stream[-1]['type'] == 'done' and stream[-1]['data']['status'] == 'succeeded'
+        assert not any(frame['type'] == 'error' for frame in stream)
+        assert 'not_member' in str(bits.client.calls[2]['messages'])
+        replay = await frames(adapter, request_id)
+        assert replay[1:] == stream[1:], 'reconnect changes the room snapshot, not the event sequence'
+        rows = await adapter.messages(1, first['session_id'], structured=True)
+        assert rows[-1]['speaker'] == 'ultron' and rows[-1]['content'] == 'Move the deadline.'
+    finally:
+        await bits.coordinator.shutdown()
 
 
 async def test_private_consultation_never_becomes_a_public_speaker_or_join(memory):
