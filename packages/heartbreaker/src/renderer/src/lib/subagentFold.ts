@@ -58,14 +58,20 @@ export function foldLegionEvent(run: SubagentRun | null, event: Record<string, u
   return next
 }
 
-/** The worker's corps/role and actual supervisor, never an invented persona. */
-export function workerLabel(run: SubagentRun): string {
+export function workerName(run: SubagentRun): string {
+  const namedAutobot = [run.agent, run.workerRole].find(value => /^Autobot [1-9]\d*$/i.test(value ?? ''))
+  if (namedAutobot) return `Autobot ${namedAutobot.split(' ')[1]}`
   const role = run.workerRole || run.agent
   const normalized = role.replace(/^forge_/, '')
-  const name = ['autobot', 'coder'].includes(normalized) ? 'Autobot'
+  return ['autobot', 'coder'].includes(normalized) ? 'Autobot'
     : ['decepticon', 'pentester'].includes(normalized) ? 'Decepticon'
     : run.source === 'forge' || run.executionType === 'forge' ? `Forge · ${normalized}`
     : run.source === 'legion' || run.executionType === 'legion' ? `Legion · ${normalized}` : role
+}
+
+/** The worker's corps/role and actual supervisor, never an invented persona. */
+export function workerLabel(run: SubagentRun): string {
+  const name = workerName(run)
   const owner = run.ownerAgent === 'nightcrawler' || run.ownerAgent === 'friday' ? 'Friday'
     : run.ownerAgent ? run.ownerAgent[0].toUpperCase() + run.ownerAgent.slice(1) : ''
   return owner ? `${name} · supervised by ${owner}` : name

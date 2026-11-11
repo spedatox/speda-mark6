@@ -8,7 +8,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge, SubagentRun, ReportMeta } from '../lib/types'
 import { SubagentPanel } from './SubagentPanel'
-import SubagentDetailView from './SubagentDetailView'
+import { useSidePane } from './SidePane'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
@@ -1038,42 +1038,6 @@ export function TextSegment({ text }: { text: string }) {
   )
 }
 
-/* ── Lightbox — full-screen image viewer (click an attachment to open) ───── */
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  const t = useT()
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(2,6,10,0.85)', backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)', cursor: 'zoom-out',
-        animation: 'fadeIn 0.15s ease',
-      }}
-    >
-      <img src={src} alt="attachment"
-        style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain',
-                 border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)', boxShadow: '0 12px 60px rgba(0,0,0,0.6)' }} />
-      <button onClick={onClose} title={t.message.closeEsc} style={{
-        position: 'fixed', top: 18, right: 18, width: 34, height: 34,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(8,20,28,0.7)', border: '1px solid rgba(var(--hb-cyan-bright-rgb),0.3)',
-        color: '#cdeefa', cursor: 'pointer',
-      }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-  )
-}
-
 /* ── File card — glassmorphism download card for produced files ──────────── */
 /** Gradient per file type for the delivery card's icon tile. Semantic colour —
  *  it identifies the artefact, so it is exempt from the neutral-chrome rule the
@@ -1098,6 +1062,7 @@ function fmtBytes(b: number): string {
 
 function FileCard({ file }: { file: FileMeta }) {
   const t = useT()
+  const pane = useSidePane()
   const { state } = useChatContext()
   const [hover, setHover] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -1162,13 +1127,18 @@ function FileCard({ file }: { file: FileMeta }) {
         </div>
       </div>
 
+      {pane && <button type="button" className="hb-preview-button" onClick={() => pane.openFile(file)}>
+        {t.sidePane.preview}
+      </button>}
       <button
         onClick={onDownload}
         title={t.message.download}
+        aria-label={t.message.download}
+        disabled={busy}
         className="glass-round"
         style={{
-          flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
-          height: 38, padding: '0 18px',
+          flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          height: 36, width: 36, padding: 0,
           border: '1px solid rgba(255,255,255,0.18)',
           background: 'linear-gradient(160deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03))',
           backdropFilter: 'blur(20px) saturate(160%)',
@@ -1182,7 +1152,6 @@ function FileCard({ file }: { file: FileMeta }) {
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>
         </svg>
-        {busy ? '…' : t.message.download}
       </button>
     </div>
   )
@@ -1240,8 +1209,9 @@ export default function Message({ message, showAttribution = true, onDelete, onR
   const [speaking, setSpeaking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(message.content)
-  const [lightbox, setLightbox] = useState<string | null>(null)
-  const [selectedSubagent, setSelectedSubagent] = useState<SubagentRun | null>(null)
+  const pane = useSidePane()
+  const selectSubagent = pane ? (run: SubagentRun) => pane.openWorker(run, { scope: message.id }) : undefined
+  useEffect(() => { pane?.updateWorkers(message.id, message.subagents) }, [pane, message.id, message.subagents])
 
   // ── Typewriter reveal (rAF, steady pacing) ───────────────────────────────
   // A requestAnimationFrame loop reveals characters at a brisk STEADY rate with a
@@ -1492,11 +1462,12 @@ export default function Message({ message, showAttribution = true, onDelete, onR
               {message.images && message.images.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'flex-end', marginBottom: message.content ? '0.4rem' : 0 }}>
                   {message.images.map((src, i) => (
-                    <img
-                      key={i} src={src} alt="attachment"
-                      onClick={() => setLightbox(src)}
-                      style={{ maxWidth: 220, maxHeight: 220, objectFit: 'cover', border: '1px solid var(--border)', display: 'block', cursor: 'zoom-in' }}
-                    />
+                    <button key={i} type="button" disabled={!pane} className="hb-preview-button"
+                      aria-label={`${t.sidePane.previewImage} ${i + 1}`} style={{ padding: 0, maxWidth: 'min(220px, 100%)', background: 'transparent' }}
+                      onClick={() => pane?.openImage(src, `${t.sidePane.image} ${i + 1}`, `${message.id}:${i}`)}>
+                      <img src={src} alt={`${t.sidePane.image} ${i + 1}`}
+                        style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'cover', display: 'block' }} />
+                    </button>
                   ))}
                 </div>
               )}
@@ -1540,7 +1511,6 @@ export default function Message({ message, showAttribution = true, onDelete, onR
             </>
           )}
         </div>
-        {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
       </div>
     )
   }
@@ -1587,7 +1557,7 @@ export default function Message({ message, showAttribution = true, onDelete, onR
               const isLast = i === segments.length - 1
               if (seg.kind === 'tools') {
                 return <ToolFeed key={`t${i}`} tools={seg.tools} streaming={!!message.isStreaming}
-                  subagents={message.subagents} onSelectSubagent={setSelectedSubagent} />
+                  subagents={message.subagents} onSelectSubagent={selectSubagent} />
               }
               return (
                 <Fragment key={`x${i}`}>
@@ -1614,19 +1584,8 @@ export default function Message({ message, showAttribution = true, onDelete, onR
             subagent's report is not the answer, and rendering it inline is what
             made a delegate's write-up read as Optimus's own reply. */}
         {message.subagents?.length ? (
-          <SubagentPanel runs={message.subagents} onSelect={setSelectedSubagent} />
+          <SubagentPanel runs={message.subagents} onSelect={selectSubagent} />
         ) : null}
-
-        {/* Subagent detail view — full-screen chat-like thread for one delegation.
-            Rendered at the Message level so it overlays the entire chat, not just
-            the message bubble. Only one open at a time. */}
-        {selectedSubagent && (
-          <SubagentDetailView
-            key={selectedSubagent.id}
-            run={message.subagents?.find(run => run.id === selectedSubagent.id) ?? selectedSubagent}
-            onClose={() => setSelectedSubagent(null)}
-          />
-        )}
 
         {message.isError && (
           <TurnError

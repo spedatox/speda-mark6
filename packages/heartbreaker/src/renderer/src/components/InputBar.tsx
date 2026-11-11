@@ -3,6 +3,7 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { useSidePane } from './SidePane'
 import { useSelectionContext } from './SelectionContext'
 import { useChatContext } from '../store/chat'
 import { mayClearSteeringDraft } from '../lib/useLiveSteering'
@@ -794,6 +795,7 @@ export default function InputBar({
 }: Props) {
   const t = useT()
   const { state } = useChatContext()
+  const pane = useSidePane()
   const { settings, update } = useSettings()
   const { language, setLanguage } = useLanguage(config)
   const profile = useProfile()
@@ -1127,6 +1129,9 @@ export default function InputBar({
             }}>
               {attachments.map(a => (
                 <div key={a.id} style={{ position: 'relative' }}>
+                  <button type="button" className="hb-attachment-preview" disabled={!pane}
+                    title={t.sidePane.preview} aria-label={`${t.sidePane.preview} · ${a.name}`}
+                    onClick={() => pane?.openLocal(a.file)}>
                   {a.isImage ? (
                     <Thumb file={a.file} alt={a.name} />
                   ) : (
@@ -1151,6 +1156,7 @@ export default function InputBar({
                       </div>
                     </div>
                   )}
+                  </button>
                   {a.isImage && (
                     <span style={{
                       position: 'absolute', bottom: 0, left: 0, right: 0,

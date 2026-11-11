@@ -8,7 +8,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { SubagentRun, SubagentStep } from '../lib/types'
 import { foldLegionEvent, workerLabel } from '../lib/subagentFold'
-import { attachWorkerExecution, inspectWorkerExecution, interruptWorker, messageWorker, newRequestId } from '../lib/api'
+import { attachLegionStream, attachWorkerExecution, inspectWorkerExecution, interruptWorker, messageWorker, newRequestId } from '../lib/api'
 import { useChatContext } from '../store/chat'
 import CodeBlock from './CodeBlock'
 import ErrorBoundary from './ErrorBoundary'
@@ -186,39 +186,17 @@ function StepRow({ step }: { step: SubagentStep }) {
 
 /* ── Header icons ────────────────────────────────────────────────────────── */
 
-function IconClose() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-function IconChevronLeft() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  )
-}
-
 /* ── Main component ──────────────────────────────────────────────────────── */
 
 interface Props {
+  name: string
   run: SubagentRun
-  onClose: () => void
+  legacyTicket?: number
+  active: boolean
 }
 
-/**
- * Full-screen detail view for a single subagent delegation.
- *
- * Opens when the owner clicks a subagent row in the transcript. Shows every step
- * the delegated agent took — text, tool calls, results — rendered with the same
- * markdown and code-block pipeline as the main chat, scoped to one delegation.
- * The close button and Escape key dismiss it.
- */
-export default function SubagentDetailView({ run: initialRun, onClose }: Props) {
+/** Activity and controls for one delegation, hosted in a side pane tab. */
+export default function SubagentDetailView({ name, run: initialRun, legacyTicket, active }: Props) {
   const { state } = useChatContext()
   const [run, setRun] = useState(initialRun)
   const [notice, setNotice] = useState('')
@@ -286,6 +264,20 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
     return () => controller.abort()
   }, [config, executionId, reconnect])
 
+  useEffect(() => {
+    if (!config || legacyTicket === undefined || executionId) return
+    const controller = new AbortController()
+    void (async () => {
+      for await (const event of attachLegionStream(config, legacyTicket, controller.signal)) {
+        if (controller.signal.aborted) break
+        setRun(previous => foldLegionEvent(previous, event))
+      }
+    })().catch(() => {
+      if (!controller.signal.aborted) setNotice('Connection lost while loading task activity.')
+    })
+    return () => controller.abort()
+  }, [config, executionId, legacyTicket])
+
   const controlStyle = { padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)',
     background: 'rgba(255,255,255,0.04)', color: 'var(--hb-text)', cursor: 'pointer', font: 'inherit', fontSize: '0.78rem' }
   const stopTask = async () => {
@@ -315,31 +307,21 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
     finally { if (mounted.current && currentSelection.current === executionId) setControlBusy(false) }
   }
   const scrollRef = useRef<HTMLDivElement>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when steps change (streaming)
+  const followActivity = useRef(true)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-  }, [run.steps.length])
-
-  // Close on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    if (active && followActivity.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [active, run.steps.length, run.running])
 
   const failed = run.ok === false
   const running = run.running
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
-      background: 'rgba(0, 0, 0, 0.82)',
-      display: 'flex', flexDirection: 'column',
-      animation: 'fadeIn 0.15s ease',
+      flex: 1, minHeight: 0, minWidth: 0,
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{
@@ -349,22 +331,6 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
         background: 'rgba(0,0,0,0.4)',
         flexShrink: 0,
       }}>
-        {/* Back button */}
-        <button
-          onClick={onClose}
-          aria-label="Close subagent detail"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.3rem',
-            background: 'transparent', border: 0,
-            color: 'var(--hb-text-dim)', cursor: 'pointer',
-            font: 'inherit', fontSize: '0.82rem', padding: '0.25rem 0.4rem',
-            borderRadius: '0.3rem',
-          }}
-        >
-          <IconChevronLeft />
-          <span style={{ letterSpacing: '0.04em' }}>Back</span>
-        </button>
-
         {/* Status dot */}
         <span style={{
           width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
@@ -377,50 +343,37 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
           animation: running ? 'pulse 1.2s ease infinite' : 'none',
         }} />
 
-        {/* Label + agent */}
+        {/* Worker name and task title */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', minWidth: 0 }}>
-          <span style={{
+          <span title={workerLabel(run)} style={{
             fontFamily: "'Rajdhani', sans-serif",
             fontSize: '1rem', fontWeight: 600, letterSpacing: '0.06em',
-            color: 'var(--hb-text)', textTransform: 'uppercase',
+            color: 'var(--hb-text)', flexShrink: 0,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {run.label || run.agent}
+            {name}
           </span>
-          <span style={{
-            fontSize: '0.72rem', color: 'var(--hb-text-dim)',
-            letterSpacing: '0.04em',
+          {run.label && run.label !== name && <span title={run.label} style={{
+            fontSize: '0.78rem', color: 'var(--hb-text-dim)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {workerLabel(run)}
-          </span>
+            {run.label}
+          </span>}
         </div>
 
         {/* Step count */}
         <span style={{
-          marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--hb-text-dim)',
+          marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--hb-text-dim)', whiteSpace: 'nowrap',
           fontVariantNumeric: 'tabular-nums', letterSpacing: '0.04em',
         }}>
           {run.steps.filter(s => s.kind === 'tool').length} tool{run.steps.filter(s => s.kind === 'tool').length === 1 ? '' : 's'}
           {running ? '…' : ''}
         </span>
 
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 32, height: 32, borderRadius: '0.3rem',
-            background: 'transparent', border: 0,
-            color: 'var(--hb-text-dim)', cursor: 'pointer',
-          }}
-        >
-          <IconClose />
-        </button>
       </div>
 
       {executionId && config && (
-        <section aria-label="Worker controls" style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <section className="hb-worker-controls" aria-label="Worker controls" style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: '0.78rem', color: 'var(--hb-text-dim)' }}>
             <span>{run.status || (running ? 'running' : 'finished')}{run.model ? ` · ${run.model}` : ''}</span>
             <button style={controlStyle} type="button" disabled={controlBusy || !running || run.canInterrupt === false} onClick={stopTask}>Stop task</button>
@@ -446,6 +399,10 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
       {/* ── Body — the chat-like thread ─────────────────────────────────── */}
       <div
         ref={scrollRef}
+        onScroll={event => {
+          const element = event.currentTarget
+          if (active) followActivity.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48
+        }}
         style={{
           flex: 1, overflowY: 'auto',
           padding: '1.25rem 1.5rem',
@@ -535,7 +492,7 @@ export default function SubagentDetailView({ run: initialRun, onClose }: Props) 
             </div>
           )}
 
-          <div ref={bottomRef} style={{ height: '1rem' }} />
+          {legacyTicket !== undefined && notice && <p role="status">{notice}</p>}
         </div>
       </div>
     </div>

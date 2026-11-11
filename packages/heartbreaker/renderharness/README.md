@@ -37,3 +37,9 @@ The saved-gesture counter should increment once per drag or settled wheel burst,
 not on every pointer/wheel event. While zooming, the compositor transform changes
 but the canvas dimensions stay fixed; the buffer resizes once after settling.
 These controls affect only the preview's local state.
+
+Load `/#side-pane` for the Heartbreaker side pane. Click **Preview** on the
+workspace brief, **Workspace tour** on the worker row, or the workspace map
+image. The worker tabs show **Autobot 1** and **Autobot 2**, with the task
+title inside each tab. Switch between the tabs, resize the pane and type in the composer while
+it is open. The fixture uses a local PDF and simulated worker events.

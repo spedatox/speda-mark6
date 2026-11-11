@@ -956,7 +956,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       } else if (err instanceof Error) {
         // Network failures throw a bare TypeError ("Failed to fetch") — name it
         // as unreachable-backend rather than dumping the opaque string.
-        const net = isTransportFailure(err) || err instanceof AttachGone
+        const net: boolean = isTransportFailure(err) || err instanceof AttachGone
         // Last check before accusing the backend of being unreachable: ask it.
         // Reconnection is exhausted, but if the turn is STILL listed as running
         // then the answer is coming and this is a local transport problem, not a
