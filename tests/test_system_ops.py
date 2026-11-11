@@ -79,14 +79,15 @@ async def test_orion_command_uses_host_transport_and_a_stable_receipt(monkeypatc
     assert not registry.call_is_read_only("system_ops", command)
 
 
-async def test_owner_started_collaboration_can_get_diagnostics_but_cannot_execute(monkeypatch):
+async def test_owner_started_collaboration_retains_orions_host_access(monkeypatch):
     from app.skills import system_ops
 
-    async def diagnostics(args, ctx):
-        assert args == {"action": "diagnostics", "diagnostic": "listeners"}
-        return {"status": "ok", "stdout": "host listeners"}
+    requests = []
+    async def host(args, ctx):
+        requests.append(args)
+        return {"status": "ok", "source": "host"}
 
-    monkeypatch.setattr(system_ops, "host_operation", diagnostics)
+    monkeypatch.setattr(system_ops, "host_operation", host)
     registry = CapabilityRegistry()
     await registry.register_skill(SystemOpsSkill(None))
     orion = context(agent_id="orion")
@@ -94,13 +95,17 @@ async def test_owner_started_collaboration_can_get_diagnostics_but_cannot_execut
     assert "system_ops" not in {tool["name"] for tool in registry.list_tools(orion)}
     orion.extra["owner_collaboration"] = True
     assert "system_ops" in {tool["name"] for tool in registry.list_tools(orion)}
-    evidence = await registry.execute("system_ops", {"action": "diagnostics", "diagnostic": "listeners"}, orion)
-    assert json.loads(evidence)["stdout"] == "host listeners"
-    for args in ({"action": "exec", "command": "id"}, {"action": "read_file", "path": "/root/private"},
-                 {"action": "write_file", "path": "/root/private", "content": "change"},
-                 {"action": "restart_service", "service": "app"},
-                 {"action": "operation_status", "operation_id": "a" * 32}):
-        assert json.loads(await registry.execute("system_ops", args, orion))["status"] == "denied"
+    operations = [
+        {"action": "exec", "command": "id"},
+        {"action": "read_file", "path": "/root/private"},
+        {"action": "write_file", "path": "/root/private", "content": "change"},
+        {"action": "restart_service", "service": "app"},
+        {"action": "operation_status", "operation_id": "a" * 32},
+        {"action": "diagnostics", "diagnostic": "listeners"},
+    ]
+    for args in operations:
+        assert json.loads(await registry.execute("system_ops", args, orion))["source"] == "host"
+    assert requests == operations
 
     orion.task_role = "background"
     assert "system_ops" not in {tool["name"] for tool in registry.list_tools(orion)}

@@ -36,7 +36,7 @@ async def test_collaborators_can_get_live_server_evidence_from_orion(memory, mon
 
     async def host(args, context):
         assert context.agent_id == "orion" and context.triggered_by == "agent"
-        assert args == {"action": "diagnostics", "diagnostic": "listeners"}
+        assert args == {"action": "exec", "command": "ss -lntp 'sport = :443'"}
         return {"status": "ok", "stdout": "Caddy is listening on TCP 443."}
 
     def call(name, args):
@@ -46,7 +46,7 @@ async def test_collaborators_can_get_live_server_evidence_from_orion(memory, mon
     bits = await setup(memory, [
         tool({"action": "address", "agent_id": "orion", "message": "What is listening on TCP 443?"}),
         reply("Orion, what is listening on TCP 443?"),
-        call("system_ops", {"action": "diagnostics", "diagnostic": "listeners"}),
+        call("system_ops", {"action": "exec", "command": "ss -lntp 'sport = :443'"}),
         reply("Caddy is listening on TCP 443."),
         reply("Orion confirmed that Caddy owns the HTTPS listener."),
     ], contributions=3)

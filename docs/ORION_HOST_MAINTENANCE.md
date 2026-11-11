@@ -1,7 +1,8 @@
 # Orion host maintenance
 
-Orion administers the live Mark VI host. In a direct owner turn, System Ops runs
-Bash commands and file operations as root. Commands start in `/root` and run
+Orion administers the live Mark VI host. In owner-started conversations, System
+Ops runs Bash commands and file operations as root, including during Orion's
+collaboration turns. Commands start in `/root` and run
 until they finish or reach an explicitly requested timeout. For a running
 command, use its operation ID with `operation_status`. Results contain up to
 8,000 bytes per stream. For longer output, redirect it to a host file and inspect

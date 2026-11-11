@@ -13,7 +13,6 @@ from app.skills.base import Skill
 _SERVICE_NAME = re.compile(
     r"^/speda-((renovated-app|hisar|n8n|sandbox|caddy|browser|playwright-mcp)-[0-9]+|postgres)$"
 )
-_COLLABORATION_ACTIONS = frozenset({"status", "services", "incidents", "diagnostics", "service_logs"})
 
 
 class SystemOpsSkill(Skill):
@@ -24,10 +23,10 @@ class SystemOpsSkill(Skill):
     search_keywords = "system_operations production host server Docker systemd SSH root shell maintenance"
     description = (
         "Use system_ops for the live Mark VI server, including Docker, systemd, SSH logs and host files. "
-        "In a direct owner turn, action=exec runs the command as root on the host, and read_file and "
-        "write_file work with absolute host paths. Commands have no "
-        "runtime limit unless you supply a timeout. In an owner-started collaboration, use status, services, "
-        "incidents, diagnostics and service_logs to gather evidence for your colleague. Use restart_service "
+        "In owner-started turns, including collaborations, action=exec runs the command as root on "
+        "the host. Use read_file and write_file with absolute host paths. Commands have no runtime "
+        "limit unless you supply a timeout. Use status, services, incidents, diagnostics and "
+        "service_logs for common checks. Use restart_service "
         "for a managed restart. For an app restart, give the owner the operation ID and finish the turn. "
         "Use operation_status to check a running, scheduled or uncertain command before repeating it."
     )
@@ -67,8 +66,6 @@ class SystemOpsSkill(Skill):
         if not self.available(context):
             return json.dumps({"status": "denied", "reason": "Available to Orion in owner-started conversations."})
         action = args.get("action", "status")
-        if context.triggered_by != "user" and action not in _COLLABORATION_ACTIONS:
-            return json.dumps({"status": "denied", "reason": "Collaborations can run read-only host diagnostics."})
         if action == "incidents":
             if self.journal is None:
                 return json.dumps({"status": "unavailable", "reason": "Damage Control journal unavailable."})
