@@ -20,7 +20,8 @@ class RunCommandSkill(Skill):
     description=(
         'Run a bounded command in the configured no-secrets sandbox workspace. '
         'Use it for actual computations, scripts and generated artifacts; project engineering uses native Forge assignments. '
-        'It never executes on the API host or receives application credentials. A stopped HTTP transport does not prove the remote process stopped. '
+        'For the live server, Orion uses system_ops. Other personas ask Orion with collaborate. '
+        'A stopped HTTP transport does not prove the remote process stopped. '
         'Returns bounded stdout/stderr, exit status and timeout information. Unknown executions require inspection rather than automatic replay.')
     input_schema={'type':'object','properties':{'command':{'type':'string','minLength':1,'maxLength':16000},
         'timeout':{'type':'integer','minimum':1,'maximum':120,'default':30}},'required':['command'],'additionalProperties':False}

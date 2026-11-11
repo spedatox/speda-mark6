@@ -18,14 +18,14 @@ _COLLABORATION_ACTIONS = frozenset({"status", "services", "incidents", "diagnost
 
 class SystemOpsSkill(Skill):
     name = "system_ops"
-    deferred = True
     read_only = False
     memoize = False
     restricted_to = frozenset({"orion"})
-    search_keywords = "host server system operations Docker service status incidents health maintenance"
+    search_keywords = "system_operations production host server Docker systemd SSH root shell maintenance"
     description = (
-        "Operate the live Mark VI server. In a direct owner turn, exec runs any Bash command as root "
-        "on the host, and read_file and write_file work with absolute host paths. Commands have no "
+        "Use system_ops for the live Mark VI server, including Docker, systemd, SSH logs and host files. "
+        "In a direct owner turn, action=exec runs the command as root on the host, and read_file and "
+        "write_file work with absolute host paths. Commands have no "
         "runtime limit unless you supply a timeout. In an owner-started collaboration, use status, services, "
         "incidents, diagnostics and service_logs to gather evidence for your colleague. Use restart_service "
         "for a managed restart. For an app restart, give the owner the operation ID and finish the turn. "
@@ -44,7 +44,8 @@ class SystemOpsSkill(Skill):
             "path": {"type": "string", "minLength": 1},
             "content": {"type": "string"},
             "timeout": {"type": "integer", "minimum": 1, "description": "Optional command deadline in seconds."},
-            "diagnostic": {"enum": ["load", "storage", "listeners", "failed_units"]},
+            "diagnostic": {"enum": ["load", "storage", "listeners", "failed_units", "timezone",
+                                    "ssh_root_password_logins"]},
             "service": {"type": "string", "enum": ["app", "n8n", "caddy", "sandbox",
                         "browser", "playwright-mcp", "hisar", "orion-spark"]},
             "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},

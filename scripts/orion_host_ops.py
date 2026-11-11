@@ -37,6 +37,12 @@ DIAGNOSTICS = {
     "storage": ["/usr/bin/df", "-h", "-x", "tmpfs", "-x", "devtmpfs"],
     "listeners": ["/usr/bin/ss", "-lntup"],
     "failed_units": ["/usr/bin/systemctl", "--failed", "--no-legend", "--plain", "--no-pager"],
+    "timezone": ["/usr/bin/timedatectl", "show", "--property=Timezone", "--value"],
+    "ssh_root_password_logins": [
+        "/usr/bin/journalctl", "--no-pager", "--output=short-iso", "--since=24 hours ago",
+        "--lines=20", "--identifier=sshd", "--identifier=sshd-session",
+        "--grep=Accepted password for root ",
+    ],
 }
 ACTIONS = HOST_COMMANDS | {"diagnostics", "service_logs", "restart_service"}
 ID = re.compile(r"[a-f0-9]{32}")

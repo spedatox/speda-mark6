@@ -1,6 +1,6 @@
 ---
 name: system-operations
-description: Understand HISAR, Forge workspaces, anonymous workers and operational boundaries; load when operating these capabilities.
+description: Use Orion's System Ops on the live server, request server evidence from Orion, or choose the sandbox, Forge or HISAR for workspace tasks.
 ---
 
 # YOUR WORLD — the Speda Mark VI system
@@ -8,6 +8,23 @@ description: Understand HISAR, Forge workspaces, anonymous workers and operation
 You run inside **Speda Mark VI**, the owner's private multi-agent assistant.
 When he uses the names below, he means real parts of your own environment — know
 them so you never treat them as unknown jargon or hallucinate a definition.
+
+## Live server operations
+
+Orion administers the production host. For host commands in a direct owner
+turn, use the `system_ops` tool with `action: "exec"` and the Bash command.
+For example, `{"action":"exec","command":"hostname; id -un"}` verifies the
+host and execution identity. Use the same tool to manage Docker and systemd
+services, inspect host logs and work with host files. Check
+`operation_status` with the returned operation ID if a command is still running.
+
+When a colleague needs live server evidence, ask Orion using `collaborate`.
+Orion can inspect host diagnostics and service logs in owner-started peer
+turns. For a root password-login check, use the `timezone` and
+`ssh_root_password_logins` diagnostics. Report the log time and UTC offset.
+
+Use `run_command` for calculations, scripts and artifacts in the isolated
+sandbox workspace.
 
 **Speda Mark VI** — the whole system: Igor (the backend core) plus the agent
 roster and the client app. You are one agent profile inside it. It is deployed
@@ -27,8 +44,8 @@ telemetry — all the real work happens in Igor.
 Sentinel (finance), NightCrawler (OSINT/web surveillance & the news desk),
 Ultron (academic research), Scourge (cyber security), Atomix (the owner's
 personal health — not infrastructure), Optimus (systems, code & infrastructure).
-**Orion** is the system's own maintenance and memory-custodian agent. You reach
-the others with `dispatch_agent`.
+**Orion** administers the live host and maintains Iacon. You reach peer
+personas with `collaborate`.
 
 **The Legion** — Igor's disposable worker corps (the `Task` tool): anonymous,
 single-purpose workers with no identity, memory, chat, or seat on the roster.
@@ -51,9 +68,6 @@ Cell image with network access denied. Forge workers cannot delegate, access
 owner memory, or create their own mission. Optimus and Scourge are still Mark VI
 personas; they use Forge as a tool, and every other authorized persona can do the
 same through `Task`.
-
-**The sandbox** (your `run_command` tool) — Speda's own isolated Linux computer
-for running commands, separate from the Forge's Cell. It holds no secrets.
 
 **HISAR** — the owner's own cloud filesystem, and a system **he designed and
 built himself**. It is a macOS-style web desktop over a real vault of folders:
@@ -90,16 +104,9 @@ backend never schedules anything internally. Automated turns arrive as triggers.
 **Telegram** — the owner can also reach agents through per-agent Telegram bots,
 and pushed results are delivered there.
 
-The **House Party Protocol** and inter-agent dispatch are covered in the Agent
-Network section above.
-
-
-
-
 Forge is the heavy execution backend available through three anonymous `Task`
-workers. It is a capability you operate, never a persona, peer, chat recipient,
-or independent agent. Do not use `dispatch_agent` to reach Forge and never speak
-as if Optimus or Scourge lives inside it.
+workers. Use `Task` to reach Forge and `collaborate` to speak with Optimus or
+Scourge.
 
 - **Optimus is the designated primary operator of `autobot` (alias `forge_coder`) and `forge_reviewer`.**
   When the owner tasks Optimus with code implementation, refactoring, bug fixes,

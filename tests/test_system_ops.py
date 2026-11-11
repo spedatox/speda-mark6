@@ -26,13 +26,14 @@ async def test_system_ops_is_discoverable_only_for_owner_orion_and_returns_selec
     await registry.register_skill(SystemOpsSkill(None))
     orion = context(agent_id="orion")
     orion.allowed_tools = ProfileRegistry().require("orion").tools
-    assert "system_ops" in registry.discovery_index(orion)
+    assert "system_ops" in {tool["name"] for tool in registry.list_tools(orion)}
+    assert registry.search_tools("system_operations", orion)[0]["name"] == "system_ops"
     result = json.loads(await registry.execute("system_ops", {"action": "services"}, orion))
     assert result["services"] == [{"name": "speda-renovated-app-1", "state": "running", "status": "Up (healthy)"}]
 
     for other in (context(agent_id="optimus"), context(user_id=2, agent_id="orion"),
                   context(agent_id="orion", task_role="worker")):
-        assert "system_ops" not in registry.discovery_index(other)
+        assert "system_ops" not in {tool["name"] for tool in registry.list_tools(other)}
         with pytest.raises(ProviderError, match="not authorized"):
             await registry.execute("system_ops", {}, other)
 
@@ -90,9 +91,9 @@ async def test_owner_started_collaboration_can_get_diagnostics_but_cannot_execut
     await registry.register_skill(SystemOpsSkill(None))
     orion = context(agent_id="orion")
     orion.triggered_by = "agent"
-    assert "system_ops" not in registry.discovery_index(orion)
+    assert "system_ops" not in {tool["name"] for tool in registry.list_tools(orion)}
     orion.extra["owner_collaboration"] = True
-    assert "system_ops" in registry.discovery_index(orion)
+    assert "system_ops" in {tool["name"] for tool in registry.list_tools(orion)}
     evidence = await registry.execute("system_ops", {"action": "diagnostics", "diagnostic": "listeners"}, orion)
     assert json.loads(evidence)["stdout"] == "host listeners"
     for args in ({"action": "exec", "command": "id"}, {"action": "read_file", "path": "/root/private"},
@@ -102,4 +103,4 @@ async def test_owner_started_collaboration_can_get_diagnostics_but_cannot_execut
         assert json.loads(await registry.execute("system_ops", args, orion))["status"] == "denied"
 
     orion.task_role = "background"
-    assert "system_ops" not in registry.discovery_index(orion)
+    assert "system_ops" not in {tool["name"] for tool in registry.list_tools(orion)}

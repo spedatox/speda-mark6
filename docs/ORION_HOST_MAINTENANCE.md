@@ -9,8 +9,9 @@ the relevant sections.
 
 Other personas use `collaborate` to request server evidence from Orion in an
 owner-started conversation. Orion can check service health, incidents, recent
-service logs, load, storage, listening sockets and failed systemd units during
-these exchanges. An app restart requested through `restart_service` waits for
+service logs, load, storage, listening sockets, failed systemd units, the host
+timezone and recent successful SSH root password logins during these exchanges.
+An app restart requested through `restart_service` waits for
 the backend admission gate and verifies a different ready instance.
 
 Install `scripts/orion_host_ops.py` as `/usr/local/libexec/speda-orion-host-ops`
