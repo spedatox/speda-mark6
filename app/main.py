@@ -267,12 +267,12 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     coordinator.automations = app.state.automations
     from app.services.delivery import Deliveries
     from app.services.telegram_gateway import TelegramGateway
-    app.state.deliveries = Deliveries(AsyncSessionLocal, settings, profiles)
-    coordinator.deliveries = app.state.deliveries
-    app.state.telegram_gateway = TelegramGateway(coordinator, app.state.deliveries, settings)
     from app.services.voice import Voice
     app.state.voice = Voice(AsyncSessionLocal, profiles, global_budget, settings)
     coordinator.voice = app.state.voice
+    app.state.deliveries = Deliveries(AsyncSessionLocal, settings, profiles, voice=app.state.voice)
+    coordinator.deliveries = app.state.deliveries
+    app.state.telegram_gateway = TelegramGateway(coordinator, app.state.deliveries, settings)
     from app.services.reminders import Reminders
     app.state.reminders = Reminders(coordinator, app.state.deliveries)
     coordinator.reminders = app.state.reminders

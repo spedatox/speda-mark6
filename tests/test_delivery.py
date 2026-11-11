@@ -1,4 +1,5 @@
 import asyncio
+import json
 from urllib.parse import urlsplit,parse_qs
 import pytest
 from sqlalchemy import select,func
@@ -8,8 +9,13 @@ from app.services.delivery import Deliveries,chunks
 from app.services.telegram_gateway import TelegramGateway
 from app.services.coordination_budget import CoordinationError
 from app.schemas.llm import ProviderError
-from tests.test_automations import build
+from app.schemas.trigger import TriggerRequest
+from app.schemas.voice import VoiceAgentPatch
+from app.services.global_budget import GlobalBudget
+from app.services.voice import Voice
+from tests.test_automations import body,build
 from tests.test_coordination import reply
+from tests.test_voice import enable
 
 
 async def channel(memory,script=()):
@@ -44,6 +50,91 @@ async def wait_for_run(coordinator, run_id, status="succeeded"):
     if task is not None:
         await task
     assert (await coordinator.inspect_run(1, run_id))["status"] == status
+
+
+@pytest.mark.parametrize('scenario', ['scheduled', 'synthesis_failed', 'voice_rejected', 'unknown_send', 'unlinked'])
+async def test_automation_voice_delivery(memory, tmp_path, monkeypatch, scenario):
+    text = '**The briefing is ready.**'
+    bits, gateway, delivery, _ = await channel(memory, [reply(text), reply(text)])
+    await pair(gateway, 'speda')
+    del delivery.telegram  # Exercise the real multipart Telegram transport with a fake HTTP response.
+    automations = bits.coordinator.automations
+    config = automations.config
+    config.openai_api_key = 'fixture-openai'
+    config.temp_outputs_dir = str(tmp_path)
+    budget = GlobalBudget(memory.sessions)
+    await enable(budget)
+    delivery.voice = Voice(memory.sessions, bits.profiles, budget, config)
+    await delivery.voice.update(1, 'sentinel', VoiceAgentPatch(
+        language='en', voice_id='openai:gpt-4o-mini-tts:nova',
+    ))
+    provider_calls = []
+    telegram_calls = []
+    mp3 = b'ID3fixture-audio'
+
+    async def synthesize(method, url, **kwargs):
+        provider_calls.append(kwargs['json'])
+        if scenario == 'synthesis_failed':
+            return 400, b''
+        if scenario == 'unlinked':
+            await gateway.disconnect(1, 'speda')
+        return 200, mp3
+
+    async def telegram(method, url, **kwargs):
+        action = url.rsplit('/', 1)[1]
+        telegram_calls.append((action, kwargs))
+        if action == 'sendVoice':
+            if scenario == 'voice_rejected':
+                return 403, b''
+            if scenario == 'unknown_send':
+                raise ProviderError('remote_effect_unknown', 'Response lost')
+        return 200, json.dumps({'ok': True, 'result': {'message_id': 123}}).encode()
+
+    monkeypatch.setattr('app.services.voice.request_bytes', synthesize)
+    monkeypatch.setattr('app.services.delivery.request_bytes', telegram)
+    definition = body()
+    definition['spec'].update(voice=True, language='en')
+    automation = await automations.create(1, definition)
+    if scenario == 'scheduled':
+        await automations.sync(1, automation['id'])
+        row, _ = await automations.snapshot(1, automation['id'])
+        fired = await automations.admissions.start(1, 'sentinel', TriggerRequest(
+            payload={'automation_key': row.public_key, 'automation_revision': row.content_version},
+            output_mode='push',
+        ))
+    else:
+        fired = await automations.test(1, automation['id'])
+    await wait_for_run(bits.coordinator, fired['run_id'])
+    await asyncio.gather(*list(bits.coordinator.background))
+    await delivery.drain(1)
+    result = (await delivery.list(1, fired['run_id']))[0]
+    assert len(provider_calls) == 1
+    assert provider_calls[0]['voice'] == 'nova'
+    assert provider_calls[0]['instructions'] == 'Speak naturally in en.'
+    actions = [action for action, _ in telegram_calls]
+
+    if scenario == 'unlinked':
+        assert result['status'] == 'cancelled' and not actions
+    elif scenario == 'unknown_send':
+        assert result['status'] == 'unknown' and actions == ['sendVoice']
+    elif scenario == 'synthesis_failed':
+        assert result['status'] == 'accepted' and actions == ['sendMessage']
+        assert 'Sent the reply as text' in result['detail']
+    elif scenario == 'voice_rejected':
+        assert result['status'] == 'accepted' and actions == ['sendVoice', 'sendMessage']
+        assert 'Sent the reply as text' in result['detail']
+    else:
+        assert result['status'] == 'accepted' and actions == ['sendVoice']
+        assert telegram_calls[0][1]['files'] == {'voice': ('automation-reply.mp3', mp3, 'audio/mpeg')}
+        assert telegram_calls[0][1]['data']['caption'] == '[sentinel] The briefing is ready.'
+        for artifact in tmp_path.glob('*.mp3'):
+            artifact.unlink()
+        repeated = await automations.test(1, automation['id'])
+        await wait_for_run(bits.coordinator, repeated['run_id'])
+        await asyncio.gather(*list(bits.coordinator.background))
+        assert [action for action, _ in telegram_calls] == ['sendVoice', 'sendVoice']
+        assert len(provider_calls) == 2
+    await bits.coordinator.shutdown()
 
 
 async def test_random_single_use_pairing_owner_attribution_and_retry(memory):

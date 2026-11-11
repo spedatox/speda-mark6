@@ -12,7 +12,9 @@ from app.models.delivery import Delivery,TelegramLink
 from app.models.academic import Device
 from app.services.coordination_budget import digest,insert_for,CoordinationError
 from app.services.remote_tools import request_bytes
+from app.services.speech_text import MAX_CHARS
 from app.schemas.llm import ProviderError
+from app.schemas.voice import SpeakRequest
 
 
 def chunks(text,limit=3800):
@@ -27,8 +29,9 @@ def chunks(text,limit=3800):
 
 
 class Deliveries:
-    def __init__(self,sessions,config,profiles):
+    def __init__(self,sessions,config,profiles,*,voice=None):
         self.sessions,self.config,self.profiles=sessions,config,profiles
+        self.voice=voice
 
     def token(self,agent):
         try: configured=json.loads(self.config.telegram_bot_tokens)
@@ -45,6 +48,8 @@ class Deliveries:
             maximum=64000,timeout=30 if files else 12,**kwargs)
         if status == 429:
             raise ProviderError('telegram_throttled', 'Telegram rejected this request due to rate limiting.')
+        if method == 'sendVoice' and status in (400, 403):
+            raise ProviderError('telegram_voice_rejected', 'Telegram rejected the voice message.')
         try: data=json.loads(body)
         except ValueError: raise ProviderError('delivery_unknown','Telegram returned an unverifiable response.')
         if status>=300 or not isinstance(data,dict) or not data.get('ok'):
@@ -65,10 +70,17 @@ class Deliveries:
             # Explicit fallback only when this agent has no linked bot.
             link=await db.get(TelegramLink,(run.user_id,'speda'))
         if link and link.chat_id and self.token(link.agent_id):
-            for index,chunk in enumerate(chunks(text)):
-                await self.add(db,run.user_id,step.agent_id,[run.id,step.id,'telegram',index],'telegram',
-                    {'bot_agent':link.agent_id,'chat_id':link.chat_id,'link_version':link.version,
-                     'text':('['+step.agent_id+'] ' if link.agent_id!=step.agent_id else '')+chunk},run.id)
+            trigger=run.policy.get('trigger_payload') or {}
+            speak=trigger.get('voice') is True
+            prefix=f'[{step.agent_id}] ' if link.agent_id!=step.agent_id else ''
+            limit=MAX_CHARS-len(prefix) if speak else 3800
+            for index,chunk in enumerate(chunks(text,limit)):
+                payload={'bot_agent':link.agent_id,'chat_id':link.chat_id,
+                         'link_version':link.version,'text':prefix+chunk}
+                if speak:
+                    payload.update(voice=True,locale=trigger.get('language'))
+                await self.add(db,run.user_id,step.agent_id,[run.id,step.id,'telegram',index],
+                    'telegram',payload,run.id)
         elif run.user_id==1 and self.config.fcm_credentials_file:
             devices=list(await db.scalars(select(Device).where(Device.active.is_(True)).order_by(Device.id).limit(20)))
             for device in devices:
@@ -116,6 +128,48 @@ class Deliveries:
         for identity in ids: await self.send(owner,identity)
         return {'processed':len(ids)}
 
+    async def telegram_link_matches(self, db, owner, payload):
+        link = await db.get(TelegramLink, (owner, payload['bot_agent']))
+        return link and link.chat_id == payload['chat_id'] and link.version == payload['link_version']
+
+    async def send_telegram_voice(self, owner, identity, agent, payload):
+        fallback = 'Speech synthesis unavailable. Sent the reply as text.'
+        audio = None
+        try:
+            if self.voice is None:
+                raise CoordinationError('voice_unconfigured', 'Speech service is unavailable')
+            speech = await self.voice.speak(owner, SpeakRequest(
+                text=payload['text'], agent_id=agent, locale=payload.get('locale'),
+                request_id=f'delivery-{identity}',
+            ), cache_scope=identity)
+            audio = await asyncio.to_thread(Path(speech['path']).read_bytes)
+        except (CoordinationError, ProviderError, ValueError, OSError):
+            # Synthesis failure cannot have sent a Telegram message.
+            pass
+
+        bot = payload['bot_agent']
+        wire = {'chat_id': payload['chat_id']}
+        changed_link = (None, 'cancelled', 'The Telegram link changed before delivery.')
+        if audio:
+            # Synthesis can take long enough for the owner to change the link.
+            async with self.sessions() as db:
+                if not await self.telegram_link_matches(db, owner, payload):
+                    return changed_link
+            caption = chunks(speech['spoken_text'], 1024)[0]
+            try:
+                result = await self.telegram(bot, 'sendVoice', {**wire, 'caption': caption},
+                    files={'voice': ('automation-reply.mp3', audio, 'audio/mpeg')})
+                return result, 'accepted', 'Telegram voice message accepted.'
+            except ProviderError as exc:
+                if exc.code != 'telegram_voice_rejected':
+                    raise
+                fallback = 'Telegram rejected the voice message. Sent the reply as text.'
+        async with self.sessions() as db:
+            if not await self.telegram_link_matches(db, owner, payload):
+                return changed_link
+        result = await self.telegram(bot, 'sendMessage', {**wire, 'text': payload['text']})
+        return result, 'accepted', fallback
+
     async def send(self,owner,identity):
         async with write_session(self.sessions) as db:
             await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.user_id==owner).values(updated_at=Delivery.updated_at))
@@ -130,8 +184,7 @@ class Deliveries:
                 if not cycle or cycle.user_id!=owner or cycle.status!='open' or cycle.version!=payload['reminder_version']:
                     row.status='cancelled'; row.detail='The reminder was answered or superseded before delivery.'; return self.view(row)
             if row.channel=='telegram':
-                link=await db.get(TelegramLink,(owner,payload['bot_agent']))
-                if not link or link.chat_id!=payload['chat_id'] or link.version!=payload['link_version']:
+                if not await self.telegram_link_matches(db,owner,payload):
                     row.status='cancelled'; row.detail='The Telegram link changed before delivery.'; return self.view(row)
                 if not self.token(payload['bot_agent']): row.status='unconfigured'; return self.view(row)
             elif row.channel=='fcm':
@@ -142,14 +195,17 @@ class Deliveries:
             claimed=await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.status=='pending').values(status='sending',updated_at=datetime.utcnow()))
             if claimed.rowcount!=1: return {'status':'busy'}
             channel=row.channel
+            agent=row.agent_id
             if payload.get('manual_step'):
                 from app.models.coordination import CoordinationRun,AgentStep
                 run=await db.get(CoordinationRun,row.run_id)
                 step=await db.get(AgentStep,payload['manual_step'])
                 if not run or run.user_id!=owner or run.cancelled or run.executor!=payload['executor'] or run.status!='running' or run.deadline<=time.time() or run.lease_until<=time.time() or not step or step.run_id!=run.id or step.status!='running':
                     row.status='cancelled'; row.detail='The originating owner run stopped before dispatch.'; return self.view(row)
+        detail=None
         try:
             if channel=='telegram':
+                status='accepted'
                 if payload.get('file_path'):
                     path=Path(payload['file_path']).resolve()
                     if not path.is_relative_to(Path(self.config.temp_outputs_dir).resolve()) or not path.is_file() or path.stat().st_size>10*1024*1024:
@@ -159,13 +215,17 @@ class Deliveries:
                         raise CoordinationError('telegram_file','Queued file changed before upload')
                     result=await self.telegram(payload['bot_agent'],'sendDocument',{'chat_id':payload['chat_id'],'caption':payload.get('caption','')},
                         files={'document':(payload['file_name'],content,'application/octet-stream')})
+                elif payload.get('voice') is True:
+                    result,status,detail=await self.send_telegram_voice(owner,identity,agent,payload)
                 else:
                     wire={'chat_id':payload['chat_id'],'text':payload['text']}
                     if payload.get('reply_markup'): wire['reply_markup']=payload['reply_markup']
                     result=await self.telegram(payload['bot_agent'],'sendMessage',wire)
-                if not isinstance(result,dict) or type(result.get('message_id')) is not int:
-                    raise ProviderError('delivery_unknown','Telegram send was not confirmed.')
-                remote_id=str(result['message_id']); status='accepted'
+                remote_id=None
+                if status=='accepted':
+                    if not isinstance(result,dict) or type(result.get('message_id')) is not int:
+                        raise ProviderError('delivery_unknown','Telegram send was not confirmed.')
+                    remote_id=str(result['message_id'])
             else:
                 from app.services.fcm import send_data_message
                 ok,detail=await send_data_message(fid=fid,token=token,
@@ -183,7 +243,7 @@ class Deliveries:
         else:
             async with write_session(self.sessions) as db:
                 await db.execute(update(Delivery).where(Delivery.id==identity,Delivery.status=='sending').values(
-                    status=status,remote_id=remote_id,updated_at=datetime.utcnow()))
+                    status=status,remote_id=remote_id,detail=detail,updated_at=datetime.utcnow()))
         async with self.sessions() as db: return self.view(await db.get(Delivery,identity))
 
     @staticmethod
