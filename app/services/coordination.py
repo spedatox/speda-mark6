@@ -668,6 +668,7 @@ class Coordinator:
         context.extra['mcp_grants'] = frozenset(profile.get('mcp_grants', ()))
         context.extra['mcp_schemas'] = dict(profile.get('mcp_schemas', {}))
         context.extra['owner_instructions'] = stored.get('owner_instructions', '')
+        context.extra['owner_collaboration'] = stored.get('origin') == 'user' and step.parent_id is not None
         context.extra['project_context'] = stored.get('project_contexts', {}).get(step.agent_id)
         if stored.get('cloud_environment') and context.extra['project_context']:
             context.extra['project_context'] = {**context.extra['project_context'],

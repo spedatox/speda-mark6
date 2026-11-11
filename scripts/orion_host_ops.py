@@ -11,6 +11,7 @@ import signal
 import socket
 import socketserver
 import sqlite3
+import stat
 import struct
 import subprocess
 import sys
@@ -21,7 +22,6 @@ from contextlib import closing
 
 ROOT = Path("/opt/speda-operations/orion-host-ops")
 SOCKET = ROOT / "socket/broker.sock"
-WORKSPACE = Path("/var/lib/speda-orion-ops/workspace")
 DEPLOY = Path("/opt/speda-operations/cicd/deployments")
 SCRIPT = "/usr/local/libexec/speda-orion-host-ops"
 DOCKER = "/usr/bin/docker"
@@ -31,7 +31,14 @@ SERVICES = {
     "sandbox": "speda-sandbox-1", "browser": "speda-browser-1",
     "playwright-mcp": "speda-playwright-mcp-1", "hisar": "speda-hisar-1",
 }
-ACTIONS = {"exec", "read_file", "write_file", "service_logs", "restart_service"}
+HOST_COMMANDS = {"exec", "read_file", "write_file"}
+DIAGNOSTICS = {
+    "load": ["/usr/bin/uptime"],
+    "storage": ["/usr/bin/df", "-h", "-x", "tmpfs", "-x", "devtmpfs"],
+    "listeners": ["/usr/bin/ss", "-lntup"],
+    "failed_units": ["/usr/bin/systemctl", "--failed", "--no-legend", "--plain", "--no-pager"],
+}
+ACTIONS = HOST_COMMANDS | {"diagnostics", "service_logs", "restart_service"}
 ID = re.compile(r"[a-f0-9]{32}")
 
 # Run inside the live application container. The API credential stays there.
@@ -64,10 +71,10 @@ def result(status, **fields):
 
 def run(argv, timeout, payload=None):
     """Drain both streams without storing unbounded output."""
-    deadline = time.monotonic() + timeout
+    deadline = None if timeout is None else time.monotonic() + timeout
     with tempfile.TemporaryFile() as input_file, selectors.DefaultSelector() as selector:
         if payload is not None:
-            input_file.write(json.dumps(payload).encode() + b"\n")
+            input_file.write(json.dumps(payload, ensure_ascii=False).encode() + b"\n")
             input_file.seek(0)
         with subprocess.Popen(argv, stdin=input_file, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, start_new_session=True) as process:
@@ -77,8 +84,8 @@ def run(argv, timeout, payload=None):
             truncated = False
             try:
                 while selector.get_map():
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
+                    remaining = None if deadline is None else deadline - time.monotonic()
+                    if remaining is not None and remaining <= 0:
                         raise TimeoutError
                     for key, _ in selector.select(remaining):
                         data = os.read(key.fd, 4096)
@@ -89,7 +96,8 @@ def run(argv, timeout, payload=None):
                         capacity = max(0, 8000 - len(buffer))
                         buffer.extend(data[:capacity])
                         truncated |= len(data) > capacity
-                code = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+                remaining = None if deadline is None else max(0.1, deadline - time.monotonic())
+                code = process.wait(timeout=remaining)
             except (TimeoutError, subprocess.TimeoutExpired):
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
@@ -114,14 +122,21 @@ def worker():
             sys.stdout.buffer.write(stream.read(8001))
         return
     target = path.resolve()
-    if not target.is_relative_to(WORKSPACE) or target == WORKSPACE:
-        raise ValueError("Write paths must be inside the Orion maintenance workspace.")
+    try:
+        existing = target.stat()
+    except FileNotFoundError:
+        existing = None
+    if existing is not None and not stat.S_ISREG(existing.st_mode):
+        raise ValueError("write_file requires a regular file.")
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as stream:
         temporary = Path(stream.name)
         try:
             stream.write(request["content"].encode())
             stream.flush()
+            if existing is not None:
+                os.fchown(stream.fileno(), existing.st_uid, existing.st_gid)
+                os.fchmod(stream.fileno(), stat.S_IMODE(existing.st_mode))
             os.fsync(stream.fileno())
             temporary.replace(target)
         finally:
@@ -129,23 +144,17 @@ def worker():
     print(f"Saved {target}.")
 
 
-def sandbox(request):
-    seconds = request.get("timeout", 20)
+def host_command(request):
+    seconds = request.get("timeout")
     unit = "speda-orion-command-" + request["operation_id"]
-    options = [
-        "User=speda-orion-ops", "Group=speda-orion-ops", f"WorkingDirectory={WORKSPACE}",
-        "UMask=0077", "NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes",
-        "PrivateTmp=yes", "PrivateDevices=yes", "ProtectKernelTunables=yes",
-        "ProtectKernelModules=yes", "ProtectControlGroups=yes", "RestrictNamespaces=yes",
-        f"ReadWritePaths={WORKSPACE}", "InaccessiblePaths=-/opt/speda -/opt/speda-operations "
-        "-/opt/hisar -/run/docker.sock -/run/containerd -/var/lib/docker -/var/lib/containerd",
-        "KillMode=control-group", "TimeoutStopSec=2s", f"RuntimeMaxSec={seconds}s",
-        "MemoryMax=256M", "TasksMax=48", "CPUQuota=100%", "LimitFSIZE=16777216",
-    ]
     argv = ["/usr/bin/systemd-run", "--pipe", "--wait", "--collect", "--quiet", "--service-type=exec",
-            f"--unit={unit}", f"--setenv=HOME={WORKSPACE}", "--setenv=LANG=C.UTF-8"]
-    argv.extend(f"--property={value}" for value in options)
-    reply = run([*argv, "/usr/bin/python3", SCRIPT, "worker"], seconds + 8, request)
+            f"--unit={unit}", "--uid=root", "--gid=root", "--working-directory=/root",
+            "--setenv=HOME=/root", "--setenv=LANG=C.UTF-8", "--property=UMask=0077",
+            "--property=TasksMax=infinity"]
+    if seconds is not None:
+        argv.extend([f"--property=RuntimeMaxSec={seconds}s", "--property=TimeoutStopSec=2s"])
+    reply = run([*argv, "/usr/bin/python3", SCRIPT, "worker"],
+                None if seconds is None else seconds + 8, request)
     if reply["status"] == "timeout":
         run(["/usr/bin/systemctl", "stop", unit], 8)
     return reply
@@ -230,26 +239,39 @@ def run_restart(identity, service):
     save(identity, reply)
 
 
+def operation_status(identity):
+    with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db:
+        row = db.execute("SELECT reply FROM operations WHERE id=?", (identity,)).fetchone()
+    return json.loads(row[0]) if row else result("unavailable", reason="Operation not found.")
+
+
+def run_host_command(request):
+    try:
+        reply = host_command(request)
+    except (OSError, ValueError, OverflowError):
+        reply = result("unknown", reason="The host command result could not be confirmed.")
+    save(request["operation_id"], reply)
+
+
 def admit(request):
     identity = request.get("operation_id")
     action = request.get("action")
     if not isinstance(identity, str) or not ID.fullmatch(identity):
         return result("denied", reason="Invalid operation ID.")
     if action == "operation_status":
-        with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db:
-            row = db.execute("SELECT reply FROM operations WHERE id=?", (identity,)).fetchone()
-        return json.loads(row[0]) if row else result("unavailable", reason="Operation not found.")
+        return operation_status(identity)
     if action not in ACTIONS:
         return result("denied", reason="Unsupported operation.")
     service = request.get("service")
     if action in {"service_logs", "restart_service"} and service not in {*SERVICES, "orion-spark"}:
         return result("denied", reason="Service is outside the maintenance scope.")
-    seconds = request.get("timeout", 20)
-    if type(seconds) is not int or not 1 <= seconds <= 40:
-        return result("denied", reason="Timeout must be between 1 and 40 seconds.")
-    for key, size in {"command": 4000, "path": 1000, "content": 16000}.items():
-        if key in request and (not isinstance(request[key], str) or "\x00" in request[key]
-                               or len(request[key].encode()) > size):
+    diagnostic = request.get("diagnostic")
+    if action == "diagnostics" and diagnostic not in DIAGNOSTICS:
+        return result("denied", reason="Unknown host diagnostic.")
+    if "timeout" in request and (type(request["timeout"]) is not int or request["timeout"] < 1):
+        return result("denied", reason="Timeout must be a positive number of seconds.")
+    for key in ("command", "path", "content"):
+        if key in request and (not isinstance(request[key], str) or "\x00" in request[key]):
             return result("denied", reason=f"Invalid {key}.")
     required = {"exec": ("command",), "read_file": ("path",), "write_file": ("path", "content")}
     if any(key not in request for key in required.get(action, ())):
@@ -265,8 +287,13 @@ def admit(request):
     if action == "restart_service":
         threading.Thread(target=run_restart, args=(identity, service), daemon=True).start()
         return initial
+    if action in HOST_COMMANDS:
+        thread = threading.Thread(target=run_host_command, args=(request,), daemon=True)
+        thread.start()
+        thread.join(timeout=2)
+        return operation_status(identity)
     try:
-        reply = service_logs(service) if action == "service_logs" else sandbox(request)
+        reply = service_logs(service) if action == "service_logs" else run(DIAGNOSTICS[diagnostic], 10)
     except (OSError, ValueError, KeyError):
         reply = result("unknown", reason="The host operation result could not be confirmed.")
     save(identity, reply)
@@ -280,7 +307,11 @@ class Handler(socketserver.StreamRequestHandler):
             return
         self.request.settimeout(5)
         try:
-            request = json.loads(self.rfile.readline(LIMIT + 1))
+            line = self.rfile.readline(LIMIT + 1)
+            if len(line) > LIMIT:
+                self.wfile.write(json.dumps(result("denied", reason="Host request exceeds 128 KiB.")).encode() + b"\n")
+                return
+            request = json.loads(line)
             if not isinstance(request, dict):
                 raise ValueError
             reply = admit(request)

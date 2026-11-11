@@ -13,6 +13,7 @@ from app.skills.base import Skill
 _SERVICE_NAME = re.compile(
     r"^/speda-((renovated-app|hisar|n8n|sandbox|caddy|browser|playwright-mcp)-[0-9]+|postgres)$"
 )
+_COLLABORATION_ACTIONS = frozenset({"status", "services", "incidents", "diagnostics", "service_logs"})
 
 
 class SystemOpsSkill(Skill):
@@ -23,25 +24,27 @@ class SystemOpsSkill(Skill):
     restricted_to = frozenset({"orion"})
     search_keywords = "host server system operations Docker service status incidents health maintenance"
     description = (
-        "Maintain the actual Mark VI server for the owner. Use exec for host shell commands and read_file "
-        "for accessible files. Use write_file for files under /var/lib/speda-orion-ops/workspace. "
-        "Use services, incidents and service_logs to diagnose problems and restart_service for a named service "
-        "when the owner asks or delegates the repair. For app restart, give the owner the operation ID and finish "
-        "the turn. Confirm a scheduled or uncertain result with operation_status before repeating an operation."
+        "Operate the live Mark VI server. In a direct owner turn, exec runs any Bash command as root "
+        "on the host, and read_file and write_file work with absolute host paths. Commands have no "
+        "runtime limit unless you supply a timeout. In an owner-started collaboration, use status, services, "
+        "incidents, diagnostics and service_logs to gather evidence for your colleague. Use restart_service "
+        "for a managed restart. For an app restart, give the owner the operation ID and finish the turn. "
+        "Use operation_status to check a running, scheduled or uncertain command before repeating it."
     )
     input_schema = {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["status", "services", "incidents", "exec", "read_file", "write_file",
+                "enum": ["status", "services", "incidents", "diagnostics", "exec", "read_file", "write_file",
                          "service_logs", "restart_service", "operation_status"],
                 "default": "status",
             },
-            "command": {"type": "string", "minLength": 1, "maxLength": 4000},
-            "path": {"type": "string", "minLength": 1, "maxLength": 1000},
-            "content": {"type": "string", "maxLength": 16000},
-            "timeout": {"type": "integer", "minimum": 1, "maximum": 40, "default": 20},
+            "command": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "content": {"type": "string"},
+            "timeout": {"type": "integer", "minimum": 1, "description": "Optional command deadline in seconds."},
+            "diagnostic": {"enum": ["load", "storage", "listeners", "failed_units"]},
             "service": {"type": "string", "enum": ["app", "n8n", "caddy", "sandbox",
                         "browser", "playwright-mcp", "hisar", "orion-spark"]},
             "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
@@ -55,12 +58,16 @@ class SystemOpsSkill(Skill):
     def available(self, context):
         return (getattr(context, "user_id", None) == 1
                 and context.agent_id == "orion" and context.task_role == "interactive"
-                and context.triggered_by == "user")
+                and (context.triggered_by == "user" or (
+                    context.triggered_by == "agent" and context.extra.get("owner_collaboration")
+                )))
 
     async def execute(self, args, context):
         if not self.available(context):
-            return json.dumps({"status": "denied", "reason": "Available in the owner's Orion chat."})
+            return json.dumps({"status": "denied", "reason": "Available to Orion in owner-started conversations."})
         action = args.get("action", "status")
+        if context.triggered_by != "user" and action not in _COLLABORATION_ACTIONS:
+            return json.dumps({"status": "denied", "reason": "Collaborations can run read-only host diagnostics."})
         if action == "incidents":
             if self.journal is None:
                 return json.dumps({"status": "unavailable", "reason": "Damage Control journal unavailable."})

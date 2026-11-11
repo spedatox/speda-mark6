@@ -12,6 +12,9 @@ async def host_operation(args, context):
     operation_id = args.get("operation_id") if action == "operation_status" else hashlib.sha256(
         f"{context.request_id}:{context.tool_call_id}".encode()).hexdigest()[:32]
     request = {**args, "operation_id": operation_id}
+    payload = json.dumps(request, ensure_ascii=False).encode() + b"\n"
+    if len(payload) > 128 * 1024:
+        return {"status": "denied", "reason": "Host request exceeds 128 KiB."}
     connect = getattr(asyncio, "open_unix_connection", None)
     if connect is None:
         return {"status": "unavailable", "reason": "Host maintenance requires the server broker."}
@@ -22,7 +25,7 @@ async def host_operation(args, context):
         return {"status": "unavailable", "reason": "The host maintenance broker is unavailable."}
     try:
         async with asyncio.timeout(58):
-            writer.write(json.dumps(request, ensure_ascii=False).encode() + b"\n")
+            writer.write(payload)
             await writer.drain()
             reply = json.loads(await reader.readline())
             if not isinstance(reply, dict):

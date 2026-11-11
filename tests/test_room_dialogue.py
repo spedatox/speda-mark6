@@ -29,6 +29,46 @@ async def session_id(memory, room):
         return (await db.get(Room, room["id"])).session_id
 
 
+async def test_scourge_can_get_live_server_evidence_from_orion(memory, monkeypatch):
+    from app.schemas.llm import Block, LLMMessage
+    from app.skills import system_ops
+    from app.skills.tool_search import ToolSearchSkill
+
+    async def host(args, context):
+        assert context.agent_id == "orion" and context.triggered_by == "agent"
+        assert args == {"action": "diagnostics", "diagnostic": "listeners"}
+        return {"status": "ok", "stdout": "Caddy is listening on TCP 443."}
+
+    def call(name, args):
+        return LLMMessage([Block(type="tool_use", id=name, name=name, input=args)], "tool_use")
+
+    monkeypatch.setattr(system_ops, "host_operation", host)
+    bits = await setup(memory, [
+        tool({"action": "address", "agent_id": "orion", "message": "What is listening on TCP 443?"}),
+        reply("Orion, what is listening on TCP 443?"),
+        call("tool_search", {"query": "system_ops"}),
+        call("system_ops", {"action": "diagnostics", "diagnostic": "listeners"}),
+        reply("Caddy is listening on TCP 443."),
+        reply("Orion confirmed that Caddy owns the HTTPS listener."),
+    ], contributions=3)
+    registry = bits.engine._registry
+    await registry.register_skill(system_ops.SystemOpsSkill(None))
+    await registry.register_skill(ToolSearchSkill(registry))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom(lead="scourge", members=["orion"]))
+        result = await send(bits, room, "Find which service is listening on TCP 443.")
+        assert result["status"] == "succeeded"
+        calls = bits.client.calls
+        assert "ask Orion using collaborate" in calls[0]["system"]
+        assert "system_ops" not in {item["name"] for item in calls[0]["tools"]}
+        assert "administrator of the live Mark VI server" in calls[2]["system"]
+        assert "system_ops" in {item["name"] for item in calls[3]["tools"]}
+        assert "Caddy is listening on TCP 443." in str(calls[4]["messages"])
+        assert "Caddy is listening on TCP 443." in str(calls[5]["messages"])
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_public_question_returns_to_questioner_without_another_owner_input(memory):
     bits = await setup(memory, [
         tool({"action": "address", "agent_id": "ultron",

@@ -76,3 +76,30 @@ async def test_orion_command_uses_host_transport_and_a_stable_receipt(monkeypatc
     assert reply == {"status": "ok", "exit_code": 0, "stdout": "host output",
                      "source": "host", "operation_id": expected}
     assert not registry.call_is_read_only("system_ops", command)
+
+
+async def test_owner_started_collaboration_can_get_diagnostics_but_cannot_execute(monkeypatch):
+    from app.skills import system_ops
+
+    async def diagnostics(args, ctx):
+        assert args == {"action": "diagnostics", "diagnostic": "listeners"}
+        return {"status": "ok", "stdout": "host listeners"}
+
+    monkeypatch.setattr(system_ops, "host_operation", diagnostics)
+    registry = CapabilityRegistry()
+    await registry.register_skill(SystemOpsSkill(None))
+    orion = context(agent_id="orion")
+    orion.triggered_by = "agent"
+    assert "system_ops" not in registry.discovery_index(orion)
+    orion.extra["owner_collaboration"] = True
+    assert "system_ops" in registry.discovery_index(orion)
+    evidence = await registry.execute("system_ops", {"action": "diagnostics", "diagnostic": "listeners"}, orion)
+    assert json.loads(evidence)["stdout"] == "host listeners"
+    for args in ({"action": "exec", "command": "id"}, {"action": "read_file", "path": "/root/private"},
+                 {"action": "write_file", "path": "/root/private", "content": "change"},
+                 {"action": "restart_service", "service": "app"},
+                 {"action": "operation_status", "operation_id": "a" * 32}):
+        assert json.loads(await registry.execute("system_ops", args, orion))["status"] == "denied"
+
+    orion.task_role = "background"
+    assert "system_ops" not in registry.discovery_index(orion)
