@@ -5,9 +5,11 @@ import json
 from time import monotonic
 from types import SimpleNamespace
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 import httpx
 import pytest
 from sqlalchemy import select
+from app.models.delivery import TelegramLink, TelegramOwner
 from app.models.iacon import IaconCall, IaconFollowup, IaconRecord, IaconWork
 from app.models.memory_serving import MemoryChange
 from app.schemas.iacon import Command, MaintenancePolicy
@@ -16,7 +18,11 @@ from app.services.iacon_catalogue import Catalogue, Conflict
 from app.services.iacon_budget import MaintenanceBudget, BudgetDenied
 from app.services.iacon_worker import Orion
 from app.services.iacon_telegram import TelegramFollowups
-from app.services.memory_runtime import MemoryRuntime
+from app.services.memory_runtime import MemoryRuntime, packet_json
+from app.services.memory_store import capture_source
+from app.profiles.registry import ProfileRegistry
+from app.services.coordination_budget import CoordinationError
+from app.services.telegram_gateway import TelegramGateway
 
 
 def effective():
@@ -26,7 +32,9 @@ def effective():
 
 
 async def command(memory, text="I prefer tea", **changes):
-    sid, _ = await memory.seed(text, role="owner", publish=False)
+    async with memory.sessions() as db, db.begin():
+        source = await capture_source(db, user_id=1, source_key=f"test:{uuid4()}", content=text)
+        sid = source.id
     values = dict(command_id=uuid4().hex, kind="preference", title="Drinks",
         payload={"text": text}, evidence=[{"source_id": sid, "start": 0, "end": len(text), "quote": text}])
     values.update(changes)
@@ -161,6 +169,143 @@ async def state_setup(memory, transport):
     config = SimpleNamespace(iacon_telegram_token="test-token", iacon_telegram_chat_id=123, iacon_telegram_owner_id=456)
     telegram = TelegramFollowups(catalogue, budget, config, transport=httpx.MockTransport(transport))
     return catalogue, saved, telegram
+
+
+async def test_current_incident_has_priority_and_older_states_remain_retrievable(memory):
+    ctx = memory.context("What are my sisters' names?")
+    today = datetime.now(ZoneInfo(ctx.timezone)).date()
+    yesterday = today - timedelta(days=1)
+    catalogue = Catalogue(memory.store)
+
+    async def save(title, salience, status, verified, review, **dates):
+        draft = await command(memory, title, kind="state", title=title,
+            payload={"summary": title, "status": status, "salience": salience, "question": "Is this still current?",
+                     "verified_on": str(verified), "review_on": str(review), **dates})
+        return await catalogue.apply(1, draft)
+
+    old = await save("Photography classes", "normal", "active", yesterday, yesterday)
+    overdue = await save("Unresolved urgent outage", "high", "active", yesterday, yesterday)
+    incident = await save("Current server incident", "high", "active", today, today + timedelta(days=1))
+    waiting = await save("Insurance paperwork", "high", "waiting", today, today + timedelta(days=1))
+    await save("Upcoming trip", "high", "planned", today, today + timedelta(days=1),
+               starts_on=str(today + timedelta(days=4)))
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2)
+    packet = await runtime.prepare(ctx)
+    states = json.loads(packet_json(packet))["current_states"]
+    assert [row["record_id"] for row in states] == [incident["id"], overdue["id"], waiting["id"]]
+    assert [row["freshness"] for row in states] == ["confirmed", "review_due", "confirmed"]
+    assert packet.token_upper_bound <= ctx.memory_budget.automatic_limit
+    lookup = await runtime.lookup(memory.context(), "photography classes")
+    assert old["id"] in packet_json(lookup) and "current status unverified" in packet_json(lookup)
+    from app.schemas.coordination import CreateRoom
+    from tests.test_coordination import setup, reply, send
+
+    bits = await setup(memory, [reply("Hello"), reply("Here is the schedule")])
+    bits.engine._memory_runtime = runtime
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        assert (await send(bits, room, "Hello"))["status"] == "succeeded"
+        assert (await send(bits, room, "Show my calendar", input_id="two"))["status"] == "succeeded"
+        for call in bits.client.calls:
+            raw = call["system"].split("<remembered_context>\n", 1)[1].split("\n</remembered_context>", 1)[0]
+            assert json.loads(raw)["current_states"][0]["record_id"] == incident["id"]
+    finally:
+        await bits.coordinator.shutdown()
+    await memory.store.revoke(ctx, incident["evidence"][0]["source_id"])
+    after = await runtime.prepare(memory.context("Hello"))
+    assert [row["record_id"] for row in json.loads(packet_json(after))["current_states"]] == [overdue["id"], waiting["id"]]
+
+
+async def test_orion_interprets_current_incident_and_reviews_it_ahead_of_older_work(memory):
+    ctx = memory.context()
+    today = datetime.now(ZoneInfo(ctx.timezone)).date()
+    routine = await command(memory)
+    incident = await command(memory, "The server outage is ongoing", kind="state", title="Server outage",
+        payload={"summary": "The server outage is ongoing", "status": "active", "salience": "high",
+                 "verified_on": str(today), "review_on": str(today), "question": "Is the outage resolved?"})
+    ctx.memory_source_id = incident.evidence[0].source_id
+    client = FakeClient([json.dumps([incident.model_dump(mode="json")]),
+        '{"accept":true,"reason":"Owner confirmed an ongoing incident"}'])
+    budget = await funded(memory, client)
+
+    class Policy:
+        async def resolve(self, **kwargs):
+            return effective()
+
+    catalogue = Catalogue(memory.store)
+    orion = Orion(catalogue, budget, Policy(), lambda stage: stage)
+    await orion.propose(ctx, routine)
+    assert (await orion.drain(ctx, limit=2))["processed"] == 2
+    assert [row["title"] for row in await catalogue.list(1)] == ["Server outage"]
+    assert len(client.calls) == 2
+
+
+async def test_native_orion_telegram_prioritizes_and_closes_exact_state(memory):
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
+    now = datetime.now(timezone.utc)
+    catalogue = Catalogue(memory.store)
+    old_date = today - timedelta(days=3)
+    old = await command(memory, "Old routine review", kind="state", title="Old routine review",
+        payload={"summary": "Old routine review", "status": "waiting", "verified_on": str(old_date),
+                 "review_on": str(old_date), "question": "Is the old review current?"})
+    await catalogue.apply(1, old)
+    incident = await command(memory, "Active server incident", kind="state", title="Active server incident",
+        payload={"summary": "Active server incident", "status": "active", "salience": "high",
+                 "verified_on": str(old_date), "review_on": str(old_date + timedelta(days=1)),
+                 "question": "Is the incident ongoing?"})
+    saved = await catalogue.apply(1, incident)
+    async with memory.sessions() as db, db.begin():
+        db.add(TelegramOwner(user_id=1, sender_id=456))
+        db.add(TelegramLink(user_id=1, agent_id="orion", chat_id=456))
+
+    outbound = []
+
+    class NativeDelivery:
+        def token(self, agent):
+            return "fixture" if agent == "orion" else ""
+
+        async def telegram(self, agent, method, payload):
+            outbound.append((agent, method, payload))
+            return {"message_id": 80}
+
+    deliveries = NativeDelivery()
+    budget = await funded(memory, FakeClient(), telegram_enabled=True, quiet_start=0, quiet_end=0)
+    config = SimpleNamespace(iacon_telegram_token="", iacon_telegram_chat_id=0, iacon_telegram_owner_id=0,
+        telegram_owner_id=0, owner_timezone="Europe/Istanbul")
+    followups = TelegramFollowups(catalogue, budget, config, deliveries=deliveries)
+    gateway = TelegramGateway(SimpleNamespace(sessions=memory.sessions, profiles=ProfileRegistry()),
+        deliveries, config, iacon_followups=followups)
+    try:
+        sent = await followups.send_due(memory.context(), now=now)
+        assert sent["status"] == "sent"
+        assert outbound[0][:2] == ("orion", "sendMessage")
+        assert outbound[0][2]["chat_id"] == 456
+        assert "Is the incident ongoing?" in outbound[0][2]["text"]
+        event = {"update_id": 12, "callback_query": {"id": "click", "from": {"id": 999},
+            "message": {"message_id": 80, "chat": {"id": 456, "type": "private"}},
+            "data": f'ia:{sent["id"]}:done'}}
+        with pytest.raises(CoordinationError, match="linked Orion owner"):
+            await gateway.receive(1, "orion", event)
+        event["callback_query"]["from"]["id"] = 456
+        event["callback_query"]["message"]["message_id"] = 81
+        with pytest.raises(CoordinationError, match="recorded Telegram message"):
+            await gateway.receive(1, "orion", event)
+        event["callback_query"]["message"]["message_id"] = 80
+        written = {"update_id": 13, "message": {"from": {"id": 456},
+            "chat": {"id": 456, "type": "private"}, "text": "It is still ongoing.",
+            "reply_to_message": {"message_id": 80, "from": {"is_bot": True},
+                                 "text": outbound[0][2]["text"]}}}
+        queued = await gateway.receive(1, "orion", written)
+        assert queued["status"] == "pending_review" and queued["state_id"] == saved["id"]
+        result = await gateway.receive(1, "orion", event)
+        assert result["id"] == saved["id"] and result["payload"]["status"] == "completed"
+        assert outbound[-1][:2] == ("orion", "answerCallbackQuery")
+        assert (await gateway.receive(1, "orion", event)) == result
+        assert (await catalogue.get(1, saved["id"]))["version"] == 2
+        packet = await MemoryRuntime(memory.store, prepare_timeout=2).prepare(memory.context("Hello"))
+        assert all(state["record_id"] != saved["id"] for state in json.loads(packet_json(packet))["current_states"])
+    finally:
+        await followups.close()
 
 
 async def test_telegram_silence_duplicate_completion_and_late_reply(memory):

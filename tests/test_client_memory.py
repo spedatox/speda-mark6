@@ -27,6 +27,7 @@ async def test_editor_http_cas_revisions_restore_and_owner_scope(memory):
         created = await http.put("/memory/files", json={"path": "/memories/life/bike.md", "content": "Original"})
         assert created.status_code == 200, created.text
         first = created.json()
+        assert first["display_title"] is None
         updated = await http.put("/memory/files", json={"path": first["path"], "content": "Corrected",
             "expected_updated_at": first["updated_at"]})
         assert updated.status_code == 200, updated.text
@@ -60,6 +61,35 @@ async def test_editor_http_cas_revisions_restore_and_owner_scope(memory):
         await editor.restore(2, history[-1]["id"])
 
 
+async def test_owner_state_controls_create_edit_close_and_fence_stale_writes(memory):
+    app = create_app()
+    catalogue = Catalogue(memory.store)
+    app.state.client_memory = ClientMemory(catalogue)
+    state = {"summary": "The service is still under attack.", "status": "active", "salience": "high",
+             "verified_on": "2026-11-11", "review_on": "2026-11-12", "question": "Is the incident contained?"}
+    create = {"request_id": "create-incident", "title": "Server incident", "state": state}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+        assert (await http.put("/memory/states", json=create)).status_code == 401
+        http.headers["X-API-Key"] = settings.speda_api_key
+        first = (await http.put("/memory/states", json=create)).json()
+        assert first["kind"] == "state" and first["version"] == 1
+        assert (await http.put("/memory/states", json=create)).json()["record_id"] == first["record_id"]
+        update = {"request_id": "close-incident", "title": "Server incident contained",
+                  "record_id": first["record_id"], "expected_version": 1,
+                  "state": {**state, "status": "completed", "closed_on": "2026-11-12",
+                            "verified_on": "2026-11-12", "salience": "normal"}}
+        closed = (await http.put("/memory/states", json=update)).json()
+        assert closed["path"] == first["path"] and closed["version"] == 2
+        assert closed["display_title"] == "Server incident contained"
+        assert (await http.put("/memory/states", json={**update, "request_id": "stale-incident"})).status_code == 409
+        assert (await http.put("/memory/states", json={**create, "state": {**state, "status": "completed"}})).status_code == 422
+    history = await catalogue.get(1, first["record_id"], history=True)
+    assert [row["payload"]["status"] for row in history["revisions"]] == ["completed", "active"]
+    async with memory.sessions() as db:
+        pending = await db.scalars(select(IaconFollowup).where(IaconFollowup.state_id == first["record_id"]))
+        assert [row.status for row in pending] == ["superseded"]
+
+
 async def test_imported_projections_read_only_and_state_edit_uses_lifecycle(memory):
     snapshot = {"sha256": "editor-import", "entities": {}, "meta": {}, "heads": {}, "files": [
         {"id": 1, "path": "/memories/finance/ledger.md", "content": "Immutable legacy ledger"},
@@ -80,9 +110,12 @@ async def test_imported_projections_read_only_and_state_edit_uses_lifecycle(memo
                  "question": "Any news about your application?"},
         evidence=[{"source_id": source.id, "start": 0, "end": len(text), "quote": text}]))
     view = next(v for v in await editor.files(1) if v["record_id"] == state["id"])
+    assert view["display_title"] == "Application"
+    assert view["path"] == f"/memories/iacon/state/{state['id']}.json"
     payload = json.loads(view["content"])
     payload.update(status="completed", closed_on="2026-10-24", verified_on="2026-10-24")
     result = await editor.commit(1, view["path"], json.dumps(payload), view["updated_at"])
+    assert result["display_title"] == "Application" and result["path"] == view["path"]
     assert result["version"] == 2 and json.loads(result["content"])["status"] == "completed"
     async with memory.sessions() as db:
         followups = (await db.execute(select(IaconFollowup).where(IaconFollowup.state_id == state["id"]))).scalars().all()

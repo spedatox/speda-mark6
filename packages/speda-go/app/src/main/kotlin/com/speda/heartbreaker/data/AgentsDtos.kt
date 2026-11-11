@@ -60,6 +60,26 @@ data class MemoryFileInfo(
     @SerialName("updated_at") val updatedAt: String? = null,
     /** Canonical files are owner-editable from the board; system trails are not. */
     val editable: Boolean = false,
+    @SerialName("display_title") val displayTitle: String? = null,
+    @SerialName("record_id") val recordId: String? = null,
+    val kind: String? = null,
+    val version: Int? = null,
+) {
+    val displayName: String
+        get() = displayTitle?.takeIf { it.isNotBlank() } ?: path.substringAfterLast('/').removeSuffix(".md")
+}
+
+@Serializable
+data class IaconStateFields(
+    val summary: String = "",
+    val status: String = "active",
+    val salience: String = "normal",
+    @SerialName("verified_on") val verifiedOn: String,
+    @SerialName("review_on") val reviewOn: String,
+    @SerialName("starts_on") val startsOn: String? = null,
+    @SerialName("ends_on") val endsOn: String? = null,
+    @SerialName("closed_on") val closedOn: String? = null,
+    val question: String = "",
 )
 
 /** One committed revision of a memory file (GET /memory/files/revisions). */

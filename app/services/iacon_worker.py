@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from time import monotonic
 from uuid import uuid4
-from sqlalchemy import select, update, case
+from sqlalchemy import and_, case, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.database import write_session
@@ -53,14 +53,14 @@ class Orion:
                     return key
         return key if result.rowcount else None
 
-    async def intake(self, user_id):
+    async def intake(self, user_id, priority_source):
         async with write_session(self.sessions) as db:
             sources = (await db.execute(select(MemoryChange).where(MemoryChange.user_id == user_id,
                 MemoryChange.source_role == "owner", MemoryChange.revoked.is_(False),
                 MemoryChange.id.not_in(select(IaconSourceRetirement.source_id).where(
                     IaconSourceRetirement.user_id == user_id)),
                 MemoryChange.outcome.in_(["pending", "iacon_pending"])
-            ).order_by(MemoryChange.id).limit(32))).scalars().all()
+            ).order_by(case((priority_source, 0), else_=1), MemoryChange.id).limit(32))).scalars().all()
             for source in sources:
                 start = source.capture_offset
                 await self.enqueue(user_id=user_id, kind="interpret", unique_key=f"{source.id}:{start}",
@@ -102,10 +102,17 @@ class Orion:
         _, policy = await self.budget.policy(context.user_id)
         if policy.paused:
             return {"status": "paused", "processed": 0}
+        # Process this turn's owner input and answers to state questions before historical intake.
+        priority = [MemoryChange.provenance["state_binding"]["id"].as_string().is_not(None)]
+        if source_id := getattr(context, "memory_source_id", None):
+            priority.append(MemoryChange.id == source_id)
+        if run_id := getattr(context, "run_id", None):
+            priority.append(MemoryChange.provenance["run_id"].as_string() == run_id)
+        priority_source = or_(*priority)
         outcomes = []
         async with self.lock:
             if not library_only:
-                await self.intake(context.user_id)
+                await self.intake(context.user_id, priority_source)
             scope = (IaconWork.kind == "library_index",) if library_only else ()
             deadline = monotonic() + policy.run_seconds
             for _ in range(min(limit or policy.units_per_run, policy.units_per_run)):
@@ -118,9 +125,19 @@ class Orion:
                     await db.execute(update(IaconWork).where(IaconWork.user_id == context.user_id,
                         IaconWork.status == "running", IaconWork.available_at < now, *scope
                     ).values(status="pending", claim=None))
+                    command = IaconWork.payload["command"]
+                    state_review = and_(IaconWork.kind == "review", command["kind"].as_string() == "state")
+                    urgent_review = and_(state_review,
+                        command["payload"]["status"].as_string() == "active",
+                        command["payload"]["salience"].as_string() == "high")
+                    input_source = case((IaconWork.kind == "interpret", IaconWork.payload["source_id"].as_integer()))
+                    current_intake = select(MemoryChange.id).where(
+                        MemoryChange.user_id == context.user_id, priority_source,
+                        MemoryChange.id == input_source).exists()
                     job = (await db.execute(select(IaconWork).where(IaconWork.user_id == context.user_id,
                         IaconWork.status == "pending", IaconWork.available_at <= now, *scope
-                    ).order_by(case((IaconWork.kind.in_(["library_index", "refresh"]), 0), else_=1),
+                    ).order_by(case((urgent_review, 0), (current_intake, 1), (state_review, 2),
+                                    (IaconWork.kind.in_(["library_index", "refresh"]), 3), else_=4),
                                IaconWork.available_at, IaconWork.id).limit(1))).scalar_one_or_none()
                     if not job:
                         break
@@ -183,10 +200,12 @@ class Orion:
                     raise ValueError("Source withdrawn")
                 if await db.get(IaconSourceRetirement, (context.user_id, source.id)):
                     raise ValueError("Source superseded")
-            candidates = await self.catalogue.list(context.user_id, limit=30)
+            recent = await self.catalogue.list(context.user_id, limit=30)
+            states = await self.catalogue.list(context.user_id, kind="state", limit=100)
+            candidates = {record["id"]: record for record in [*recent, *states]}
             # Bounded catalogue hints; full evidence is fetched for the independent review.
             hints = [{k: r[k] for k in ("id", "version", "kind", "title", "payload")}
-                     for r in candidates if r["status"] == "accepted" and r["kind"] != "document"]
+                     for r in candidates.values() if r["status"] == "accepted" and r["kind"] != "document"]
             binding = source.provenance.get("state_binding")
             if binding:
                 bound = await self.catalogue.get(context.user_id, binding["id"])
@@ -197,7 +216,12 @@ class Orion:
                 from app.services.memory_runtime import query_terms
                 terms = query_terms(source.content[job.payload["start"]:job.payload["end"]])
                 from app.services.memory_store import fold
-                hints.sort(key=lambda h: -sum(t in fold(json.dumps(h, ensure_ascii=False)) for t in terms))
+                def relevance(hint):
+                    text = fold(json.dumps(hint, ensure_ascii=False))
+                    matches = sum(term in text for term in terms)
+                    open_state = hint["kind"] == "state" and hint["payload"].get("status") in {"planned", "active", "waiting"}
+                    return (bool(matches) and open_state, matches)
+                hints.sort(key=relevance, reverse=True)
             data = {"source_id": source.id, "offset": job.payload["start"],
                 "source": source.content[job.payload["start"]:job.payload["end"]],
                 "prior_context_only": source.provenance.get("prior_context"),

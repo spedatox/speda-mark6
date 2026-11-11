@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { commitMemoryFile, fetchMemoryRevisions, restoreMemoryRevision } from '../lib/api'
+import { commitMemoryFile, fetchMemoryRevisions, memoryFileLabel, restoreMemoryRevision } from '../lib/api'
 import type { MemoryFileInfo, MemoryRevisionInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 
@@ -167,7 +167,7 @@ export default function MemoryEditorModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [content, saving, showHistory, onClose]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filename = file.path.split('/').pop() || file.path
+  const filename = memoryFileLabel(file)
   const relativePath = file.path.replace(/^\/memories\//, '')
 
   return (

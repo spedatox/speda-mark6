@@ -11,12 +11,14 @@ from app.models.user import User
 from app.models.coordination import Room,CoordinationRun
 from app.models.session import Session
 from app.schemas.coordination import RoomInput
+from app.schemas.llm import ProviderError
 from app.services.coordination_budget import CoordinationError,digest
 
 
 class TelegramGateway:
-    def __init__(self,coordinator,deliveries,config):
+    def __init__(self,coordinator,deliveries,config,*,iacon_followups=None):
         self.coordinator,self.sessions,self.deliveries,self.config=coordinator,coordinator.sessions,deliveries,config
+        self.iacon_followups=iacon_followups
 
     def agent(self,agent):
         aid=self.coordinator.profiles.canonical(agent)
@@ -55,6 +57,24 @@ class TelegramGateway:
 
     async def receive(self,owner,agent,event):
         aid=self.agent(agent)
+        if aid == "orion" and self.iacon_followups and self.iacon_followups.matches_native(event):
+            from types import SimpleNamespace
+            try:
+                result = await self.iacon_followups.receive(
+                    SimpleNamespace(user_id=owner, timezone=self.config.owner_timezone), event, native=True)
+            except ValueError as exc:
+                raise CoordinationError("iacon_telegram_reply", str(exc), 422) from exc
+            callback = event.get("callback_query") or {}
+            if callback.get("id"):
+                feedback = {"accepted": "State updated", "stale_reply": "This question is out of date",
+                    "snoozed": "Question snoozed", "muted": "Follow-up muted"}
+                try:
+                    await self.deliveries.telegram(aid, "answerCallbackQuery", {
+                        "callback_query_id": callback["id"],
+                        "text": feedback.get(result["status"], "Reply recorded")})
+                except (ProviderError, TimeoutError):
+                    pass  # The state receipt is committed even when the button acknowledgement is unavailable.
+            return {"accepted": True, **result}
         if event.get('callback_query'): return await self.callback(owner,aid,event)
         update_id=event.get('update_id')
         message=event.get('message')

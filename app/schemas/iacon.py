@@ -69,6 +69,23 @@ class Document(Strict):
     revision_id: str | None = Field(default=None, max_length=128)
 
 
+class StateWrite(Strict):
+    request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    record_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
+    expected_version: int = Field(default=0, ge=0)
+    title: str = Field(min_length=1, max_length=256)
+    state: State
+
+    @model_validator(mode="after")
+    def identity(self):
+        self.title = self.title.strip()
+        if not self.title:
+            raise ValueError("Enter a title for the state")
+        if bool(self.record_id) != bool(self.expected_version):
+            raise ValueError("State edits require the current version")
+        return self
+
+
 class Link(Strict):
     target_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     relation: Literal["about", "participant", "place", "project", "supports", "corrects", "supersedes", "reference"]

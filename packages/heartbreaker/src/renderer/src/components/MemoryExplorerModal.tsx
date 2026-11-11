@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   fetchMemoryFiles,
+  memoryFileLabel,
   deleteMemoryFile,
   renameMemoryFile,
   createMemoryFile,
@@ -11,6 +12,7 @@ import {
 import type { MemoryFileInfo } from '../lib/api'
 import type { AppConfig } from '../lib/types'
 import MemoryEditorModal from './MemoryEditorModal'
+import StateEditorModal from './StateEditorModal'
 import GlassFolderIcon from './GlassFolderIcon'
 
 export interface MemoryExplorerModalProps {
@@ -93,6 +95,7 @@ export default function MemoryExplorerModal({
 
   // Sub-modal states
   const [editorFile, setEditorFile] = useState<MemoryFileInfo | null>(null)
+  const [stateEditor, setStateEditor] = useState<MemoryFileInfo | 'new' | null>(null)
   const [renameDialog, setRenameDialog] = useState<{
     open: boolean
     item: { type: 'folder' | 'file'; path: string; name: string } | null
@@ -263,16 +266,13 @@ export default function MemoryExplorerModal({
       folders = folders.filter(fo => fo.name.toLowerCase().includes(q))
       filteredFiles = filteredFiles.filter(fi => {
         const filename = fi.path.split('/').pop() || fi.path
-        return filename.toLowerCase().includes(q) || fi.content.toLowerCase().includes(q)
+        return memoryFileLabel(fi).toLowerCase().includes(q) ||
+          filename.toLowerCase().includes(q) || fi.content.toLowerCase().includes(q)
       })
     }
 
     folders.sort((a, b) => a.name.localeCompare(b.name))
-    filteredFiles.sort((a, b) => {
-      const nameA = a.path.split('/').pop() || a.path
-      const nameB = b.path.split('/').pop() || b.path
-      return nameA.localeCompare(nameB)
-    })
+    filteredFiles.sort((a, b) => memoryFileLabel(a).localeCompare(memoryFileLabel(b)))
 
     return { currentFolders: folders, currentFiles: filteredFiles }
   }, [files, dirHierarchy, currentDir, searchQuery])
@@ -293,14 +293,16 @@ export default function MemoryExplorerModal({
 
   // Actions
   const handleOpenFile = (file: MemoryFileInfo) => {
-    setEditorFile(file)
+    if (file.kind === 'state' && file.record_id && file.version) setStateEditor(file)
+    else setEditorFile(file)
   }
 
   const handleStartRename = (item: { type: 'folder' | 'file'; path: string; name: string }) => {
+    const name = item.path.split('/').pop() || item.name
     setRenameDialog({
       open: true,
-      item,
-      newName: item.name,
+      item: { ...item, name },
+      newName: name,
       error: undefined,
     })
   }
@@ -517,6 +519,7 @@ export default function MemoryExplorerModal({
   // Keyboard shortcut for Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (stateEditor) return
       if (e.key === 'Escape') {
         if (renameDialog.open) setRenameDialog({ open: false, item: null, newName: '' })
         else if (deleteDialog.open) setDeleteDialog({ open: false, item: null })
@@ -532,7 +535,7 @@ export default function MemoryExplorerModal({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [renameDialog, deleteDialog, newFileDialog, newFolderDialog, editorFile, selectedItem, onClose])
+  }, [renameDialog, deleteDialog, newFileDialog, newFolderDialog, editorFile, selectedItem, stateEditor, onClose])
 
   return (
     <div
@@ -890,6 +893,9 @@ export default function MemoryExplorerModal({
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
               <span>+ YENİ DOSYA</span>
+            </button>
+            <button className="hb-btn hb-btn-tint" onClick={() => setStateEditor('new')}>
+              + New state
             </button>
 
             <button
@@ -1305,7 +1311,7 @@ export default function MemoryExplorerModal({
 
                 {/* Files rows */}
                 {currentFiles.map(fi => {
-                  const filename = fi.path.split('/').pop() || fi.path
+                  const filename = memoryFileLabel(fi)
                   const isSel = selectedItem?.path === fi.path
                   return (
                     <div
@@ -1342,7 +1348,7 @@ export default function MemoryExplorerModal({
                           <line x1="16" y1="13" x2="8" y2="13" />
                           <line x1="16" y1="17" x2="8" y2="17" />
                         </svg>
-                        <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span title={filename} style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {filename}
                         </span>
                       </div>
@@ -1467,7 +1473,7 @@ export default function MemoryExplorerModal({
 
                 {/* File Cards */}
                 {currentFiles.map(fi => {
-                  const filename = fi.path.split('/').pop() || fi.path
+                  const filename = memoryFileLabel(fi)
                   const isSel = selectedItem?.path === fi.path
                   return (
                     <div
@@ -1524,6 +1530,7 @@ export default function MemoryExplorerModal({
                         <line x1="8" y1="17" x2="13" y2="17" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" />
                       </svg>
                       <span
+                        title={filename}
                         style={{
                           fontSize: '0.8rem',
                           fontWeight: 500,
@@ -1594,6 +1601,27 @@ export default function MemoryExplorerModal({
           </div>
         </div>
       </div>
+
+      {stateEditor && (
+        <StateEditorModal
+          config={config}
+          file={stateEditor === 'new' ? undefined : stateEditor}
+          onClose={() => {
+            setStateEditor(null)
+            void loadFiles()
+          }}
+          onSaved={updated => {
+            setFiles(prev => [...prev.filter(f => f.path !== updated.path), updated])
+            if (stateEditor === 'new') navigateTo('iacon/state')
+            setStateEditor(null)
+            onFilesChanged?.()
+          }}
+          onHistory={stateEditor === 'new' ? undefined : () => {
+            setEditorFile(stateEditor)
+            setStateEditor(null)
+          }}
+        />
+      )}
 
       {/* Sub-Modal: Memory Editor */}
       {editorFile && (

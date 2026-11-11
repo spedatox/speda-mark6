@@ -22,7 +22,10 @@ IDs, and checks Hisar access before returning evidence.
   have stable IDs and typed payloads. Recorded, effective, occurrence and review
   dates remain distinct. Unknown dates stay unknown. Links join records; competing
   claims can share a conflict group. Corrections refresh affected projections.
-- **Living states:** due questions check newer evidence, quiet hours and a 24-hour
+- **Living states:** new conversations receive a bounded, priority-ordered view
+  of open states. High-priority states remain visible when review is due, with
+  their last verification date. Overdue routine states are available in lookup.
+  Due questions check newer evidence, quiet hours and a 24-hour
   notification cooldown. Telegram buttons support completion, cancellation, still
   open, snooze and mute. Free text becomes evidence for review, not automatic
   completion. Late replies cannot overwrite a newer state. Silence leaves it open.
@@ -72,11 +75,10 @@ through the Iacon queue, without starting conversation maintenance. Older
 Settings report keyword search availability; OCR and paid embeddings are not
 enabled by this compatibility layer.
 
-Configure the three `IACON_TELEGRAM_*` values in `.env`, and enable
-`telegram_enabled` in the persisted policy. The bot's Telegram trigger in n8n
-forwards the original update JSON to `/iacon/telegram/update`; callback-query
-acknowledgement can use n8n's Telegram Answer Query action. This endpoint is **not**
-an unauthenticated direct Telegram webhook. Delivery-unknown/sending items need
+Enable `telegram_enabled` in the persisted Iacon policy. By default, state
+questions use the linked Orion Telegram bot and its native webhook. A separate
+Iacon bot uses the three `IACON_TELEGRAM_*` values, and n8n forwards its updates
+to `/iacon/telegram/update` with the API and scheduler headers. Delivery-unknown/sending items need
 reconciliation; never replay them automatically. Reply-pending and needs-review
 items remain visible in maintenance status.
 

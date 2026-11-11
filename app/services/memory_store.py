@@ -9,13 +9,14 @@ from datetime import date, datetime, timezone
 import hashlib
 import re
 import unicodedata
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import and_, case, func, literal, or_, select, text, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.memory_serving import MemoryChange, MemoryServingState, MemoryServingUnit
-from app.models.iacon import IaconSourceRetirement
+from app.models.iacon import IaconRecord, IaconSourceRetirement
 from app.schemas.memory_runtime import EvidenceSection
 from app.services.postgres_search import PostgresMemorySearch, pin_search_snapshot
 
@@ -268,17 +269,29 @@ class MemoryStore:
                 relation_ids.clear()
             person_ids.update(relation_ids)
             units, hits = list(core), []
+            state_candidates = []
             if include_recent:
-                from app.models.iacon import IaconRecord
-                from sqlalchemy import literal, case
-                units += (await db.execute(select(MemoryServingUnit).join(IaconRecord,
+                today = datetime.now(ZoneInfo(context.timezone)).date().isoformat()
+                payload = IaconRecord.payload
+                status = payload["status"].as_string()
+                high = payload["salience"].as_string() == "high"
+                review = payload["review_on"].as_string()
+                verified = payload["verified_on"].as_string()
+                starts, ends = payload["starts_on"].as_string(), payload["ends_on"].as_string()
+                state_candidates = (await db.execute(select(MemoryServingUnit, IaconRecord).join(IaconRecord,
                     MemoryServingUnit.stable_key == literal("iacon:") + IaconRecord.id).where(
                     MemoryServingUnit.user_id == context.user_id, IaconRecord.user_id == context.user_id,
                     IaconRecord.kind == "state", IaconRecord.status == "accepted",
-                    IaconRecord.payload["closed_on"].as_string().is_(None)
-                ).order_by(case((IaconRecord.payload["salience"].as_string() == "high", 0), else_=1),
-                           IaconRecord.payload["review_on"].as_string().nulls_first(),
-                           MemoryServingUnit.id).limit(3))).scalars().all()
+                    status.in_(("active", "waiting", "planned")), payload["closed_on"].as_string().is_(None),
+                    verified <= today, or_(high, review > today),
+                    or_(starts.is_(None), starts <= today), or_(ends.is_(None), ends >= today),
+                ).order_by(case((and_(high, status == "active"), 0), (high, 1),
+                               (payload["salience"].as_string() == "low", 3), else_=2),
+                           verified.desc(),
+                           case((status == "active", 0), (status == "waiting", 1), else_=2),
+                           IaconRecord.updated_at.desc(),
+                           MemoryServingUnit.id).limit(8))).all()
+                units.extend(unit for unit, _ in state_candidates)
             recent_ids = set()
             if person_ids:
                 units += (await db.execute(select(MemoryServingUnit).where(
@@ -338,6 +351,18 @@ class MemoryStore:
                 valid_units.append(self.cache[key])
             while len(self.cache) > self.cache_size:
                 self.cache.popitem(last=False)
+            valid_by_key = {unit["key"]: unit for unit in valid_units}
+            current_states = []
+            for unit, state in state_candidates:
+                valid = valid_by_key.get(unit.stable_key)
+                if valid is None:
+                    continue
+                for section in valid["sections"]:
+                    provenance = deps[section["source_id"]].provenance
+                    if provenance.get("iacon_record") == state.id and provenance.get("version") == state.version:
+                        current_states.append({"record_id": state.id, "version": state.version, "title": state.title,
+                            "payload": state.payload, "section": section, "revision": unit.revision})
+                        break
             source_rows = {s.id: s for s in hits if
                 (s.id not in retired_ids or s.id in source_ids) and
                 (s.provenance.get("eligible_for_context", True) or s.id in source_ids) and
@@ -361,7 +386,7 @@ class MemoryStore:
             while self.source_cache and (len(self.source_cache)>128 or self.source_cache_bytes>8000000):
                 _, removed = self.source_cache.popitem(last=False)
                 self.source_cache_bytes -= removed["size"]
-            return {"epoch": epoch, "boundary": boundary, "units": valid_units,
+            return {"epoch": epoch, "boundary": boundary, "units": valid_units, "current_states": current_states,
                     "entity_terms": sorted(name_terms),
                     "relation_keys": {u.stable_key for u in units if u.id in relation_ids},
                     "contexts": {s.id: s.provenance.get("prior_context")

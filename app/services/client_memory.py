@@ -61,6 +61,7 @@ class ClientMemory:
         editable = active and scope["eligible_for_context"] and not any(
             s.provenance.get("historical", False) for s in sources.values())
         return {"path": binding.path, "content": content(record),
+                "display_title": None if record.title.startswith("/memories/") else record.title,
                 "updated_at": record.updated_at.isoformat(), "editable": editable,
                 "record_id": record.id, "kind": record.kind, "version": record.version,
                 "authority": "iacon", "evidence_scope": scope}
@@ -154,6 +155,28 @@ class ClientMemory:
                     raise CoordinationError("memory_conflict", {"message": "Reload before saving.", "current": current}, 409)
                 await self._write(db, owner, record, text=text)
             return await self._view(db, owner, record, binding)
+
+    async def save_state(self, owner, body):
+        async with self.sessions() as db, db.begin():
+            links = []
+            if body.record_id:
+                record = await db.get(IaconRecord, body.record_id)
+                if not record or record.user_id != owner or record.kind != "state" or record.status != "accepted":
+                    raise KeyError("State not found")
+                links = [{"target_id": row.target_id, "relation": row.relation} for row in await db.scalars(
+                    select(IaconLink).where(IaconLink.source_id == record.id)
+                    .order_by(IaconLink.target_id, IaconLink.relation))]
+            payload = body.state.model_dump(mode="json")
+            assertion = json.dumps({"title": body.title, "state": payload}, ensure_ascii=False)
+            source = await capture_source(db, user_id=owner, source_key="owner-state:" + body.request_id,
+                content=assertion, provenance={"writer": "state_editor"})
+            source.outcome = "iacon_interpreted"
+            result = await self.catalogue.apply(owner, Command(command_id="owner-state:" + body.request_id,
+                record_id=body.record_id, expected_version=body.expected_version, kind="state",
+                title=body.title, payload=payload, links=links,
+                evidence=[{"source_id": source.id, "start": 0, "end": min(len(assertion), 8000),
+                           "quote": assertion[:8000]}]), db=db)
+            return await self._view(db, owner, await db.get(IaconRecord, result["id"]))
 
     async def retire(self, owner, path):
         async with self.sessions() as db, db.begin():

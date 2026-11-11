@@ -1225,6 +1225,38 @@ class IgorApi(
         }.getOrNull() ?: emptyList()
     }
 
+    suspend fun saveMemoryState(
+        config: AppConfig,
+        title: String,
+        state: IaconStateFields,
+        requestId: String,
+        file: MemoryFileInfo?,
+    ): MemoryFileInfo = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("request_id", requestId)
+            put("title", title)
+            put("state", json.encodeToJsonElement(state))
+            put("record_id", file?.recordId)
+            put("expected_version", file?.version ?: 0)
+        }
+        val request = Request.Builder()
+            .url("${config.apiBase}/memory/states")
+            .header("X-API-Key", config.apiKey)
+            .put(body.toString().toRequestBody(jsonMedia))
+            .build()
+        restClient.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (response.code == 409) error("This state changed. Close and reopen it to review the latest version.")
+            if (!response.isSuccessful) {
+                val detail = runCatching {
+                    json.parseToJsonElement(text).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+                }.getOrNull()
+                error(detail ?: "Could not save state (${response.code}).")
+            }
+            json.decodeFromString(text)
+        }
+    }
+
     /** Commit an owner edit. On a 409 (an agent wrote since the board loaded it)
      *  returns [MemoryCommitResult.Conflict] with the fresh file so the caller can
      *  reload instead of clobbering. */

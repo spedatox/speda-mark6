@@ -199,7 +199,6 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     budget = MaintenanceBudget(AsyncSessionLocal, client)
     preparer = Orion(catalogue, budget, model_policy, orchestrator.build_iacon_prompt,
                     enabled=settings.memory_capture_enabled)
-    telegram = TelegramFollowups(catalogue, budget, settings)
     indexer = LibraryIndexer(client_from_settings(settings), AsyncSessionLocal,
         max_pages=settings.library_max_pages, enqueue=preparer.enqueue)
     library = LibraryService(indexer, n8n_secret=settings.n8n_secret)
@@ -272,7 +271,8 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     coordinator.voice = app.state.voice
     app.state.deliveries = Deliveries(AsyncSessionLocal, settings, profiles, voice=app.state.voice)
     coordinator.deliveries = app.state.deliveries
-    app.state.telegram_gateway = TelegramGateway(coordinator, app.state.deliveries, settings)
+    telegram = TelegramFollowups(catalogue, budget, settings, deliveries=app.state.deliveries)
+    app.state.telegram_gateway = TelegramGateway(coordinator, app.state.deliveries, settings, iacon_followups=telegram)
     from app.services.reminders import Reminders
     app.state.reminders = Reminders(coordinator, app.state.deliveries)
     coordinator.reminders = app.state.reminders

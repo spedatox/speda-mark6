@@ -86,6 +86,9 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
     var folders by remember { mutableStateOf<List<MemoryFolderInfo>>(emptyList()) }
     var status by remember { mutableStateOf<MemoryStatus?>(null) }
     var openPath by remember { mutableStateOf<String?>(null) }
+    var newState by remember { mutableStateOf(false) }
+    var showRawFile by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     /** Folders start OPEN: a collapsed tree hides the thing the panel exists
      *  to show, and the owner opened it to look at his memory. */
     var folded by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -104,6 +107,7 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
 
     Panel {
         status?.let { MemoryStatusStrip(it) }
+        SettingsButton("+ New state", onClick = { newState = true }, tint = palette.accent)
 
         if (files.isEmpty() && folders.isEmpty()) {
             HbText(t.knowledgeBank.noRecords, style = HbType.read.copy(fontSize = 14.sp), color = palette.textFaint)
@@ -125,14 +129,14 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
                 }
             }
             if (open) {
-                group.forEach { f ->
+                group.sortedBy { it.displayName.lowercase() }.forEach { f ->
                     FileRow(
                         // Inside a folder the folder name is already overhead,
                         // so the row shows the leaf alone.
-                        label = f.path.substringAfterLast('/').removeSuffix(".md"),
+                        label = f.displayName,
                         indented = dir.isNotEmpty(),
-                        editable = f.editable,
-                        onClick = { openPath = f.path },
+                        editable = f.editable || f.kind == "state",
+                        onClick = { showRawFile = false; openPath = f.path },
                     )
                 }
             }
@@ -140,7 +144,24 @@ fun KnowledgeBank(config: AppConfig, api: IgorApi) {
     }
 
     val file = files.firstOrNull { it.path == openPath }
-    if (file != null) {
+    if (newState || (file?.kind == "state" && file.recordId != null && file.version != null && !showRawFile)) {
+        StateEditorDialog(
+            config = config,
+            api = api,
+            file = if (newState) null else file,
+            onClose = {
+                newState = false
+                openPath = null
+                scope.launch { files = api.fetchMemoryFiles(config) }
+            },
+            onSaved = { fresh ->
+                files = files.filterNot { it.path == fresh.path } + fresh
+                newState = false
+                openPath = null
+            },
+            onHistory = if (newState) null else { { showRawFile = true } },
+        )
+    } else if (file != null) {
         MemoryFileWindow(
             config = config,
             api = api,
@@ -319,7 +340,7 @@ private fun MemoryFileWindow(
             ) {
                 Column(Modifier.weight(1f)) {
                     HbText(
-                        file.path.substringAfterLast('/').removeSuffix(".md"),
+                        file.displayName,
                         style = HbType.headerBar.copy(fontSize = 18.sp),
                         color = palette.text,
                         maxLines = 1,

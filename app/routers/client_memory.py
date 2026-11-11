@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
+from app.schemas.iacon import StateWrite
 from app.services.coordination_budget import CoordinationError
 from app.services.iacon_catalogue import Conflict
 
@@ -48,6 +49,11 @@ async def files(request: Request):
 @router.put("/files")
 async def commit(body: Commit, request: Request):
     return await checked(request.app.state.client_memory.commit(1, body.path, body.content, body.expected_updated_at))
+
+
+@router.put("/states")
+async def save_state(body: StateWrite, request: Request):
+    return await checked(request.app.state.client_memory.save_state(1, body))
 
 
 @router.delete("/files")

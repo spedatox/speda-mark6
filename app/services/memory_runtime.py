@@ -112,6 +112,43 @@ class MemoryRuntime:
         ceiling = min(budget.automatic_limit if automatic else budget.lookup_limit,
                       budget.turn_limit - budget.used)
         available = max(0, ceiling - 512)
+        selected = 0
+        state_count = 0
+        for state in result.get("current_states", ()):
+            try:
+                data = EvidenceSection.model_validate(state["section"])
+            except (ValidationError, ValueError, TypeError):
+                packet.omissions.append("Invalid evidence in current state")
+                continue
+            if (data.historical or (data.valid_from and data.valid_from > today)
+                    or (data.valid_until and data.valid_until <= today)):
+                continue
+            handle = f"source:{data.source_id}:{data.start}:{data.end}"
+            if handle in budget.seen:
+                continue
+            payload = state["payload"]
+            summary = payload["summary"].encode("utf-8")
+            brief = {
+                "record_id": state["record_id"], "version": state["version"], "title": state["title"],
+                "source": handle, "status": payload["status"], "salience": payload.get("salience", "normal"),
+                "verified_on": payload["verified_on"], "review_on": payload["review_on"],
+                "freshness": "review_due" if payload["review_on"] <= today.isoformat() else "confirmed",
+                "summary": summary[:600].decode("utf-8", errors="ignore") + ("…" if len(summary) > 600 else ""),
+            }
+            # Keep the existing persisted packet shape so saved room runs can be restored across releases.
+            block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
+            cost = token_upper_bound(block) + 1
+            if selected + cost > min(2400, available):
+                packet.omissions.append("Current state context reached its budget")
+                continue
+            packet.blocks.append(block)
+            packet.evidence_handles.append(handle)
+            packet.unit_revisions["iacon:" + state["record_id"]] = state["revision"]
+            budget.seen.add(handle)
+            selected += cost
+            state_count += 1
+            if state_count == 3:
+                break
         candidates = []
         matched_aliases = {}
         future_spans = []
@@ -156,7 +193,8 @@ class MemoryRuntime:
                     identity_bonus += 30
                 dated = [day for day in section_dates if day <= today]
                 recency_bonus = max(0, 20 - (today - max(dated)).days / 2) if dated else 0
-                living = automatic and not family_query and not personal_fact and unit["kind"] == "situation" and not section.get("historical")
+                living = (automatic and not family_query and not personal_fact and unit["kind"] == "situation"
+                          and not unit["key"].startswith("iacon:") and not section.get("historical"))
                 if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance:
                     continue
                 candidates.append((score + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus, unit["key"],
@@ -212,7 +250,6 @@ class MemoryRuntime:
                                    f"{source['role']} source ({source['created_at']}; event date may differ; claim level {source['provenance'].get('observation_level','source')})",
                                    span.model_dump(mode="json"), 0))
         candidates.sort(key=lambda c: (-c[0], c[1], c[3]["start"]))
-        selected = 0
         selected_core = 0
         selected_focus = 0
         has_supporting = any(candidate[1].startswith("raw:") for candidate in candidates)
@@ -273,7 +310,9 @@ class MemoryRuntime:
         # Check the serialized result, including metadata; no character/token mix.
         while packet.blocks and token_upper_bound(packet_json(packet)) + 64 > ceiling:
             removed = packet.evidence_handles.pop()
-            packet.blocks.pop()
+            block = json.loads(packet.blocks.pop())
+            if state := block.get("current_state"):
+                packet.unit_revisions.pop("iacon:" + state["record_id"], None)
             budget.seen.discard(removed)
             packet.omissions.append("Serialized packet budget reached")
         packet.token_upper_bound = token_upper_bound(packet_json(packet)) + 64
@@ -284,9 +323,11 @@ def packet_json(packet: MemoryPacket) -> str:
     important = [x for x in packet.omissions if x.startswith("Invalid evidence") or
                  any(t in x for t in ("unavailable", "deadline", "changed during assembly", "exhausted"))]
     limitations = list(dict.fromkeys([*important, *packet.omissions]))[:2]
+    blocks = [json.loads(block) for block in packet.blocks]
     return json.dumps({"status": packet.status, "coverage": packet.coverage,
         "freshness": packet.freshness, "source_boundary": packet.source_boundary,
-        "evidence": [json.loads(block) for block in packet.blocks],
+        "current_states": [block["current_state"] for block in blocks if "current_state" in block],
+        "evidence": [block for block in blocks if "current_state" not in block],
         "omissions_count": len(packet.omissions), "limitations": [x[:160] for x in limitations],
         "ambiguities": packet.ambiguities[:4],
         "notice": "Bounded source evidence; absence is not proof of absence."},

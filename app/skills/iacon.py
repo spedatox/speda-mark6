@@ -8,6 +8,8 @@ class IaconProposeSkill(Skill):
     read_only = False
     description = ("Propose an evidence-backed addition or correction to Iacon's structured catalogue. "
         "Use exact source IDs and character spans from owner evidence; updates require the current record version. "
+        "For an ongoing serious incident, propose an active state with high salience so future chats can track it. "
+        "Update an existing state when the owner confirms a change or recovery. "
         "Do not rewrite native documents or claim the write is complete before review. "
         "Returns pending_review; Orion validates and reviews the proposal within persistent maintenance budgets.")
     input_schema = Command.model_json_schema()

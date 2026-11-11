@@ -608,10 +608,47 @@ export function saveFileBlob(blob: Blob, filename: string): void {
 
 export interface MemoryFileInfo {
   path: string
+  display_title?: string | null
+  record_id?: string
+  kind?: string
+  version?: number
   content: string
   updated_at: string | null
   /** Canonical files are owner-editable from the board; system trails are not. */
   editable?: boolean
+}
+
+export function memoryFileLabel(file: MemoryFileInfo): string {
+  return file.display_title?.trim() || file.path.split('/').pop() || file.path
+}
+
+export interface IaconStateFields {
+  summary: string
+  status: 'planned' | 'active' | 'waiting' | 'completed' | 'cancelled' | 'superseded'
+  salience: 'high' | 'normal' | 'low'
+  verified_on: string
+  review_on: string
+  starts_on: string | null
+  ends_on: string | null
+  closed_on: string | null
+  question: string
+}
+
+export async function saveMemoryState(
+  config: AppConfig, title: string, state: IaconStateFields, requestId: string, file?: MemoryFileInfo
+): Promise<MemoryFileInfo> {
+  const res = await fetch(`${config.apiBase}/memory/states`, {
+    method: 'PUT',
+    headers: authHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      request_id: requestId, title, state, record_id: file?.record_id ?? null,
+      expected_version: file?.version ?? 0,
+    }),
+  })
+  if (res.ok) return res.json()
+  if (res.status === 409) throw new Error('This state changed. Close and reopen it to review the latest version.')
+  const detail = (await res.json().catch(() => null))?.detail
+  throw new Error(typeof detail === 'string' ? detail : detail?.[0]?.msg ?? `Could not save state (${res.status}).`)
 }
 
 /** Speda's knowledge bank — the /memories virtual filesystem. */

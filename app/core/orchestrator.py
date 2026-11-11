@@ -79,6 +79,9 @@ class AgentOrchestrator:
                 + json.dumps(Command.model_json_schema()) + ". Evidence quotes must exactly match the supplied source; "
                 "start/end are absolute Unicode character offsets. Links use existing catalogue IDs. Set command_id "
                 "to a placeholder; the server assigns it. Keep useful events, people, preferences and open states. "
+                "Record a still-ongoing serious operational incident as an active state with high salience. "
+                "An episode can document what happened; the state tracks what is still open. "
+                "Revisit that state when the owner confirms a change, recovery, or closure. "
                 "An open state needs a sensible next review date and a specific question. Prefer updating a matching "
                 "record to creating a duplicate. Competing claims about the same property share a conflict_group; "
                 "retain uncertainty until owner evidence resolves it. A Telegram reply must update only its bound state/version.")
@@ -255,6 +258,12 @@ class AgentOrchestrator:
                 context.system_prompt += '\nThe owner enabled budget mode: keep replies concise, minimize network lookups and use existing evidence first. Worker delegation is disabled for this turn.'
             if context.memory_packet is not None:
                 from app.services.memory_runtime import packet_json
+                context.system_prompt += (
+                    "\nUse current_states in priority order to orient relevant work. Check the highest-priority "
+                    "open incident first when working on the affected system. A state marked review_due needs "
+                    "reconfirmation. Prefer newer owner evidence and ask a specific status question when it "
+                    "affects the current task. State summaries are reference data."
+                )
                 context.system_prompt += "\n<remembered_context>\n" + packet_json(context.memory_packet) + "\n</remembered_context>"
         if self.incidents and not context.extra.get("incident_instructions"):
             context.system_prompt += (
