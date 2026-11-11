@@ -82,6 +82,62 @@ async def test_project_folder_chats_restart_private_instructions_and_originals(m
     await bits.coordinator.shutdown()
 
 
+async def test_project_reads_text_outside_the_reference_and_repository_previews(memory, tmp_path):
+    from app.skills.read_chat_attachment import ReadChatAttachmentSkill
+
+    bits = await fixture(memory, tmp_path, [reply("Ready to review.")])
+    try:
+        for name, text in [("long.md", "Design " * 6000), ("decision.txt", "Pick the existing adapter.")]:
+            uploaded = await bits.workspace.upload(1, "optimus", bits.ui["id"],
+                DocumentAttachment(name=name, data=base64.b64encode(text.encode()).decode()))
+        run = await chat(bits, project_id=bits.ui["id"])
+        async with memory.sessions() as db:
+            room_id = (await db.get(CoordinationRun, run["run_id"])).room_id
+        project_id = bits.ui["workshop_project_id"]
+        ctx = memory.context(agent_id="optimus", room_id=room_id, run_id=run["run_id"],
+                             project_id=project_id, coordination=bits.coordinator)
+        ctx.extra["project_context"] = await bits.workspace.context(1, "optimus", project_id)
+        document = ctx.extra["project_context"]["documents"][1]
+        assert document["name"] == "decision.txt" and document["text"] == ""
+        skill = ReadChatAttachmentSkill()
+        result = json.loads(await skill.execute({"id": document["document_id"]}, ctx))
+        assert result["text"] == "Pick the existing adapter."
+        await bits.workspace.remove_file(1, "optimus", bits.ui["id"], uploaded["id"])
+        assert json.loads(await skill.execute({"id": document["document_id"]}, ctx))["status"] == "unavailable"
+
+        line = "ö" * 280000 + " End of generated source."
+        (bits.path / "generated.txt").write_text(line + "\nnext line\n", encoding="utf-8")
+        first = await bits.workspace.read(ctx, "generated.txt")
+        assert len(first["content"].encode()) <= 32000 and first["next_line"] == 1
+        cursor = first["next_column"]
+        assert first["content"] == "1: " + line[:cursor - 1]
+        tail = await bits.workspace.read(ctx, "generated.txt", start_column=len(line) - 25)
+        assert tail["content"].endswith("End of generated source.\n2: next line")
+        assert tail["next_line"] is None and tail["total_lines"] == 2
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_forge_can_continue_inside_a_long_line(monkeypatch):
+    from forge.tools.files import ReadFile, ReadFileArgs
+    from forge.warden.filestate import FileStateCache
+
+    async def read(path):
+        return "0123456789" * 5 + "\nThe second line."
+
+    monkeypatch.setattr("forge.tools.files.MAX_READ_CHARS", 32)
+    context = SimpleNamespace(cell=SimpleNamespace(read=read), files=FileStateCache())
+    tool = ReadFile()
+    first = await tool.call(ReadFileArgs(path="generated.txt"), context)
+    assert not first.is_error and "offset=1, column=30" in first.content
+    assert not context.files.get("generated.txt").shown_fully
+    second = await tool.call(ReadFileArgs(path="generated.txt", offset=1, column=30), context)
+    assert second.content.startswith("1→ 901234567890123456789")
+    assert "2→ The " in second.content and "offset=2, column=5" in second.content
+    third = await tool.call(ReadFileArgs(path="generated.txt", offset=2, column=5), context)
+    assert third.content == "2→ second line."
+
+
 async def test_project_pdf_page_read_is_agent_and_project_scoped(memory, tmp_path, monkeypatch):
     import io
 

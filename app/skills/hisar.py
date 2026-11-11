@@ -38,7 +38,7 @@ from app.schemas.llm import ProviderError
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 20.0
-_MAX_TEXT_CHARS = 40_000     # a read is context; a whole book is not
+_MAX_TEXT_BYTES = 40_000
 _MAX_ENTRIES = 200           # a listing the model can actually reason over
 
 
@@ -79,7 +79,7 @@ class HisarSkill(Skill):
         "the vault but write ONLY under /Speda and /Forge, and you cannot delete "
         "or rename anything, so treat the owner's own folders as reference "
         "material. Returns a directory listing, the document's text, or the "
-        "path a deposit landed at."
+        "path a deposit landed at. For large files or folders, continue with the returned offset."
     )
 
     input_schema = {
@@ -103,6 +103,8 @@ class HisarSkill(Skill):
                     "server's disk — the vault root is not '/opt/...'."
                 ),
             },
+            "offset": {"type": "integer", "minimum": 0,
+                       "description": "Continuation offset from a previous read or list result."},
             "filename": {
                 "type": "string",
                 "description": "deposit only: the name to file it under, e.g. 'q3-briefing.md'.",
@@ -123,14 +125,15 @@ class HisarSkill(Skill):
 
         action = str(args.get("action") or "").strip().lower()
         path = (args.get("path") or "").strip()
+        offset = args.get("offset", 0)
 
         try:
             if action == "list":
-                return await self._list(path or "/")
+                return await self._list(path or "/", offset)
             if action == "read":
                 if not path:
                     return "Refused: `read` needs the path of a file in the vault."
-                return await self._read(path)
+                return await self._read(path, offset)
             if action == "deposit":
                 return await self._deposit(
                     folder=path or "/Speda",
@@ -174,13 +177,14 @@ class HisarSkill(Skill):
         return bool(entry.get("is_dir") or entry.get("kind") == "dir"
                     or entry.get("type") == "dir")
 
-    async def _list(self, path: str) -> str:
+    async def _list(self, path: str, offset=0) -> str:
         entries = await self.entries(path)
         if not entries:
             return f"{path} is empty."
 
         lines = []
-        for e in entries[:_MAX_ENTRIES]:
+        end = offset + _MAX_ENTRIES
+        for e in entries[offset:end]:
             name = e.get("name", "?")
             if self.is_dir(e):
                 lines.append(f"  {name}/")
@@ -189,29 +193,22 @@ class HisarSkill(Skill):
                 lines.append(f"  {name}{f'  ({size})' if size else ''}")
 
         more = ""
-        if len(entries) > _MAX_ENTRIES:
-            more = f"\n  … and {len(entries) - _MAX_ENTRIES} more"
+        if len(entries) > end:
+            more = f"\n  … and {len(entries) - end} more. Continue with offset={end}."
         return f"{path}\n" + "\n".join(lines) + more
 
-    async def _read(self, path: str) -> str:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            r = await client.get(f"{settings.hisar_base_url}/files/download",
-                                 params={"path": path, "inline": True},
-                                 headers=_headers())
-            r.raise_for_status()
-            raw = r.content
-
+    async def _read(self, path: str, offset=0) -> str:
+        from forge.hisar_pages import read_text_page
         try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            return (f"{path} is not a text file ({_fmt_size(len(raw))}), so there "
-                    "is nothing to read into context. Reference it by path "
-                    "instead of guessing at its contents.")
-
-        if len(text) > _MAX_TEXT_CHARS:
-            return (f"{path} (first {_MAX_TEXT_CHARS} of {len(text)} chars)\n\n"
-                    + text[:_MAX_TEXT_CHARS])
-        return f"{path}\n\n{text}"
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                text, next_offset = await read_text_page(
+                    client, settings.hisar_base_url, path, _headers(), offset, _MAX_TEXT_BYTES)
+        except UnicodeError:
+            return f"{path} is not a text file at this offset. Use a continuation offset from Hisar."
+        except ValueError as exc:
+            return f"{path}: {exc}."
+        more = f"\n\n[Continue reading with offset={next_offset}.]" if next_offset is not None else ""
+        return f"{path}\n\n{text}{more}"
 
     async def _deposit(self, folder: str, filename: str, content: str) -> str:
         target = PurePosixPath(folder)

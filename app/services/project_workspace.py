@@ -17,7 +17,60 @@ from app.models.session import Session
 from app.schemas.coordination import CreateProject, IntegrateProject
 from app.services.coordination_budget import CoordinationError
 from app.services.projects import inventory, IGNORED
+from app.services.pdf_navigation import text_slice
 from app.services.room_attachments import PDF, prepare_client_attachment
+
+
+def read_project_lines(source, start_line, max_lines, start_column):
+    limit = 32000
+    parts = []
+    line = 1
+    last_line = 0
+
+    def fragment(size):
+        text = source.readline(size)
+        if '\x00' in text:
+            raise UnicodeError()
+        return text
+
+    def result(next_line=None, next_column=None):
+        return {'content': ''.join(parts), 'total_lines': last_line if next_line is None else None,
+                'truncated': next_line is not None, 'next_line': next_line, 'next_column': next_column}
+
+    while line < start_line:
+        text = fragment(limit)
+        if not text:
+            return result()
+        last_line = line
+        if text.endswith('\n'):
+            line += 1
+
+    remaining = start_column - 1
+    while remaining:
+        skipped = fragment(min(remaining, limit))
+        if not skipped or skipped.endswith('\n'):
+            raise CoordinationError('project_file_offset', 'Column is past the end of this line', 422)
+        last_line = line
+        remaining -= len(skipped)
+
+    column = start_column
+    for line in range(start_line, start_line + max_lines):
+        prefix = ('\n' if parts else '') + f'{line}: '
+        available = limit - len(prefix)
+        raw = fragment(max(1, available + 2))
+        if not raw:
+            return result()
+        if available < 1:
+            return result(line, column)
+        text = raw.removesuffix('\n')
+        excerpt = text_slice(text, 0, available)
+        parts.append(prefix + excerpt)
+        limit = available - len(excerpt.encode())
+        last_line = line
+        if len(excerpt) < len(text):
+            return result(line, column + len(excerpt))
+        column = 1
+    return result(line + 1, 1) if fragment(1) else result()
 
 
 class ProjectWorkspace:
@@ -143,25 +196,30 @@ class ProjectWorkspace:
                 ClientProject.agent_id == self.agent(agent), ClientProject.native_id == native_id))
             if row is None:
                 return {'cwd': native.path, 'host_id': native.host_id, 'native_id': native_id}
-            files = list(await db.scalars(select(ClientProjectFile).where(
+            preview_bytes = 16000
+            files = (await db.execute(select(ClientProjectFile.id, ClientProjectFile.name,
+                ClientProjectFile.mime, func.substr(ClientProjectFile.extracted, 1, preview_bytes).label('preview'),
+                func.length(ClientProjectFile.extracted).label('characters')).where(
                 ClientProjectFile.project_id == row.id, ClientProjectFile.removed.is_(False))
-                .order_by(ClientProjectFile.id)))
-            remaining, documents = 16000, []
+                .order_by(ClientProjectFile.id))).all()
+            remaining, documents = preview_bytes, []
             for item in files:
-                excerpt = item.extracted[:remaining]
-                if not excerpt and item.mime != PDF:
-                    continue
-                document = {'name': item.name, 'text': excerpt, 'truncated': len(excerpt) < len(item.extracted)}
+                excerpt = text_slice(item.preview, 0, remaining)
+                identity = f'project:{item.id}'
+                document = {'name': item.name, 'document_id': identity, 'text': excerpt,
+                            'truncated': len(excerpt) < item.characters}
                 if item.mime == PDF:
-                    document['pdf_id'] = f'project:{item.id}'
+                    document['pdf_id'] = identity
                     document['coverage'] = 'PDF text preview. Use read_chat_attachment with pdf_id to search or read pages.'
+                elif document['truncated']:
+                    document['coverage'] = 'Use read_chat_attachment with document_id to search or read the extracted text.'
                 documents.append(document)
-                remaining -= len(excerpt)
+                remaining -= len(excerpt.encode())
             return {'id': row.id, 'name': row.name, 'instructions': row.instructions,
                 'cwd': native.path, 'host_id': native.host_id, 'native_id': native_id,
-                'documents': documents, 'documents_omitted': len(files) - len(documents)}
+                'documents': documents, 'documents_omitted': 0}
 
-    async def read(self, context, path, start_line=1, max_lines=200, task_id=None):
+    async def read(self, context, path, start_line=1, max_lines=200, task_id=None, start_column=1, file_offset=0):
         """Bounded code reads through the same snapshot inventory as execution."""
         native = await self.projects.owned(context.user_id, context.project_id)
         root = Path(native.path)
@@ -189,23 +247,17 @@ class ProjectWorkspace:
             if checkpoint and revision != checkpoint['artifact_revision']:
                 raise CoordinationError('stale_artifact', 'The published checkpoint artifact changed after verification')
             if not path:
-                return {'revision':revision, 'files':[r[0] for r in rows[:1000]], 'omitted':max(0,len(rows)-1000)}
+                end = file_offset + 1000
+                return {'revision': revision, 'files': [row[0] for row in rows[file_offset:end]],
+                        'omitted': max(0, len(rows) - end), 'next_file_offset': end if end < len(rows) else None}
             if path not in {r[0] for r in rows}:
                 raise CoordinationError('project_file_scope', 'Choose a file from this project inventory', 422)
-            target = root / path
-            if target.stat().st_size > 512000:
-                raise CoordinationError('project_file_size', 'File exceeds the 512 KiB text preview limit', 422)
             try:
-                text = target.read_text(encoding='utf-8')
-                if '\x00' in text:
-                    raise UnicodeError()
+                with (root / path).open(encoding='utf-8') as source:
+                    page = read_project_lines(source, start_line, max_lines, start_column)
             except UnicodeError as exc:
                 raise CoordinationError('project_file_binary', 'This file needs a binary viewer', 422) from exc
-            lines = text.splitlines()
-            selected = '\n'.join(f'{n+1}: {line}' for n,line in enumerate(lines)
-                if start_line-1 <= n < start_line-1+max_lines)
-            return {'path':path, 'revision':revision, 'start_line':start_line, 'total_lines':len(lines),
-                'content':selected[:32000], 'truncated':len(selected)>32000 or len(lines)>start_line-1+max_lines}
+            return {'path': path, 'revision': revision, 'start_line': start_line, **page}
         return await asyncio.to_thread(read)
 
     def root(self):
@@ -258,9 +310,13 @@ class ProjectWorkspace:
     async def files(self, owner, agent, identity):
         async with self.sessions() as db:
             await self.owned(db, owner, agent, identity)
-            rows = await db.scalars(select(ClientProjectFile).where(ClientProjectFile.project_id == identity,
-                ClientProjectFile.removed.is_(False)).order_by(ClientProjectFile.id.desc()))
-            return [self.file_view(row) for row in rows]
+            rows = (await db.execute(select(ClientProjectFile.id, ClientProjectFile.name,
+                ClientProjectFile.mime, func.length(ClientProjectFile.original).label('size'),
+                func.length(ClientProjectFile.extracted).label('chars'), ClientProjectFile.created_at)
+                .where(ClientProjectFile.project_id == identity, ClientProjectFile.removed.is_(False))
+                .order_by(ClientProjectFile.id.desc()))).all()
+            return [{'id': row.id, 'name': row.name, 'media_type': row.mime, 'size': row.size,
+                     'chars': row.chars, 'created_at': row.created_at.isoformat() + 'Z'} for row in rows]
 
     @staticmethod
     def file_view(row):

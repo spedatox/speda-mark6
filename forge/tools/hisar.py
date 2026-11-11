@@ -39,6 +39,7 @@ import os
 
 from pydantic import BaseModel, Field
 
+from forge.hisar_pages import read_text_page
 from forge.warden.tool import Tool, ToolContext, ToolResult
 
 _TOKEN_ENV = "HISAR_MACHINE_TOKEN"
@@ -54,7 +55,8 @@ WRITE_SCOPES = ("/SPEDA", "/Forge")
 
 # A vault document is raw material, not the answer. Same cap and same reasoning
 # as web_fetch: one oversized file must not evict the actual work from context.
-_MAX_READ_CHARS = 20_000
+_MAX_READ_BYTES = 19_000  # Leave room for the continuation in Forge's result limit.
+_LIST_PAGE_SIZE = 200
 
 _NO_TOKEN = (
     f"Hisar is not configured: {_TOKEN_ENV} is not set in this Forge's "
@@ -138,6 +140,7 @@ async def _request(method: str, path: str, **kwargs) -> tuple[object | None, str
 
 class HisarListArgs(BaseModel):
     path: str = Field(default="/", description="Vault folder to list, e.g. '/' or '/Forge'.")
+    offset: int = Field(default=0, ge=0, description="Continuation offset from the preceding listing.")
 
 
 class HisarList(Tool):
@@ -149,7 +152,7 @@ class HisarList(Tool):
         "before asking them. Reading is NOT restricted by folder — you can list "
         "anywhere in the vault, including the owner's own documents. Writing is "
         f"restricted to {' and '.join(WRITE_SCOPES)}; deleting and renaming are "
-        "owner-only and you have no tool for them."
+        "owner-only and you have no tool for them. Continue large listings with the returned offset."
     )
     Args = HisarListArgs
     READ_ONLY = True
@@ -169,7 +172,8 @@ class HisarList(Tool):
         if not entries:
             return ToolResult(f"{args.path} is empty.")
         lines = []
-        for e in entries:
+        end = args.offset + _LIST_PAGE_SIZE
+        for e in entries[args.offset:end]:
             if not isinstance(e, dict):
                 continue
             name = e.get("name") or e.get("path") or "?"
@@ -177,6 +181,8 @@ class HisarList(Tool):
             size = e.get("size")
             lines.append(f"  {kind}  {name}" + (f"  ({size:,} bytes)"
                                                 if isinstance(size, int) else ""))
+        if end < len(entries):
+            lines.append(f"[Continue listing with offset={end}.]")
         return ToolResult(f"{args.path}\n" + "\n".join(lines))
 
 
@@ -184,6 +190,7 @@ class HisarList(Tool):
 
 class HisarReadArgs(BaseModel):
     path: str = Field(description="Full vault path of the file, e.g. '/Forge/report.md'.")
+    offset: int = Field(default=0, ge=0, description="Byte offset from the preceding read.")
 
 
 class HisarRead(Tool):
@@ -192,8 +199,7 @@ class HisarRead(Tool):
         "Read a text file out of H.İ.S.A.R., the owner's file vault. Use it when "
         "the owner refers to something already in the vault, or to pick up work "
         "you filed in an earlier session. You can read anywhere in the vault. "
-        "Large files are truncated — if you need the rest, say so rather than "
-        "guessing at it. Binary files (images, PDFs, archives) cannot be read "
+        "Continue large files using the returned offset. Binary files (images, PDFs, archives) cannot be read "
         "as text; list the folder to confirm what a file is before reading it."
     )
     Args = HisarReadArgs
@@ -201,26 +207,25 @@ class HisarRead(Tool):
     CONCURRENCY_SAFE = True
 
     async def call(self, args: HisarReadArgs, ctx: ToolContext) -> ToolResult:
-        response, error = await _request("GET", "/files/download",
-                                         params={"path": args.path})
-        if response is None:
-            return ToolResult(error, is_error=True)
-
-        raw = response.content
+        httpx = _client()
+        if httpx is None:
+            return ToolResult(_NO_CLIENT, is_error=True)
+        if not configured():
+            return ToolResult(_NO_TOKEN, is_error=True)
         try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            return ToolResult(
-                f"{args.path} is not UTF-8 text ({len(raw):,} bytes) — it looks "
-                "like a binary file. This tool reads text only.", is_error=True)
-
-        if len(text) > _MAX_READ_CHARS:
-            kept = text[:_MAX_READ_CHARS]
-            return ToolResult(
-                f"{kept}\n\n[… truncated at {_MAX_READ_CHARS:,} of "
-                f"{len(text):,} characters. This is the head of the file, not "
-                f"all of it — do not conclude anything from its absence.]")
-        return ToolResult(text)
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+                text, next_offset = await read_text_page(
+                    client, _base_url(), args.path, _headers(), args.offset, _MAX_READ_BYTES)
+        except UnicodeError:
+            return ToolResult(f"{args.path} is not UTF-8 text at this offset.", is_error=True)
+        except ValueError as exc:
+            return ToolResult(str(exc), is_error=True)
+        except httpx.HTTPStatusError as exc:
+            return ToolResult(_explain(exc.response.status_code, exc.response.text), is_error=True)
+        except httpx.RequestError as exc:
+            return ToolResult(f"Could not reach Hisar at {_base_url()}: {exc}", is_error=True)
+        more = f"\n\n[Continue reading with offset={next_offset}.]" if next_offset is not None else ""
+        return ToolResult(text + more)
 
 
 # ── deposit ──────────────────────────────────────────────────────────────────

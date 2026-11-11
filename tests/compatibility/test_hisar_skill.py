@@ -13,6 +13,7 @@ it did not do:
 - a name Hisar changed (it never overwrites) must be reported as it landed
 """
 
+from contextlib import asynccontextmanager
 import httpx
 import pytest
 
@@ -35,6 +36,8 @@ def _skill(monkeypatch, handler):
         async def __aexit__(self, *a): return False
         async def get(self, url, **kw): return handler("GET", url, kw)
         async def post(self, url, **kw): return handler("POST", url, kw)
+        @asynccontextmanager
+        async def stream(self, method, url, **kw): yield handler(method, url, kw)
 
     monkeypatch.setattr("app.skills.hisar.httpx.AsyncClient", _Client)
     return HisarSkill()
@@ -146,6 +149,31 @@ async def test_reading_returns_the_text(monkeypatch):
     skill = _skill(monkeypatch, lambda *a: _resp(content=b"# Notes\nhello"))
     out = await skill.execute({"action": "read", "path": "/Documents/n.md"}, _Ctx())
     assert "hello" in out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("range_supported", [True, False])
+async def test_read_continues_across_a_utf8_boundary(monkeypatch, range_supported):
+    monkeypatch.setattr("app.skills.hisar._MAX_TEXT_BYTES", 7)
+    raw = "hello 🚀end".encode()
+    offsets = []
+
+    def respond(method, url, options):
+        start, end = map(int, options["headers"]["Range"].removeprefix("bytes=").split("-"))
+        offsets.append(start)
+        if not range_supported:
+            return _resp(content=raw)
+        end = min(end, len(raw) - 1)
+        return httpx.Response(206, content=raw[start:end + 1],
+            headers={"Content-Range": f"bytes {start}-{end}/{len(raw)}"},
+            request=httpx.Request(method, url))
+
+    skill = _skill(monkeypatch, respond)
+    args = {"action": "read", "path": "/Documents/n.md"}
+    first = await skill.execute(args, _Ctx())
+    assert "hello " in first and "offset=6" in first and "🚀" not in first
+    second = await skill.execute({**args, "offset": 6}, _Ctx())
+    assert second.endswith("🚀end") and offsets == [0, 6]
 
 
 @pytest.mark.asyncio

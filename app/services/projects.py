@@ -51,8 +51,9 @@ def inventory(root):
                 raise CoordinationError("snapshot_limit", "Project exceeds the configured snapshot bounds")
             if not path.resolve().is_relative_to(root):
                 raise CoordinationError("workspace_escape", "Project path left its authorized root")
-            rows.append((path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest(),
-                         path.stat().st_mode & 0o777))
+            with path.open('rb') as source:
+                digest = hashlib.file_digest(source, 'sha256').hexdigest()
+            rows.append((path.relative_to(root).as_posix(), digest, path.stat().st_mode & 0o777))
     rows.sort()
     revision = hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest()
     return revision, rows

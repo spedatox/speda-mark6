@@ -12,6 +12,16 @@ class ExtractionError(ValueError):
     pass
 
 
+def decode_document_text(blob: bytes) -> str:
+    try:
+        text = blob.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ExtractionError("Text must be UTF-8 encoded") from exc
+    if "\x00" in text:
+        raise ExtractionError("Binary content cannot be indexed as text")
+    return text
+
+
 @dataclass(frozen=True)
 class ExtractedPassage:
     content: str
@@ -85,12 +95,7 @@ def extract_document_bytes(blob: bytes, mime_type: str, *, max_bytes: int = 25 *
         except Exception as exc:
             raise ExtractionError("PDF could not be parsed") from exc
     elif mime_type in {"text/plain", "text/markdown", "text/csv"}:
-        try:
-            text = blob.decode("utf-8-sig")
-        except UnicodeDecodeError as exc:
-            raise ExtractionError("Text must be UTF-8 encoded") from exc
-        if "\x00" in text:
-            raise ExtractionError("Binary content cannot be indexed as text")
+        text = decode_document_text(blob)
         if len(text) > max_characters:
             raise ExtractionError("Extracted text exceeds the character limit")
         if mime_type == "text/csv":

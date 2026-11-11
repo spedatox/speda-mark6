@@ -126,11 +126,15 @@ class ProjectReadSkill(ProjectStatusSkill):
     description = ('Read files or list the current folder project inventory without starting a coding worker. '
         'Use it to inspect existing code, README and AGENTS.md instructions before planning changes or resuming work. '
         'An optional task_id reads an exact retained completed artifact belonging to this supervisor and project. '
-        'It refuses secret environment files, metadata, links, binary content and paths outside the project; returns bounded numbered lines and a content revision.')
+        'Continue a partial read with next_line and next_column as start_line and start_column. '
+        'Continue an inventory listing with next_file_offset as file_offset. '
+        'It refuses secret environment files, metadata, links, binary content and paths outside the project.')
     input_schema = {'type':'object', 'properties': {
         'path':{'type':'string', 'maxLength':2000, 'default':''},
-        'start_line':{'type':'integer', 'minimum':1, 'maximum':1000000, 'default':1},
+        'start_line':{'type':'integer', 'minimum':1, 'default':1},
+        'start_column':{'type':'integer', 'minimum':1, 'default':1},
         'max_lines':{'type':'integer', 'minimum':1, 'maximum':500, 'default':200},
+        'file_offset':{'type':'integer', 'minimum':0, 'default':0},
         'task_id':{'type':'string', 'pattern':'^[a-f0-9]{32}$'}}, 'additionalProperties':False}
 
     async def execute(self, args, context):
@@ -138,8 +142,10 @@ class ProjectReadSkill(ProjectStatusSkill):
         from pydantic import BaseModel, Field
         class Read(BaseModel):
             path: str = Field(default='', max_length=2000)
-            start_line: int = Field(default=1, ge=1, le=1000000)
+            start_line: int = Field(default=1, ge=1)
+            start_column: int = Field(default=1, ge=1)
             max_lines: int = Field(default=200, ge=1, le=500)
+            file_offset: int = Field(default=0, ge=0)
             task_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
         body = Read.model_validate(args)
         return json.dumps(await ProjectWorkspace(context.coordination).read(context, **body.model_dump()))

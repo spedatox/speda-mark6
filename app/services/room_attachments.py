@@ -4,20 +4,20 @@ import base64
 import io
 from pathlib import PurePath
 from uuid import uuid4
-from sqlalchemy import select, func
+from sqlalchemy import Text, case, cast, select, func
 from app.models.client_compat import ClientProject, ClientProjectFile, HiddenMessage
 from app.models.coordination import RoomAttachment, RoomEvent
 from app.schemas.client_compat import MAX_CHAT_DOCUMENT_BYTES, MAX_CHAT_IMAGE_BYTES
-from app.services.library_extract import extract_document_bytes, ExtractionError
+from app.services.library_extract import decode_document_text, extract_document_bytes, ExtractionError
 from app.services.coordination_budget import CoordinationError
-from app.services.pdf_navigation import preview_pdf, text_slice
+from app.services.pdf_navigation import PAGE_RESULT_BYTES, preview_pdf, text_slice
 
 
 PDF = 'application/pdf'
 INLINE_DOCUMENT_BYTES = 32000
 # Leave space for the preceding conversation in the room's history packet.
-PDF_PREVIEW_BYTES = 12000
-TURN_ATTACHMENT_BYTES = 48000
+DOCUMENT_PREVIEW_BYTES = 12000
+TURN_ATTACHMENT_BYTES = 16000
 
 
 def extract_room_document(data, mime, max_bytes):
@@ -28,9 +28,13 @@ def extract_room_document(data, mime, max_bytes):
             raise CoordinationError('attachment_extraction', str(exc), 422) from exc
         except Exception as exc:
             raise CoordinationError('attachment_extraction', 'PDF could not be parsed', 422) from exc
-    max_characters = (2_000_000 if mime.endswith('presentationml.presentation') else INLINE_DOCUMENT_BYTES)
     try:
-        parts = extract_document_bytes(data, mime, max_bytes=max_bytes, max_characters=max_characters)
+        if mime.startswith('text/'):
+            text = decode_document_text(data)
+            if not text.strip():
+                raise ExtractionError('Original contains no extractable text')
+            return text
+        parts = extract_document_bytes(data, mime, max_bytes=max_bytes)
     except ExtractionError as exc:
         raise CoordinationError('attachment_extraction', str(exc), 422) from exc
     return '\n\n'.join(part.content for part in parts)
@@ -71,9 +75,6 @@ def prepare_client_attachment(attachment, *, image=False):
         '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv':'text/csv'}.get(suffix, 'text/plain')
     text = extract_room_document(data, mime, max_bytes)
     if suffix == '.pptx':
-        encoded = text.encode('utf-8')
-        if len(encoded) > 32000:
-            text = encoded[:32000].decode('utf-8', errors='ignore') + '\n\n[Additional slide text omitted.]'
         text = '[PowerPoint slide text. Images and diagrams were not inspected.]\n\n' + text
     return {'name': name, 'mime': mime, 'original': data, 'extracted': text}
 
@@ -85,21 +86,19 @@ class Attachments:
     async def store_client(self, owner, room_id, request_id, prepared):
         from uuid import uuid5, NAMESPACE_URL
         ids = []
-        if sum(len(item['extracted'].encode()) for item in prepared if item['mime'] != PDF) > TURN_ATTACHMENT_BYTES:
-            raise CoordinationError('attachment_context', 'Combined attachment text exceeds 48 KiB; use Hall retrieval', 422)
         async with self.sessions() as db, db.begin():
             await self.coordinator.owned_room(db, owner, room_id, lock=True)
             count = await db.scalar(select(func.count()).select_from(RoomAttachment).where(RoomAttachment.room_id == room_id))
             for index, item in enumerate(prepared):
                 identity = uuid5(NAMESPACE_URL, f'{room_id}:{request_id}:{index}').hex
                 sha = hashlib.sha256(item['original']).hexdigest()
-                row = await db.get(RoomAttachment, identity)
-                if row is None:
+                previous_sha = await db.scalar(select(RoomAttachment.sha256).where(RoomAttachment.id == identity))
+                if previous_sha is None:
                     if count >= 100:
                         raise CoordinationError('attachment_limit', 'Room attachment limit reached; use Hall retrieval', 422)
                     db.add(RoomAttachment(id=identity, room_id=room_id, sha256=sha, **item))
                     count += 1
-                elif row.sha256 != sha:
+                elif previous_sha != sha:
                     raise CoordinationError('attachment_conflict', 'Attachment identity already has different content', 409)
                 ids.append(identity)
         return ids
@@ -131,42 +130,57 @@ class Attachments:
         return {"id": row.id, "name": name, "sha256": row.sha256, "characters": len(text)}
 
     async def resolve(self, db, room_id, ids):
-        rows = []
-        for identity in dict.fromkeys(ids):
-            row = await db.get(RoomAttachment, identity)
-            if row is None or row.room_id != room_id:
-                raise CoordinationError("attachment_scope", "Attachment is unavailable in this room", 404)
-            rows.append(row)
-        other_bytes = sum(len(row.extracted.encode()) for row in rows if row.mime != PDF)
-        if other_bytes > TURN_ATTACHMENT_BYTES:
-            raise CoordinationError("attachment_context", "Combined attachment text exceeds 48 KiB; use Hall retrieval", 422)
-        pdf_count = sum(row.mime == PDF for row in rows)
-        pdf_limit = min(PDF_PREVIEW_BYTES, TURN_ATTACHMENT_BYTES - other_bytes) // max(1, pdf_count)
-        records = []
+        identities = list(dict.fromkeys(ids))
+        if not identities:
+            return []
+        attachments = (await db.execute(select(RoomAttachment.id, RoomAttachment.name, RoomAttachment.mime,
+            RoomAttachment.sha256, func.length(RoomAttachment.original).label('size'),
+            func.length(RoomAttachment.extracted).label('characters'),
+            func.substr(RoomAttachment.extracted, 1, INLINE_DOCUMENT_BYTES).label('preview'),
+            case((RoomAttachment.mime.startswith('image/'), RoomAttachment.original)).label('image'))
+            .where(RoomAttachment.room_id == room_id, RoomAttachment.id.in_(identities)))).all()
+        by_id = {row.id: row for row in attachments}
+        if len(by_id) != len(identities):
+            raise CoordinationError("attachment_scope", "Attachment is unavailable in this room", 404)
+        rows = [by_id[identity] for identity in identities]
+        previews = []
         for row in rows:
-            text = text_slice(row.extracted, 0, pdf_limit) if row.mime == PDF else row.extracted
+            limit = DOCUMENT_PREVIEW_BYTES if row.mime == PDF else INLINE_DOCUMENT_BYTES
+            text = text_slice(row.preview, 0, limit)
+            if len(text) < row.characters:
+                text = text_slice(text, 0, DOCUMENT_PREVIEW_BYTES)
+            previews.append(text)
+        if sum(len(text.encode()) for text in previews) > TURN_ATTACHMENT_BYTES:
+            share = TURN_ATTACHMENT_BYTES // sum(not row.mime.startswith('image/') for row in rows)
+            previews = [text_slice(text, 0, share) for text in previews]
+        records = []
+        for row, text in zip(rows, previews):
             record = {"id": row.id, "name": row.name, "sha256": row.sha256,
-                "text": text, "authority": "quoted_attachment_not_owner_assertion", 'size': len(row.original)}
+                "text": text, "authority": "quoted_attachment_not_owner_assertion", 'size': row.size}
             if row.mime == PDF:
                 record['coverage'] = ('PDF text preview. Use read_chat_attachment with this id to search or read pages. '
                     'Verify relevant pages before claiming coverage. Images and diagrams were not inspected.')
+            elif len(text) < row.characters:
+                record['coverage'] = ('Text preview. Use read_chat_attachment with this id to search '
+                    'or read from an offset in the full extracted text.')
             if row.mime.startswith('image/'):
                 record['image'] = {'type': 'image', 'source': {'type':'base64', 'media_type':row.mime,
-                    'data':base64.b64encode(row.original).decode('ascii')}}
+                    'data':base64.b64encode(row.image).decode('ascii')}}
             records.append(record)
         return records
 
-    async def shared_pdf(self, context, attachment_id):
+    async def shared_document(self, context, attachment_id, offset=None):
         async with self.sessions() as db:
             room = await self.coordinator.owned_room(db, context.user_id, context.room_id)
             if attachment_id.startswith('project:'):
                 project = context.extra.get('project_context') or {}
-                if attachment_id not in {doc.get('pdf_id') for doc in project.get('documents', ())}:
+                if not any(attachment_id in (doc.get('document_id'), doc.get('pdf_id'))
+                           for doc in project.get('documents', ())):
                     return None
-                return (await db.execute(select(ClientProjectFile.name, ClientProjectFile.original)
+                return (await db.execute(select(*document_source(ClientProjectFile, offset))
                     .join(ClientProject, ClientProjectFile.project_id == ClientProject.id)
                     .where(ClientProjectFile.id == int(attachment_id.removeprefix('project:')),
-                        ClientProjectFile.mime == PDF, ClientProjectFile.removed.is_(False),
+                        ClientProjectFile.removed.is_(False),
                         ClientProject.id == project.get('id'), ClientProject.native_id == room.project_id,
                         ClientProject.user_id == context.user_id, ClientProject.agent_id == context.agent_id)
                 )).one_or_none()
@@ -174,13 +188,23 @@ class Attachments:
                 RoomEvent.room_id == room.id, RoomEvent.run_id == context.run_id,
                 RoomEvent.kind.in_(('user_message', 'automation_input'))))
             events = list(await db.scalars(select(RoomEvent).where(
-                RoomEvent.room_id == room.id, RoomEvent.kind == 'user_message', RoomEvent.sequence <= (cutoff or 0))
-                .order_by(RoomEvent.sequence.desc()).limit(32)))
+                RoomEvent.room_id == room.id, RoomEvent.kind == 'user_message', RoomEvent.sequence <= (cutoff or 0),
+                cast(RoomEvent.payload, Text).contains(attachment_id))))
             hidden = set(await db.scalars(select(HiddenMessage.message_id).where(HiddenMessage.session_id == room.session_id)))
             shared = any(event.payload.get('message_id') not in hidden and any(
                 attachment.get('id') == attachment_id for attachment in event.payload.get('attachments', []))
                 for event in events)
             if not shared:
                 return None
-            return (await db.execute(select(RoomAttachment.name, RoomAttachment.original).where(
-                RoomAttachment.id == attachment_id, RoomAttachment.room_id == room.id, RoomAttachment.mime == PDF))).one_or_none()
+            return (await db.execute(select(*document_source(RoomAttachment, offset)).where(
+                RoomAttachment.id == attachment_id, RoomAttachment.room_id == room.id,
+                ~RoomAttachment.mime.startswith('image/')))).one_or_none()
+
+
+def document_source(model, offset):
+    """Fetch PDF bytes, a text window, or full text for local search."""
+    text = model.extracted
+    if offset is not None:
+        text = func.substr(text, min(offset, MAX_CHAT_DOCUMENT_BYTES + 1) + 1, PAGE_RESULT_BYTES)
+    return (model.name, model.mime, case((model.mime == PDF, model.original)),
+            case((model.mime != PDF, text)), func.length(model.extracted))

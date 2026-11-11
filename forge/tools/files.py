@@ -16,7 +16,7 @@ from forge.warden.tool import Tool, ToolContext, ToolResult
 
 # ── read_file ────────────────────────────────────────────────────────────────
 DEFAULT_LINE_LIMIT = 2000
-MAX_READ_CHARS = 100_000       # roughly 25k tokens: one read's share of a window
+MAX_READ_CHARS = 32_000
 
 FILE_UNCHANGED_STUB = (
     "File unchanged since your last read. The contents from that earlier read are "
@@ -32,6 +32,7 @@ class ReadFileArgs(BaseModel):
     limit: int | None = Field(
         default=None, ge=1,
         description=f"How many lines to read. Defaults to {DEFAULT_LINE_LIMIT}.")
+    column: int = Field(default=1, ge=1, description="1-based character column within the first line.")
 
 
 class ReadFile(Tool):
@@ -42,11 +43,8 @@ class ReadFile(Tool):
         "(read-before-write). Output is line-numbered, which is what makes edit_file's "
         f"exact-match anchoring reliable and composes with grep's path:line output. Reads "
         f"up to {DEFAULT_LINE_LIMIT} lines by default; pass offset and limit to read a "
-        "window of a larger file, so no file is ever too big to work with. A file under "
-        "the default limit is read whole in one call — after a grep hit, check the "
-        "file's size before windowing around its line number; a guessed offset/limit "
-        "often costs a second call for content the first call already had. Read-only "
-        "and safe to run in parallel."
+        "window of a larger file. If the response gives a continuation offset and column, "
+        "pass those values to keep reading without skipping text. Read-only and safe to run in parallel."
     )
     Args = ReadFileArgs
     READ_ONLY = True
@@ -63,7 +61,7 @@ class ReadFile(Tool):
             return ToolResult(f"File not found: {args.path} ({e})", is_error=True)
 
         digest = _hash(content)
-        windowed = args.offset is not None or args.limit is not None
+        windowed = args.offset is not None or args.limit is not None or args.column != 1
 
         # A whole-file re-read of something unchanged is the single most common
         # duplicate in a long transcript. The model already has this text; hand
@@ -73,13 +71,9 @@ class ReadFile(Tool):
         if not windowed and prior is not None and prior.mtime == digest and prior.shown_fully:
             return ToolResult(FILE_UNCHANGED_STUB)
 
-        # Freshness always records the hash of the WHOLE file, even for a window:
-        # edit-grounding must cover the parts that were not shown, or an edit to
-        # an unseen region would sail through on a partial read.
-        ctx.files.record(args.path, content, digest, shown_fully=not windowed)
-
         lines = content.splitlines()
         if not lines:
+            ctx.files.record(args.path, content, digest, shown_fully=True)
             return ToolResult(f"[{args.path} is empty]")
 
         start = args.offset or 1
@@ -90,34 +84,32 @@ class ReadFile(Tool):
         count = args.limit if args.limit is not None else DEFAULT_LINE_LIMIT
         window = lines[start - 1:start - 1 + count]
         end = start + len(window) - 1
+        if args.column > len(window[0]) + 1:
+            return ToolResult(f"Column {args.column} is past the end of line {start}.", is_error=True)
 
+        parts, remaining = [], MAX_READ_CHARS
+        next_offset, next_column = end + 1, 1
         width = len(str(end))
-        body = "\n".join(f"{n:>{width}}→ {text}"
-                         for n, text in enumerate(window, start=start))
+        for number, line in enumerate(window, start=start):
+            column = args.column if number == start else 1
+            prefix = ("\n" if parts else "") + f"{number:>{width}}→ "
+            available = remaining - len(prefix)
+            if available < 1:
+                next_offset, next_column = number, column
+                break
+            piece = line[column - 1:column - 1 + available]
+            parts.append(prefix + piece)
+            remaining = available - len(piece)
+            if column - 1 + len(piece) < len(line):
+                next_offset, next_column = number, column + len(piece)
+                break
 
-        # Self-bounding. Refusing beats truncating here: a refusal costs ~100
-        # chars and the model retries with a narrower window, while a silent
-        # truncation costs the full ceiling in tokens AND hides that there was
-        # more. The exception is a single monstrous line — no smaller `limit`
-        # can help, so that one gets cut with the cut declared.
-        if len(body) > MAX_READ_CHARS:
-            if len(window) == 1:
-                return ToolResult(
-                    body[:MAX_READ_CHARS]
-                    + f"\n…[line {start} is {len(window[0])} chars; cut at "
-                      f"{MAX_READ_CHARS}]")
-            suggested = max(1, len(window) * MAX_READ_CHARS // len(body))
-            return ToolResult(
-                f"Lines {start}-{end} of {args.path} are {len(body)} chars, over the "
-                f"{MAX_READ_CHARS}-char ceiling for one read. Retry with a smaller "
-                f"window — about limit={suggested} — or grep for what you need.",
-                is_error=True)
-
-        remaining = len(lines) - end
-        if remaining > 0:
-            body += (f"\n\n…[{remaining} more line{'' if remaining == 1 else 's'}; "
-                     f"read from offset {end + 1} to continue]")
-        return ToolResult(body)
+        # Keep the whole-file hash for edit freshness even when only one page is shown.
+        complete = next_offset > len(lines)
+        ctx.files.record(args.path, content, digest, shown_fully=complete and not windowed)
+        if not complete:
+            parts.append(f"\n\n…[continue with offset={next_offset}, column={next_column}]")
+        return ToolResult("".join(parts))
 
 
 # ── write_file ───────────────────────────────────────────────────────────────
