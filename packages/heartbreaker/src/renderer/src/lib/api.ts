@@ -576,13 +576,26 @@ export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   }
 }
 
-/** Download a produced file (fetch with auth header, then save as a blob). */
-export async function downloadFile(config: AppConfig, url: string, filename: string): Promise<void> {
-  const res = await fetch(`${config.apiBase}${url}`, {
-    headers: authHeaders(config),
-  })
+/** Fetch a deliverable through the same authenticated route used for downloads. */
+export async function fetchFile(config: AppConfig, path: string, signal?: AbortSignal, maxBytes?: number): Promise<Blob> {
+  const url = new URL(`${config.apiBase}${path}`)
+  if (!path.startsWith('/') || url.origin !== new URL(config.apiBase).origin) throw new Error('Invalid file URL')
+  const res = await fetch(url, { headers: authHeaders(config), signal, redirect: 'error' })
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+  if (maxBytes && Number(res.headers.get('Content-Length')) > maxBytes) {
+    void res.body?.cancel()
+    throw new Error('File exceeds the preview limit')
+  }
   const blob = await res.blob()
+  if (maxBytes && blob.size > maxBytes) throw new Error('File exceeds the preview limit')
+  return blob
+}
+
+export async function downloadFile(config: AppConfig, path: string, filename: string): Promise<void> {
+  saveFileBlob(await fetchFile(config, path), filename)
+}
+
+export function saveFileBlob(blob: Blob, filename: string): void {
   const objUrl = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = objUrl

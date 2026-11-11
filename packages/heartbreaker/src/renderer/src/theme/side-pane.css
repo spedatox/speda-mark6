@@ -1,0 +1,151 @@
+.hb-side-pane-layout {
+  --hb-side-pane-width: clamp(300px, var(--hb-side-pane-preferred-width, 40%), 60%);
+  --hb-side-pane-divider-width: 8px;
+}
+
+.hb-side-pane {
+  flex: 0 0 var(--hb-side-pane-width);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 20px 20px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--hb-base);
+  color: var(--hb-text);
+  font: 0.85rem var(--font-read);
+  box-shadow: 0 12px 36px #0004;
+}
+
+.hb-side-pane-divider {
+  flex: 0 0 var(--hb-side-pane-divider-width);
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+  margin-block: 24px;
+}
+
+.hb-side-pane-divider:hover, .hb-side-pane-divider:focus-visible {
+  background: rgba(var(--hb-accent-rgb), 0.24);
+}
+
+.hb-side-pane-bar, .hb-side-pane-tabs, .hb-side-pane-tab, .hb-side-pane-tab > button {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.hb-side-pane-bar {
+  flex: none;
+  gap: 5px;
+  padding: 6px 8px;
+  background: rgba(var(--hb-accent-rgb), 0.05);
+  border-bottom: 1px solid var(--border);
+}
+
+.hb-side-pane-tabs {
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.hb-side-pane-tab {
+  flex: 0 0 auto;
+  max-width: 215px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.hb-side-pane-tab[data-active="true"] {
+  background: rgba(var(--hb-accent-rgb), 0.09);
+  border-color: var(--border);
+}
+
+.hb-side-pane-tab > button:first-child {
+  gap: 6px;
+  padding: 6px 5px 6px 8px;
+  background: transparent;
+  border: 0;
+  color: var(--hb-text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hb-side-pane-tab[data-active="true"] > button:first-child { color: var(--hb-text); }
+.hb-side-pane-tab > button:first-child > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-side-pane-tab svg { flex: none; }
+
+.hb-side-pane-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: 30px;
+  width: 30px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--hb-text-dim);
+  cursor: pointer;
+}
+
+.hb-side-pane-tab > .hb-side-pane-icon { width: 24px; justify-content: center; }
+.hb-side-pane-add { margin-inline-end: auto; }
+.hb-side-pane-icon:hover, .hb-side-pane-tab > button:first-child:hover { color: var(--hb-text); background: #ffffff10; }
+.hb-side-pane button:focus-visible { outline: 1px solid var(--hb-cyan); outline-offset: -2px; }
+
+.hb-side-pane-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hb-side-pane[hidden], .hb-side-pane-content[hidden] { display: none; }
+
+.hb-preview-toolbar {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hb-preview-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-pdf-controls { font-variant-numeric: tabular-nums; color: var(--hb-text-dim); }
+.hb-pdf-spacer { flex: 1; }
+
+.hb-preview-button {
+  border: 1px solid var(--border);
+  background: #ffffff06;
+  color: var(--hb-text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hb-preview-button:hover:not(:disabled) { background: #ffffff15; }
+.hb-preview-button:disabled { opacity: 0.4; cursor: default; }
+.hb-preview-scroll { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+.hb-preview-note { padding: 14px; color: var(--hb-text-dim); }
+.hb-preview-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 0.82rem/1.65 var(--font-mono); }
+.hb-preview-image { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
+.hb-preview-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.hb-pdf-scroll { background: #0003; }
+.hb-pdf-scroll canvas { display: block; margin-inline: auto; background: white; box-shadow: 0 4px 20px #0006; }
+
+@media (max-width: 767px) {
+  .hb-side-pane-layout { flex-direction: column; }
+  .hb-side-pane-divider { display: none; }
+  .hb-side-pane { flex-basis: 48%; margin: 0 6px 6px; }
+}
+
+.hb-attachment-preview { padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.hb-worker-controls button:disabled { opacity: 0.45; cursor: default; }

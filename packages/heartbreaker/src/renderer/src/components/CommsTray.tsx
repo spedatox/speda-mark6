@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState } from 'react'
-import { fetchAgentComms, getHouseParty, setHouseParty, fetchActiveLegionRuns, attachLegionStream, fetchWorkerExecutions } from '../lib/api'
+import { fetchAgentComms, getHouseParty, setHouseParty, fetchActiveLegionRuns, fetchWorkerExecutions } from '../lib/api'
 import type { AgentCommEntry, ActiveLegionRun, WorkerExecution } from '../lib/api'
 import type { AppConfig, SubagentRun } from '../lib/types'
-import { foldLegionEvent, workerLabel } from '../lib/subagentFold'
+import { workerLabel } from '../lib/subagentFold'
 import { useIsMobile } from '../lib/useIsMobile'
 import { CommFeed, AvatarStack } from './CommBubble'
-import SubagentDetailView from './SubagentDetailView'
+import { useSidePane } from './SidePane'
 import { SkeletonList } from './Skeleton'
 import { useT } from '../lib/i18n'
 
@@ -35,11 +35,11 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   const [loaded, setLoaded] = useState(false)
   const [legionRuns, setLegionRuns] = useState<ActiveLegionRun[]>([])
   const [executions, setExecutions] = useState<WorkerExecution[]>([])
-  const [openRun, setOpenRun] = useState<SubagentRun | null>(null)
+  const pane = useSidePane()
+  const openWorker = (run: SubagentRun, ticket?: number) => { pane?.openWorker(run, { ticket }); onClose() }
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const pinnedToEnd = useRef(true)  // follow the newest bubble unless the user scrolled up
-  const attachAbort = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const load = () => {
@@ -56,7 +56,6 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
     timer.current = setInterval(load, POLL_MS)
     return () => {
       if (timer.current) clearInterval(timer.current)
-      attachAbort.current?.abort()
     }
   }, [config])
 
@@ -65,21 +64,14 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
   // row here opens the same SubagentDetailView fed by its own independent
   // SSE connection instead of message.subagents.
   const openLegionRun = (run: ActiveLegionRun) => {
-    attachAbort.current?.abort()
-    const ctrl = new AbortController()
-    attachAbort.current = ctrl
-    setOpenRun({ id: run.execution_id || `legion-bg-${run.ticket}`, executionId: run.execution_id, ownerAgent: run.owner_agent, workerRole: run.role, executionType: run.execution_type, status: run.status, agent: run.agent, label: run.label, running: true, steps: [], source: run.execution_type === 'forge' ? 'forge' : 'legion' })
-    if (run.execution_id) return
-    ;(async () => {
-      for await (const event of attachLegionStream(config, run.ticket, ctrl.signal)) {
-        setOpenRun(prev => foldLegionEvent(prev, event))
-      }
-    })().catch(() => { /* aborted or dropped connection — the tray row still reflects /legion/active */ })
+    openWorker({ id: run.execution_id || `legion-bg-${run.ticket}`, executionId: run.execution_id,
+      ownerAgent: run.owner_agent, workerRole: run.role, executionType: run.execution_type, status: run.status,
+      agent: run.agent, label: run.label, running: true, steps: [],
+      source: run.execution_type === 'forge' ? 'forge' : 'legion' }, run.ticket)
   }
 
   const openExecution = (execution: WorkerExecution) => {
-    attachAbort.current?.abort()
-    setOpenRun({ id: execution.execution_id, executionId: execution.execution_id,
+    openWorker({ id: execution.execution_id, executionId: execution.execution_id,
       agent: execution.role || execution.worker || execution.agent || 'worker', label: execution.label || execution.task || 'Worker task',
       ownerAgent: execution.owner_agent || execution.agent_id, workerRole: execution.role || execution.worker,
       executionType: execution.execution_type || execution.backend, source: execution.execution_type === 'forge' || execution.backend === 'forge' ? 'forge' : 'legion',
@@ -87,12 +79,6 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
       running: ['queued', 'running', 'staging', 'waiting_input', 'waiting_dependency'].includes(execution.status || ''), steps: [] })
   }
   const legacyRuns = legionRuns.filter(run => !run.execution_id || !executions.some(execution => execution.execution_id === run.execution_id))
-
-  const closeLegionRun = () => {
-    attachAbort.current?.abort()
-    attachAbort.current = null
-    setOpenRun(null)
-  }
 
   useEffect(() => {
     // Esc retracts the extended tray first; a second Esc closes it.
@@ -239,8 +225,6 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
         </div>
       )}
 
-      {openRun && <SubagentDetailView key={openRun.id} run={openRun} onClose={closeLegionRun} />}
-
       <div
         ref={feedRef}
         onScroll={() => {
@@ -264,7 +248,7 @@ export default function CommsTray({ config, onClose }: { config: AppConfig; onCl
             {t.commsTray.noTraffic}
           </p>
         ) : (
-          <CommFeed entries={entries} compact={!wide} config={config} onOpenDetail={setOpenRun} />
+          <CommFeed entries={entries} compact={!wide} config={config} onOpenDetail={openWorker} />
         )}
       </div>
 

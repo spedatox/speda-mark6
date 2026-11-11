@@ -10,12 +10,17 @@ import { useEffect, useState } from 'react'
 const MOBILE_QUERY = '(max-width: 767px)'
 
 export function useIsMobile(): boolean {
-  const [mobile, setMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches)
+  return useViewportMatch(MOBILE_QUERY)
+}
+
+export function useViewportMatch(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
   useEffect(() => {
-    const mql = window.matchMedia(MOBILE_QUERY)
-    const onChange = (e: MediaQueryListEvent) => setMobile(e.matches)
+    const mql = window.matchMedia(query)
+    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches)
     mql.addEventListener('change', onChange)
     return () => mql.removeEventListener('change', onChange)
-  }, [])
-  return mobile
+    setMatches(mql.matches)
+  }, [query])
+  return matches
 }

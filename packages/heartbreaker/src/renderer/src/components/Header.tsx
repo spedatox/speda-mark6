@@ -8,6 +8,7 @@ import { fetchProjects } from '../lib/api'
 import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
 import { useT } from '../lib/i18n'
+import { useSidePane } from './SidePane'
 
 /**
  * THE DECK BAR — the chat column's title row, plus the floating icon rail.
@@ -138,6 +139,7 @@ export interface RailProps {
    *  tile hides. */
   inWarRoom?: boolean
   onOpenWarRoom?: () => void
+  rightInset?: string
 }
 
 /**
@@ -152,12 +154,12 @@ export interface RailProps {
 export function DeckRail({
   boardOpen, onToggleBoard, commsOpen, onToggleComms,
   voiceOpen, onToggleVoice, telemetryOpen, onToggleTelemetry,
-  inWarRoom, onOpenWarRoom,
+  inWarRoom, onOpenWarRoom, rightInset,
 }: RailProps) {
   const t = useT()
   return (
     <div style={{
-      position: 'absolute', top: 20, right: 20, zIndex: 30,
+      position: 'absolute', top: 20, right: rightInset ?? 20, zIndex: 30,
       display: 'flex', gap: 8,
     }}>
       {!inWarRoom && onOpenWarRoom && (
@@ -240,10 +242,11 @@ interface Props {
   /** Width the title row must keep clear on its right so the floating rail,
    *  which is not in this flow, never lands on top of a long session title. */
   railClearance?: number
+  onRestorePane?: () => void
 }
 
 export default function Header({
-  config, sidebarOpen, onToggleSidebar, railClearance = 0,
+  config, sidebarOpen, onToggleSidebar, railClearance = 0, onRestorePane,
 }: Props) {
   const t = useT()
   const { state } = useChatContext()
@@ -367,7 +370,24 @@ export default function Header({
       {/* The rail is NOT here — it floats above the telemetry column, out of
           this column's clipped overflow. Layout renders <DeckRail/>. This
           keeps the space it occupies clear so a long title never runs under it. */}
+      {onRestorePane && <RailTile onClick={onRestorePane} title={t.sidePane.reopenPane}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <path d="M3 5h18v14H3zM14 5v14" />
+        </svg>
+      </RailTile>}
+      <OpenPreviewFile />
       <div style={{ width: railClearance, flexShrink: 0 }} />
     </div>
   )
+}
+
+function OpenPreviewFile() {
+  const t = useT()
+  const pane = useSidePane()
+  if (!pane) return null
+  return <RailTile onClick={pane.pickFile} title={t.sidePane.openFile}>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+      <path d="M3 7h7l2 2h9v11H3zM3 7V5h7l2 2h6" />
+    </svg>
+  </RailTile>
 }

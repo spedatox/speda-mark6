@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef, type ReactNode } from 'react'
+import { SidePaneProvider, SidePaneDivider, sidePaneStyle } from './SidePane'
 import type { AppProfile } from '../profile/types'
 import type { AppConfig } from '../lib/types'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
-import { useIsMobile } from '../lib/useIsMobile'
+import { useIsMobile, useViewportMatch } from '../lib/useIsMobile'
 import { fetchMessages } from '../lib/api'
 import { loadMessages, saveMessages } from '../store/messageCache'
 import Sidebar from './Sidebar'
@@ -40,9 +41,15 @@ interface LayoutProps {
   onExitWarRoom: () => void
 }
 
-export default function Layout({
-  profile, config, switchAgent, partyEngaged, inWarRoom, onEnterWarRoom, onExitWarRoom,
-}: LayoutProps) {
+export default function Layout(props: LayoutProps) {
+  return <SidePaneProvider key={props.config.apiBase}>{({ pane, visible, restore, width, setWidth }) =>
+    <Deck {...props} pane={pane} paneVisible={visible} restorePane={restore} paneWidth={width} setPaneWidth={setWidth} />
+  }</SidePaneProvider>
+}
+
+function Deck({
+  profile, config, switchAgent, partyEngaged, inWarRoom, onEnterWarRoom, onExitWarRoom, pane, paneVisible, restorePane, paneWidth, setPaneWidth,
+}: LayoutProps & { pane: ReactNode; paneVisible: boolean; restorePane?: () => void; paneWidth: number; setPaneWidth: (width: number) => void }) {
   const { state, dispatch } = useChatContext()
   const viewRef = useRef(state)
   viewRef.current = state
@@ -114,12 +121,14 @@ export default function Layout({
   // The right telemetry column. Permanent by default — it is the glanceable
   // half of the Systems Board — but collapsible from the rail, because two
   // 280px columns is a lot of horizontal room on a laptop.
-  const telemetryOpen = settings.telemetryOpen !== false
+  const telemetryOpen = !paneVisible && settings.telemetryOpen !== false
 
   const isMobile = useIsMobile()
+  const narrowDeck = useViewportMatch('(max-width: 1100px)')
+  const useSidebarDrawer = isMobile || (paneVisible && narrowDeck)
   // Rail geometry, stated once: five 44px tiles on 8px gaps, one of which
   // (war room) hides inside the war room itself.
-  const railTiles = inWarRoom ? 4 : 5
+  const railTiles = (inWarRoom ? 4 : 5) - (paneVisible ? 1 : 0)
   const railWidth = railTiles * 44 + (railTiles - 1) * 8
   // Mobile drawer state is session-local and starts closed — the drawer only
   // ever opens from an explicit tap on the header menu button.
@@ -196,9 +205,10 @@ export default function Layout({
   }, [dispatch])
 
   return (
-    <div style={{ position: 'relative', display: 'flex', height: '100%', overflow: 'hidden', background: 'transparent' }}>
+    <div className={paneVisible ? 'hb-side-pane-layout' : undefined}
+      style={{ ...sidePaneStyle(paneWidth), position: 'relative', display: 'flex', height: '100%', overflow: 'hidden', background: 'transparent' }}>
       {/* Mobile drawer backdrop — full glassmorphic blur sheet; tap to dismiss */}
-      {isMobile && drawerOpen && (
+      {useSidebarDrawer && drawerOpen && (
         <div
           onClick={() => setDrawerOpen(false)}
           style={{
@@ -214,10 +224,10 @@ export default function Layout({
       <Sidebar
         profile={profile}
         config={config}
-        isOpen={isMobile ? drawerOpen : sidebarOpen}
-        mobile={isMobile}
+        isOpen={useSidebarDrawer ? drawerOpen : sidebarOpen}
+        mobile={useSidebarDrawer}
         onSelectSession={handleSelectSession}
-        onToggle={() => (isMobile ? setDrawerOpen(false) : update({ sidebarOpen: !sidebarOpen }))}
+        onToggle={() => (useSidebarDrawer ? setDrawerOpen(false) : update({ sidebarOpen: !sidebarOpen }))}
         onNewChat={handleNewChat}
         onOpenSettings={() => { setDrawerOpen(false); setSettingsOpen(true) }}
         switchAgent={switchAgent}
@@ -238,11 +248,12 @@ export default function Layout({
       }}>
         <Header
           config={config}
-          sidebarOpen={isMobile ? false : sidebarOpen}
-          onToggleSidebar={() => (isMobile ? setDrawerOpen(true) : update({ sidebarOpen: !sidebarOpen }))}
+          sidebarOpen={useSidebarDrawer ? false : sidebarOpen}
+          onToggleSidebar={() => (useSidebarDrawer ? setDrawerOpen(true) : update({ sidebarOpen: !sidebarOpen }))}
           // The rail floats over this row's right end when the telemetry column
           // is folded away; while it is open the column already holds that
           // space, so the title row needs none.
+          onRestorePane={restorePane}
           railClearance={isMobile || telemetryOpen ? 0 : railWidth}
         />
         {inWarRoom && (
@@ -274,6 +285,9 @@ export default function Layout({
         )}
       </div>
 
+      {paneVisible && <SidePaneDivider width={paneWidth} setWidth={setPaneWidth} />}
+      {pane}
+
       {/* Right island — telemetry. Starts below the rail's row so the floating
           tiles clear it, exactly as the deck has it. */}
       {!isMobile && telemetryOpen && (
@@ -292,7 +306,8 @@ export default function Layout({
           voiceOpen={voiceOpen}
           onToggleVoice={() => setVoiceOpen(v => !v)}
           telemetryOpen={telemetryOpen}
-          onToggleTelemetry={() => update({ telemetryOpen: !telemetryOpen })}
+          onToggleTelemetry={paneVisible ? undefined : () => update({ telemetryOpen: !telemetryOpen })}
+          rightInset={paneVisible ? 'calc(40px + var(--hb-side-pane-width) + var(--hb-side-pane-divider-width))' : undefined}
           inWarRoom={inWarRoom}
           onOpenWarRoom={onEnterWarRoom}
         />

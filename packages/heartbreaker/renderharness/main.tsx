@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { TextSegment } from '../src/renderer/src/components/Message'
 import { SettingsContext, useSettingsProvider } from '../src/renderer/src/store/settings'
 import '../src/renderer/src/theme/heartbreaker.css'
 import CanvasPreview from './CanvasPreview'
 import MentionPreview from './MentionPreview'
+
+const SidePanePreview = lazy(() => import('./SidePanePreview'))
 
 const fence = (language: string, body: string) => `\`\`\`${language}\n${body}\n\`\`\``
 const calendar = { title: 'Your week', range: '25–31 Oct 2026', days: [
@@ -34,6 +36,7 @@ function Harness() {
   const [width, setWidth] = useState(760)
   const [pending, setPending] = useState(false)
   const [canvas, setCanvas] = useState(window.location.hash === '#canvas')
+  if (window.location.hash === '#side-pane') return <Suspense fallback={null}><SidePanePreview /></Suspense>
   if (window.location.hash === '#mentions') return <SettingsContext.Provider value={settings}><MentionPreview /></SettingsContext.Provider>
   return <SettingsContext.Provider value={settings}>
     {canvas ? <CanvasPreview fixtures={fixtures} onClose={() => setCanvas(false)} /> : <main style={{ maxWidth: width, width: 'calc(100% - 32px)', margin: '32px 16px', color: 'var(--hb-text)' }}>
