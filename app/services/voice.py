@@ -140,7 +140,7 @@ class Voice:
             await asyncio.shield(settle())
             raise
 
-    async def speak(self,owner,body):
+    async def speak(self,owner,body,*,cache_scope=None):
         resolved=await self.resolve(owner,body.agent_id,body.voice,body.locale)
         p,m,n=resolved['provider'],resolved['model'],resolved['name']
         if p not in self.providers(): raise CoordinationError('voice_unconfigured','The selected voice provider is not configured',503)
@@ -167,7 +167,12 @@ class Voice:
             if m!='eleven_multilingual_v2': payload['language_code']=resolved['locale'].split('-')[0]
             kwargs={'headers':{'xi-api-key':self.config.elevenlabs_api_key},'params':{'output_format':'mp3_44100_128'},'json':payload}
             units=len(spoken.encode())
-        fingerprint=digest({'kind':'tts','resolved':resolved,'spoken':spoken})
+        speech_input={'kind':'tts','resolved':resolved,'spoken':spoken}
+        if cache_scope is not None:
+            # A later automation firing has its own receipt, even if its reply
+            # repeats earlier text whose cached audio has since expired.
+            speech_input['scope']=cache_scope
+        fingerprint=digest(speech_input)
         async def generate():
             status,audio=await request_bytes('POST',url,maximum=12*1024*1024,timeout=45,**kwargs)
             if status>=300 or not audio or not (audio.startswith(b'ID3') or (len(audio)>1 and audio[0]==255 and audio[1]&224==224)):
