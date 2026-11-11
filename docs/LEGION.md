@@ -52,7 +52,8 @@ Scope validation binds owner, room, root run, active supervisor step and role.
 Root limits allow eight combined read/Forge assignments, with at most three active
 Legion children; actual paid concurrency is the existing shared root/owner gate.
 Known in-flight capacity can be awaited within the original deadline before
-reservation. Unknown or stale-executor receipts hold capacity without another send.
+reservation. An unknown model outcome stays held in the affected run. Owner-wide
+concurrency counts active reservations and excludes closed calls.
 
 A reply can finish while detached work continues under its original run lease,
 deadline and budgets. New owner messages can start another room round. They do not

@@ -79,9 +79,9 @@ Use `GET/PUT /coordination/budget` to set finite allowances and conservative rat
 for each chosen model before unpausing. Rates cover input, output and reasoning;
 Google thinking routes also require an explicit extra output ceiling. Byte-based
 input bounds intentionally overreserve. Reservations are not refunded from guessed
-usage. Unknown calls continue occupying concurrency slots. This favors bounded
-spending over optimistic utilization. No real rates or credentials were installed
-by this implementation.
+usage. A closed call with an unknown outcome retains its reservation and holds
+replay of the affected run. It releases its owner-wide concurrency slots so
+independent runs can proceed under the same spending limits.
 
 `POST /coordination/rooms/{id}/messages` accepts a client-generated `input_id`.
 Reuse that ID only for retries of the identical request. Busy rooms return a

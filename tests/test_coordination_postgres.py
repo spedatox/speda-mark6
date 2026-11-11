@@ -55,6 +55,7 @@ from tests.test_automation_admission import (
     test_paused_automation_intake_survives_restart_and_drains_once,
 )
 from tests.test_global_budget import (
+    test_global_capacity_rejection_does_not_wedge_coordination,
     test_lifetime_budget_counts_prior_days_and_unknown_outcomes,
     test_lifetime_concurrency_and_pause_block_before_provider_dispatch,
     test_shared_pause_rejects_chat_before_admission_and_keeps_automation_intake,

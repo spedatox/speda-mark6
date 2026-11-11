@@ -450,7 +450,7 @@ class Coordinator:
 
     async def unresolved_outcomes(self, db, run_id):
         calls = await db.scalar(select(func.count()).select_from(ModelCallReceipt).where(
-            ModelCallReceipt.run_id == run_id, ModelCallReceipt.status != "complete"))
+            ModelCallReceipt.run_id == run_id, ModelCallReceipt.status.in_(["started", "unknown"])))
         requests = select(AgentStep.id).where(AgentStep.run_id == run_id).union(
             select(ProjectTask.id).where(ProjectTask.run_id == run_id),
             select(LegionExecution.id).where(LegionExecution.run_id == run_id))
@@ -979,6 +979,8 @@ class Coordinator:
             if self.projects:
                 await asyncio.shield(self.projects.stop_run(run_id))
             status = "cancelled" if isinstance(exc, asyncio.CancelledError) else "reconciling"
+            if isinstance(exc, ProviderError) and exc.code == "global_concurrency":
+                status = "failed"
             reason = str(exc) if isinstance(exc, ProviderError) else (
                 "Execution cancelled; partial output is retained" if status == "cancelled" else
                 f"Execution stopped ({type(exc).__name__}); inspect recorded outcomes before resuming")

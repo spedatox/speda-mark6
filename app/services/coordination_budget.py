@@ -29,6 +29,10 @@ class CoordinationError(ProviderError):
         self.status = status
 
 
+class ModelDispatchRejected(CoordinationError):
+    """The local spending gate rejected the request before any provider send."""
+
+
 def insert_for(db, model):
     return (sqlite_insert if db.bind.dialect.name == "sqlite" else pg_insert)(model)
 
@@ -74,13 +78,16 @@ class CoordinationBudget:
                 if exc.code not in {'concurrency','owner_concurrency'}:
                     raise
                 async with self.sessions() as db:
-                    query=select(func.count()).select_from(ModelCallReceipt).join(CoordinationRun,
-                        CoordinationRun.id == ModelCallReceipt.run_id).where(
-                        CoordinationRun.user_id == context.user_id,or_(ModelCallReceipt.status == 'unknown',
-                            and_(ModelCallReceipt.status == 'started',or_(
-                                CoordinationRun.status.not_in(['running','waiting_tasks']),
-                                CoordinationRun.lease_until <= time.time(),CoordinationRun.deadline <= time.time()))))
-                    if exc.code == 'concurrency':query=query.where(ModelCallReceipt.run_id == context.run_id)
+                    stalled = and_(ModelCallReceipt.status == 'started', or_(
+                        CoordinationRun.status.not_in(['running', 'waiting_tasks']),
+                        CoordinationRun.lease_until <= time.time(), CoordinationRun.deadline <= time.time()))
+                    query = select(func.count()).select_from(ModelCallReceipt).join(CoordinationRun,
+                        CoordinationRun.id == ModelCallReceipt.run_id).where(CoordinationRun.user_id == context.user_id)
+                    if exc.code == 'concurrency':
+                        query = query.where(ModelCallReceipt.run_id == context.run_id,
+                            or_(ModelCallReceipt.status == 'unknown', stalled))
+                    else:
+                        query = query.where(stalled)
                     if await db.scalar(query):
                         raise CoordinationError('outcome_unknown','An uncertain provider outcome occupies capacity; reconcile before more calls') from None
                 remaining=policy.deadline-time.monotonic()
@@ -169,7 +176,7 @@ class CoordinationBudget:
             owner_active = await db.scalar(select(func.count()).select_from(ModelCallReceipt)
                 .join(CoordinationRun, CoordinationRun.id == ModelCallReceipt.run_id).where(
                     CoordinationRun.user_id == context.user_id,
-                    ModelCallReceipt.status.in_(["started", "unknown"])))
+                    ModelCallReceipt.status == "started"))
             if owner_active >= live.concurrent_calls:
                 raise CoordinationError("owner_concurrency", "The owner's model-call slots are occupied or awaiting reconciliation")
             await db.execute(insert_for(db, CoordinationDay).values(user_id=context.user_id, day=day,
@@ -234,12 +241,13 @@ class CoordinationBudget:
                                      .values(tokens=CoordinationRun.tokens + actual_tokens - reserved))
             async with self._capacity:
                 self._capacity.notify_all()
-        except BaseException:
-            async def hold():
+        except BaseException as exc:
+            status = "rejected" if isinstance(exc, ModelDispatchRejected) else "unknown"
+            async def settle_failure():
                 async with write_session(self.sessions) as db:
                     await db.execute(update(ModelCallReceipt).where(ModelCallReceipt.id == receipt_id,
-                        ModelCallReceipt.status == "started").values(status="unknown"))
-            await asyncio.shield(hold())
+                        ModelCallReceipt.status == "started").values(status=status))
+            await asyncio.shield(settle_failure())
             async with self._capacity:
                 self._capacity.notify_all()
             raise

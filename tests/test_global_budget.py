@@ -36,12 +36,22 @@ async def test_disabled_spending_limits_allow_calls_past_zero_allowances(memory,
     assert status['lifetime_reserved']['calls'] == 1
     assert status['lifetime_reserved']['tokens'] > 0
     assert (status['lifetime_reserved']['microdollars'] > 0) == priced
-    # Outcomes and concurrency still have durable authority without spending gates.
+    # Active calls still limit concurrency, and closed unknown calls keep their receipts.
     await budget.save(1, 2, GlobalPolicy(paused=False, enforce_limits=False, concurrent_calls=1))
     key = await budget.reserve(1, policy, {}, 16, 'uncertain')
-    await budget.finish(key, 'unknown')
     with pytest.raises(CoordinationError, match='slots'):
         await budget.reserve(1, policy, {}, 16, 'next')
+    await budget.finish(key, 'unknown')
+    restarted = GlobalBudget(memory.sessions)
+    next_key = await restarted.reserve(1, policy, {}, 16, 'next')
+    with pytest.raises(CoordinationError, match='slots'):
+        await restarted.reserve_external(1, 'speech:fixture', 100, 'speech')
+    await restarted.finish(next_key, 'complete')
+    speech = await restarted.reserve_external(1, 'speech:fixture', 100, 'speech')
+    await restarted.finish(speech, 'complete')
+    async with memory.sessions() as db:
+        assert (await db.get(GlobalCall, key)).status == 'unknown'
+    assert (await restarted.status(1))['lifetime_reserved']['calls'] == 4
 
 
 async def test_disabled_spending_limits_allow_unpriced_external_calls(memory):
@@ -117,6 +127,44 @@ async def test_lifetime_concurrency_and_pause_block_before_provider_dispatch(mem
                 messages=[{'role':'user', 'content':'test'}], max_tokens=16)
         assert not calls
     finally:
+        await client.close()
+
+
+async def test_global_capacity_rejection_does_not_wedge_coordination(memory):
+    from app.schemas.coordination import CreateRoom
+    from tests.test_coordination import send, setup
+
+    bits = await setup(memory, [])
+    await bits.budget.save(1, 1, bits.spending.model_copy(update={'concurrent_calls': 1}))
+    gate = GlobalBudget(memory.sessions)
+    await gate.save(1, 0, GlobalPolicy(paused=False, enforce_limits=False, concurrent_calls=1))
+    route = await bits.policy.resolve(user_id=1)
+    active = await gate.reserve(1, route, {}, 16, 'existing call')
+    sent = []
+
+    def handler(request):
+        sent.append(request)
+        return httpx.Response(200, headers={'content-type': 'text/event-stream'}, text=chat_events(reasoning=False))
+
+    config = Settings(_env_file=None, kimi_api_key='fixture-only')
+    client = LLMClient(bits.policy, config,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), spending=gate)
+    bits.budget.client = client
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        blocked = await send(bits, room)
+        assert blocked['status'] == 'failed'
+        assert blocked['calls'][0]['status'] == 'rejected'
+        assert not sent
+        await gate.finish(active, 'unknown')
+
+        new_room = await bits.coordinator.create(1, CreateRoom())
+        recovered = await send(bits, new_room, input_id='after-saturation')
+        assert recovered['status'] == 'succeeded', recovered
+        assert recovered['calls'][0]['status'] == 'complete'
+        assert len(sent) == 1
+    finally:
+        await bits.coordinator.shutdown()
         await client.close()
 
 

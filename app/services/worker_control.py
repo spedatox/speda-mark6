@@ -164,7 +164,7 @@ class WorkerControl:
                 return row.status
             unknown = await db.scalar(select(func.count()).select_from(ModelCallReceipt).where(
                 ModelCallReceipt.run_id == row.run_id, ModelCallReceipt.call_key.startswith(row.id + ':'),
-                ModelCallReceipt.status != 'complete'))
+                ModelCallReceipt.status.in_(['started', 'unknown'])))
             unknown += await db.scalar(select(func.count()).select_from(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.request_id == row.id, ToolExecutionReceipt.status != 'completed'))
             row.status = 'reconciling' if unknown else 'interrupted' if row.cancelled else status

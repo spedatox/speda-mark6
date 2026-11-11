@@ -183,7 +183,8 @@ async def test_mcp_browse_rejection_finishes_the_turn_without_an_unknown_receipt
 
 
 async def test_unknown_paid_response_is_held_never_resent(memory):
-    bits = await setup(memory, [ProviderError("disconnect", "Connection lost after dispatch")])
+    bits = await setup(memory, [ProviderError("disconnect", "Connection lost after dispatch"), reply("New turn")])
+    await bits.budget.save(1, 1, bits.spending.model_copy(update={"concurrent_calls": 1}))
     room = await bits.coordinator.create(1, CreateRoom())
     result = await send(bits, room)
     assert result["status"] == "reconciling"
@@ -191,6 +192,11 @@ async def test_unknown_paid_response_is_held_never_resent(memory):
     with pytest.raises(CoordinationError, match="reconciliation"):
         await bits.coordinator.resume(1, result["id"])
     assert len(bits.client.calls) == 1
+    separate_room = await bits.coordinator.create(1, CreateRoom())
+    new_turn = await send(bits, separate_room, input_id="independent")
+    assert new_turn["status"] == "succeeded"
+    assert (await bits.coordinator.inspect_run(1, result["id"]))["calls"][0]["status"] == "unknown"
+    assert len(bits.client.calls) == 2
     await bits.coordinator.shutdown()
 
 

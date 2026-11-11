@@ -144,10 +144,11 @@ class GlobalBudget:
                 tokens += price.extra_output_ceiling + images * price.image_token_ceiling
             # An unpriced call has no monetary reservation; this is not its billed cost.
             cost = math.ceil(tokens * price.microdollars_per_token) if price else 0
+            # Closed streams keep their spending receipts, including unknown outcomes.
             live = await db.scalar(select(func.count()).select_from(GlobalCall).where(
-                GlobalCall.user_id == owner, GlobalCall.status.in_(["started", "unknown"])))
+                GlobalCall.user_id == owner, GlobalCall.status == "started"))
             if live >= limits.concurrent_calls:
-                raise CoordinationError("global_concurrency", "Global call slots are occupied or require reconciliation")
+                raise CoordinationError("global_concurrency", "Global call slots are occupied")
             if limits.enforce_limits and any(getattr(limits, name) is not None for name in (
                     "lifetime_calls", "lifetime_tokens", "lifetime_microdollars")):
                 total = (await db.execute(select(func.count(), func.coalesce(func.sum(GlobalCall.tokens), 0),
@@ -193,8 +194,9 @@ class GlobalBudget:
             if limits.paused or (limits.enforce_limits and (not math.isfinite(rate) or rate<=0)):
                 raise CoordinationError('global_budget_paused','Paid transport is paused or this resource has no explicit price ceiling')
             cost=math.ceil(units*rate)
-            live=await db.scalar(select(func.count()).select_from(GlobalCall).where(GlobalCall.user_id==owner,GlobalCall.status.in_(['started','unknown'])))
-            if live>=limits.concurrent_calls: raise CoordinationError('global_concurrency','Paid call slots are occupied or require reconciliation')
+            live=await db.scalar(select(func.count()).select_from(GlobalCall).where(
+                GlobalCall.user_id==owner, GlobalCall.status=='started'))
+            if live>=limits.concurrent_calls: raise CoordinationError('global_concurrency','Paid call slots are occupied')
             total=(await db.execute(select(func.count(),func.coalesce(func.sum(GlobalCall.tokens),0),func.coalesce(func.sum(GlobalCall.microdollars),0)).where(GlobalCall.user_id==owner))).one()
             if limits.enforce_limits and any(cap is not None and used+delta>cap for cap,used,delta in zip(
                 (limits.lifetime_calls,limits.lifetime_tokens,limits.lifetime_microdollars),total,(1,0,cost))):

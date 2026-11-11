@@ -9,6 +9,7 @@ import httpx
 import anthropic
 
 from app.schemas.llm import ProviderError
+from app.services.coordination_budget import CoordinationError, ModelDispatchRejected
 from app.services.llm_protocol import decode, request_body
 from app.services.model_policy import parse_model_ref
 
@@ -109,7 +110,10 @@ class LLMClient:
                 if self.spending:
                     if not self.configured(selected.spec.ref):
                         raise ProviderError("not_configured", "Selected provider is not configured")
-                    reservation = await self.spending.reserve(user_id, selected, body, max_tokens, f"{agent_id}:{role}")
+                    try:
+                        reservation = await self.spending.reserve(user_id, selected, body, max_tokens, f"{agent_id}:{role}")
+                    except CoordinationError as exc:
+                        raise ModelDispatchRejected(exc.code, str(exc), exc.status) from exc
                 try:
                     await selected_stream.open()
                 except ProviderError as exc:
