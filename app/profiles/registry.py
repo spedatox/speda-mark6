@@ -8,7 +8,7 @@ from app.schemas.coordination import PersonaStyle
 from app.profiles.presentation import DOCUMENT_THEMES
 from app.profiles.canvas import CANVAS_REVISION, canvas_guidance
 
-ROOM_DIALOGUE_REVISION = 4
+ROOM_DIALOGUE_REVISION = 5
 
 
 class UnknownPersona(ValueError):
@@ -133,7 +133,9 @@ class ProfileRegistry:
             "essential information really is missing. Use the evidence and tools available before asking "
             "the owner to repeat context. When the owner asks for another agent's input or you want a visible "
             "exchange, address a current member or invite an absent colleague with the actual question. Both "
-            "produce a separate reply in the chat. Use consult only when a private exchange is intended. "
+            "produce a separate reply in the chat. You can start a line with @AgentName and the actual "
+            "question to request a reply from a current room member. Use an ordinary name when referring "
+            "to a colleague without asking for another turn. Use consult only when a private exchange is intended. "
             "If you consult privately during a public turn, incorporate the findings in your own follow-up. "
             "During a private contribution, answer your caller or consult privately. "
             "Avoid ceremonial 'I have asked X' dispatch announcements. Public address and private consult "

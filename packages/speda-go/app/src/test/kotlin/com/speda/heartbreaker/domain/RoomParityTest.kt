@@ -14,18 +14,20 @@ class RoomParityTest {
         ChatMessage("local-user", Role.User, "Plan the week"), ChatMessage("placeholder", Role.Assistant, "", isStreaming = true, sessionId = 1)))
     private fun play(state: ChatState) = trace().fold(state) { s, e -> reduce(s, ChatAction.RoomFrame(e, "placeholder", 1)) }
 
-    @Test fun shared_desktop_trace_keeps_speakers_tools_membership_and_canonical_reply_ids() {
+    @Test fun shared_desktop_trace_keeps_peer_exchange_and_reply_ids_without_owner_relay() {
         val result = play(begin())
         val speakers = result.messages.filter { it.speaker != null }
-        assertEquals(listOf("speda", "ultron"), speakers.map { it.speaker })
-        assertEquals(listOf("Bringing Ultron in.", "My own answer."), speakers.map { it.content })
+        assertEquals(listOf("speda", "ultron", "speda", "ultron"), speakers.map { it.speaker })
+        assertEquals(listOf("Bringing Ultron in.", "@SPEDA, when is the midterm?",
+            "The midterm is Friday.", "Then review on Thursday."), speakers.map { it.content })
         assertEquals("collaborate", speakers.first().tools.single().name)
         assertTrue(speakers.last().tools.isEmpty())
-        assertEquals(9L, speakers.last().roomSequence)
+        assertEquals(9L, speakers[1].roomSequence)
+        assertEquals(14L, speakers.last().roomSequence)
         assertEquals(listOf("speda", "ultron"), result.room!!.members)
         assertEquals(1, result.messages.count { it.roomNotice != null })
         assertEquals(1, result.messages.count { it.role == Role.User })
-        assertEquals(3, historyMessageCount(result.messages))
+        assertEquals(5, historyMessageCount(result.messages))
         assertTrue(result.isStreaming) // Contributions do not finish the root reply.
         assertFalse(reduce(result, ChatAction.FinishRoomTurn(1)).isStreaming)
     }

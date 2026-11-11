@@ -26,14 +26,18 @@ const room = { id: 'room', title: 'Study', lead: 'speda', members: ['speda', 'ul
 const frame = (sequence, kind, step, speaker, payload = {}) => ({ schema_version: 1, room_id: 'room', sequence, run_id: 'run', step_id: step, speaker, kind, payload, created_at: '2026-10-28T09:00:00Z' })
 const apply = (state, event) => reduce(state, { type: 'ROOM_EVENT', payload: { event, sessionId: 1 } })
 
-test('Android and Heartbreaker consume the same room-v1 trace', () => {
+test('Android and Heartbreaker show the same peer exchange without an owner relay', () => {
   const trace = JSON.parse(fs.readFileSync(path.join(__dirname, '../../speda-go/app/src/test/resources/fixtures/room_v1.json'), 'utf8'))
   const state = trace.reduce(apply, begin([{ id: 'local-user', role: 'user', content: 'Plan the week', tools: [], isStreaming: false, isError: false }]))
   const speakers = state.messages.filter(message => message.speaker)
-  assert.deepEqual(speakers.map(message => [message.speaker, message.content]), [['speda', 'Bringing Ultron in.'], ['ultron', 'My own answer.']])
+  assert.deepEqual(speakers.map(message => [message.speaker, message.content]), [
+    ['speda', 'Bringing Ultron in.'], ['ultron', '@SPEDA, when is the midterm?'],
+    ['speda', 'The midterm is Friday.'], ['ultron', 'Then review on Thursday.'],
+  ])
   assert.equal(speakers[0].tools[0].name, 'collaborate')
   assert.equal(speakers[1].roomSequence, 9)
-  assert.equal(historyMessageCount(state.messages), 3)
+  assert.equal(speakers[3].roomSequence, 14)
+  assert.equal(historyMessageCount(state.messages), 5)
   assert.equal(state.messages.filter(message => message.roomNotice).length, 1)
   assert.equal(state.messages.filter(message => message.role === 'user').length, 1)
 })

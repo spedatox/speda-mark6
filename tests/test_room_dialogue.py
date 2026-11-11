@@ -12,6 +12,7 @@ from app.schemas.client_compat import ClientChat
 from app.schemas.coordination import CreateRoom, RoomInput
 from app.services.client_compat import ClientCompatibility
 from tests.test_coordination import setup, send, tool, reply
+from tests.test_heartbreaker_rooms import completed, frames
 
 
 def collaboration_packet(call):
@@ -93,18 +94,80 @@ async def test_public_question_returns_to_questioner_without_another_owner_input
     await bits.coordinator.shutdown()
 
 
+@pytest.mark.parametrize("question", [
+    "@Scourge, does your threat model still flag port 5050?",
+    "Scourge — with 5050 named as our own Forge gateway: does your threat model still flag it?",
+])
+async def test_public_message_addresses_peer_without_owner_relay(memory, question):
+    bits = await setup(memory, [
+        reply(f"Port 5050 is the Forge gateway.\n\n{question}"),
+        reply("@Orion, check whether external workers use it before restricting access."),
+        reply("I'll check which workers require access."),
+    ], contributions=3)
+    room = await bits.coordinator.create(1, CreateRoom(members=["orion", "scourge"]))
+    adapter = ClientCompatibility(bits.coordinator)
+    turn = await completed(bits, adapter, session_id=await session_id(memory, room),
+        addressed_agent_id="orion", message="Assess the exposed listener")
+    result = await bits.coordinator.inspect_run(1, turn["run_id"])
+    assert result["status"] == "succeeded"
+    events = (await bits.coordinator.events(1, room["id"]))["events"]
+    spoken = [e for e in events if e["kind"] == "message"]
+    assert [e["speaker"] for e in spoken] == ["orion", "scourge", "orion"]
+    assert len([e for e in events if e["kind"] == "user_message"]) == 1
+    queued, = [e for e in events if e["kind"] == "contribution_queued"]
+    assert queued["payload"]["reply_to"] == spoken[0]["sequence"]
+    assert collaboration_packet(bits.client.calls[1])["collaboration_request"] == question
+    assert "external workers" in str(bits.client.calls[2]["messages"])
+    stream = await frames(adapter, turn["request_id"])
+    assert [f["data"] for f in stream if f["type"] == "room_event" and f["data"]["kind"] == "message"] == spoken
+    assert stream[-1]["type"] == "done"
+    rows = await adapter.messages(1, turn["session_id"], structured=True)
+    assert [r["roomSequence"] for r in rows if r.get("speaker")] == [e["sequence"] for e in spoken]
+    await bits.coordinator.shutdown()
+
+
+async def test_visible_question_does_not_repeat_explicit_address(memory):
+    bits = await setup(memory, [
+        tool({"action": "address", "agent_id": "scourge", "message": "Assess port 5050."}),
+        reply("@Scourge, does your threat model still flag port 5050?"),
+        reply("Check which workers require access."), reply("I'll check."),
+    ])
+    room = await bits.coordinator.create(1, CreateRoom(members=["scourge"]))
+    result = await send(bits, room)
+    assert result["status"] == "succeeded" and result["contributions"] == 3
+    assert len(bits.client.calls) == 4
+    await bits.coordinator.shutdown()
+
+
+@pytest.mark.parametrize(("text", "cap"), [
+    ("```text\n@Scourge, check this\n```\n> @Scourge, check that\n@Orion, check as well\n"
+     "@Unknown, look here\n@SPEDA, check again\nScourge noted port 5050.", 6),
+    ("@Scourge, assess port 5050.", 2),
+])
+async def test_automatic_address_respects_public_membership_and_round_cap(memory, text, cap):
+    bits = await setup(memory, [reply(text)], contributions=cap)
+    room = await bits.coordinator.create(1, CreateRoom(members=["scourge"]))
+    result = await send(bits, room)
+    assert result["status"] == "succeeded" and result["contributions"] == 1
+    assert len(result["steps"]) == 1 and len(bits.client.calls) == 1
+    await bits.coordinator.shutdown()
+
+
 @pytest.mark.parametrize("action", ["address", "consult"])
 async def test_nested_exchange_finishes_before_outer_caller_responds(memory, action):
+    evidence = "The March schedule is historical evidence."
+    if action == "consult":
+        evidence += "\n@Scourge, can you verify the schedule?"
     bits = await setup(memory, [
         tool({"action": action, "agent_id": "ultron", "message": "Which dates are reliable?"}),
         reply("Ultron, which dates are reliable?"),
         tool({"action": action, "agent_id": "orion", "message": "Which schedule is current?"}),
         reply("Orion, which schedule is current?"),
-        reply("The March schedule is historical evidence."),
+        reply(evidence),
         reply("SPEDA, the current exam dates remain unverified."),
         reply("Then we should verify this semester's schedule."),
-    ], contributions=5)
-    room = await bits.coordinator.create(1, CreateRoom(members=["ultron", "orion"] if action == "address" else []))
+    ], contributions=5 if action == "address" else 7)
+    room = await bits.coordinator.create(1, CreateRoom(members=["ultron", "orion"] if action == "address" else ["scourge"]))
     result = await send(bits, room)
     assert result["status"] == "succeeded"
     events = (await bits.coordinator.events(1, room["id"]))["events"]

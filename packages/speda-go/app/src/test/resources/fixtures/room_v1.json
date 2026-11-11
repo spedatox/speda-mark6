@@ -6,6 +6,10 @@
   {"room_id":"room","sequence":5,"run_id":"run","step_id":"lead","speaker":"speda","kind":"membership","payload":{"action":"invite","agent_id":"ultron","room":{"id":"room","title":"Study","lead":"speda","members":["speda","ultron"],"version":2,"sequence":5,"active_run":"run"}}},
   {"room_id":"room","sequence":6,"run_id":"run","step_id":"lead","speaker":"speda","kind":"message","payload":{"message_id":2,"text":"Bringing Ultron in."}},
   {"room_id":"room","sequence":7,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"speaker_started","payload":{"mode":"invite"}},
-  {"room_id":"room","sequence":8,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"delta","payload":{"text":"My own answer."}},
-  {"room_id":"room","sequence":9,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"message","payload":{"message_id":3,"text":"My own answer."}}
+  {"room_id":"room","sequence":8,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"delta","payload":{"text":"@SPEDA, when is the midterm?"}},
+  {"room_id":"room","sequence":9,"run_id":"run","step_id":"guest","speaker":"ultron","kind":"message","payload":{"message_id":3,"text":"@SPEDA, when is the midterm?"}},
+  {"room_id":"room","sequence":11,"run_id":"run","step_id":"peer","speaker":"speda","kind":"speaker_started","payload":{"mode":"address"}},
+  {"room_id":"room","sequence":12,"run_id":"run","step_id":"peer","speaker":"speda","kind":"message","payload":{"message_id":4,"text":"The midterm is Friday."}},
+  {"room_id":"room","sequence":13,"run_id":"run","step_id":"followup","speaker":"ultron","kind":"speaker_started","payload":{"mode":"return"}},
+  {"room_id":"room","sequence":14,"run_id":"run","step_id":"followup","speaker":"ultron","kind":"message","payload":{"message_id":5,"text":"Then review on Thursday."}}
 ]

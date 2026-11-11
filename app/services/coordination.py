@@ -20,6 +20,7 @@ from app.models.message import Message
 from app.models.model_policy import ToolExecutionReceipt
 from app.models.legion import LegionExecution
 from app.models.user import User
+from app.profiles.registry import UnknownPersona
 from app.schemas.coordination import Collaboration, SpendingPolicy
 from app.schemas.llm import PolicyDocument, ThinkingRequest, ProviderError
 from app.schemas.memory_runtime import MemoryBudget, MemoryPacket
@@ -487,38 +488,89 @@ class Coordinator:
                         {"action": body.action, "agent_id": aid}, run.id, context.step_id)
             if body.action in {"dismiss", "handoff"}:
                 return json.dumps({"action": body.action, "agent_id": aid})
-            count = await db.scalar(select(func.count()).select_from(AgentStep).where(AgentStep.run_id == run.id))
-            limit = SpendingPolicy.model_validate(run.limits).run.contributions
-            return_key = f"return:{context.step_id}"
-            continuation = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id,
-                AgentStep.operation_id == return_key))
-            needs_return = body.action in {"address", "consult"} and continuation is None
-            needed = 2 if needs_return else 1
-            if count + needed > limit:
-                raise CoordinationError("round_limit",
-                    "The collaboration round has reached its contribution limit. Finish with the available evidence.")
-            repeated = await db.scalar(select(AgentStep.id).where(AgentStep.run_id == run.id,
-                AgentStep.agent_id == aid, AgentStep.prompt == body.message))
-            if repeated:
-                raise CoordinationError("no_progress", "That identical question is already assigned in this round")
-            step = AgentStep(id=uuid4().hex, run_id=run.id, operation_id=operation,
-                parent_id=context.step_id, ordinal=count, agent_id=aid, mode=body.action, prompt=body.message)
-            db.add(step)
-            if needs_return:
-                # Reserve the caller's response at admission, within the same root
-                # cap. A single response waits for all questions from this turn.
-                db.add(AgentStep(id=uuid4().hex, run_id=run.id, operation_id=return_key,
-                    parent_id=caller.id, ordinal=count + 1, agent_id=caller.agent_id,
-                    mode="consult" if caller.mode == "consult" else "return",
-                    status="waiting_reply", prompt=""))
-            await self.event(db, room, "contribution_queued", context.agent_id,
-                {"agent_id": aid, "question": body.message, "reply_to": body.reply_to, "mode": body.action}, run.id, step.id)
+            step = await self._queue_collaboration(db, room, run, caller, aid, body, operation)
         await self.notify()
         return json.dumps({"queued_step": step.id, "status": "queued",
             "returns_to_caller": body.action in {"address", "consult"},
             "note": "Address the participant directly in your own words, then finish this contribution. "
                 "Their answer will arrive in a separate turn; questions return to you automatically. "
                 "Do not announce a dispatch or ask the owner to relay the conversation."})
+
+    async def _queue_collaboration(self, db, room, run, caller, aid, body, operation):
+        count = await db.scalar(select(func.count()).select_from(AgentStep).where(AgentStep.run_id == run.id))
+        limit = SpendingPolicy.model_validate(run.limits).run.contributions
+        return_key = f"return:{caller.id}"
+        continuation = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id,
+            AgentStep.operation_id == return_key))
+        needs_return = body.action in {"address", "consult"} and continuation is None
+        needed = 2 if needs_return else 1
+        if count + needed > limit:
+            raise CoordinationError("round_limit",
+                "The collaboration round has reached its contribution limit. Finish with the available evidence.")
+        repeated = await db.scalar(select(AgentStep.id).where(AgentStep.run_id == run.id,
+            AgentStep.agent_id == aid, AgentStep.prompt == body.message))
+        if repeated:
+            raise CoordinationError("no_progress", "That identical question is already assigned in this round")
+        step = AgentStep(id=uuid4().hex, run_id=run.id, operation_id=operation,
+            parent_id=caller.id, ordinal=count, agent_id=aid, mode=body.action, prompt=body.message)
+        db.add(step)
+        if needs_return:
+            # A single response waits for all questions from this contribution.
+            db.add(AgentStep(id=uuid4().hex, run_id=run.id, operation_id=return_key,
+                parent_id=caller.id, ordinal=count + 1, agent_id=caller.agent_id,
+                mode="consult" if caller.mode == "consult" else "return",
+                status="waiting_reply", prompt=""))
+        await self.event(db, room, "contribution_queued", caller.agent_id,
+            {"agent_id": aid, "question": body.message, "reply_to": body.reply_to, "mode": body.action}, run.id, step.id)
+        return step
+
+    async def _address_from_message(self, db, room, run, caller, text, sequence):
+        """Route direct public questions, ignoring quoted or fenced material."""
+        recipients = {}
+        fence = ""
+        for line in text.splitlines():
+            marker = re.match(r" {0,3}(`{3,}|~{3,})(.*)", line)
+            if marker:
+                delimiter, suffix = marker.groups()
+                if not fence:
+                    fence = delimiter
+                elif delimiter.startswith(fence) and not suffix.strip():
+                    fence = ""
+                continue
+            if fence:
+                continue
+            # A line-leading @mention is explicit. Also accept questions that
+            # directly address a colleague by name, as in “Scourge — can you check?”
+            address = re.match(r" {0,3}@(\w+)(?=[ \t,:—–])[ \t,:—–]*\S", line)
+            if not address:
+                address = re.fullmatch(r" {0,3}(\w+)(?:,[ \t]+|[ \t]+[—–][ \t]+).+\?[ \t]*", line)
+            if address:
+                try:
+                    aid = self.profiles.canonical(address[1])
+                except UnknownPersona:
+                    continue
+                if aid in room.members and aid != caller.agent_id:
+                    recipients.setdefault(aid, line.strip()[:6000])
+        if not recipients:
+            return
+
+        addressed = set(await db.scalars(select(AgentStep.agent_id).where(AgentStep.run_id == run.id,
+            AgentStep.parent_id == caller.id)))
+        if caller.mode == "address" and caller.parent_id:
+            # The original questioner already has a reserved response turn.
+            parent = await db.get(AgentStep, caller.parent_id)
+            addressed.add(parent.agent_id)
+        for aid, question in recipients.items():
+            if aid in addressed:
+                continue
+            body = Collaboration(action="address", agent_id=aid, message=question, reply_to=sequence)
+            try:
+                await self._queue_collaboration(db, room, run, caller, aid, body, f"mention:{caller.id}:{aid}")
+            except CoordinationError as exc:
+                if exc.code == "round_limit":
+                    break
+                if exc.code != "no_progress":
+                    raise
 
     async def release_replies(self, db, run_id):
         """Unblock a caller only after its peers and their nested exchanges settle."""
@@ -869,9 +921,11 @@ class Coordinator:
                     await db.flush()
                     if self.deliveries:
                         await self.deliveries.enqueue_run(db,active,room,step,text)
-                    await self.event(db, room, "consult_result" if step.mode == "consult" else "message",
+                    sequence = await self.event(db, room, "consult_result" if step.mode == "consult" else "message",
                         step.agent_id, {"text": text, 'message_id':delivered.id,
                             "profile_revision": context.persona_snapshot["revision"]}, run_id, step.id)
+                    if step.mode != "consult" and len(room.members) > 1 and "collaborate" in context.allowed_tools:
+                        await self._address_from_message(db, room, active, current, text, sequence)
                     values = asdict(context.memory_budget)
                     values["seen"] = sorted(context.memory_budget.seen)
                     await db.execute(update(CoordinationRun).where(CoordinationRun.id == run_id)
