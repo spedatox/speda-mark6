@@ -27,6 +27,9 @@ spending checks disabled. Currency fields state their microdollar unit.
 Optimus and Scourge runs, including their delegated workers, skip the shared
 per-run model call cap. Token, time, concurrency, and configured spending
 limits still apply. The exemption is pinned when a run is admitted.
+Completed calls with a full provider-reported chat usage total count at that
+total toward an exempt run's token limit. In-flight and unconfirmed calls,
+daily allowances, and spending checks use the conservative reservations.
 Invalid numbers cannot be saved. Failed saves and reloads retain drafts together
 with their original revision; a revision conflict requires discarding the stale
 draft and using the latest saved values, so a reload cannot silently authorize

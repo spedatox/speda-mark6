@@ -24,6 +24,7 @@ from tests.test_coordination import (
     test_paid_response_replays_after_delivery_crash_without_another_charge,
     test_consult_returns_to_caller_without_changing_membership,
     test_parallel_model_reservations_never_exceed_root,
+    test_exempt_run_settles_reported_tokens_and_holds_unknown_calls,
     test_cancellation_joins_stream_and_holds_uncertain_call,
     test_queued_owner_input_waits_and_does_not_leak_into_active_round,
     test_stop_reply_at_delivery_boundary_does_not_publish_completed_answer,
@@ -44,6 +45,7 @@ from tests.test_client_memory import (
     test_corrected_import_does_not_leak_obsolete_prepared_text,
 )
 from tests.test_client_compat import (
+    test_chat_keeps_large_documents_searchable_outside_the_prompt,
     test_warroom_is_speda_led_coordinator_with_separate_history,
     test_original_chat_retry_reconnect_and_history,
     test_legacy_session_adopted_without_rewriting_originals,

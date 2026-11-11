@@ -318,6 +318,48 @@ async def test_parallel_model_reservations_never_exceed_root(memory, lead, token
     assert (await bits.coordinator.inspect_run(1, run.id))["reserved"]["calls"] == 1
 
 
+async def test_exempt_run_settles_reported_tokens_and_holds_unknown_calls(memory):
+    from app.models.coordination import CoordinationDay
+
+    first = LLMMessage([Block(type="text", text="Read the file.")], "end_turn",
+                       {"prompt_tokens": 140, "completion_tokens": 20, "total_tokens": 160})
+    bits = await setup(memory, [first, ProviderError("disconnect", "Lost after send")], calls=1, tokens=10000)
+    room = await bits.coordinator.create(1, CreateRoom(lead="optimus"))
+    bits.coordinator.launch = lambda _: None
+    admitted = await bits.coordinator.start(1, room["id"], RoomInput(input_id="settle", message="Read this"))
+    async with memory.sessions() as db, db.begin():
+        run = await db.get(CoordinationRun, admitted["run_id"])
+        run.status, run.executor, run.lease_until = "running", bits.coordinator.identity, time.time() + 60
+        step = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id))
+
+    ctx = memory.context(agent_id="optimus", room_id=room["id"], run_id=run.id, step_id=step.id,
+                         coordination=bits.coordinator)
+    args = {"policy": await bits.policy.resolve(user_id=1), "system": "file context " * 400,
+            "messages": [], "max_tokens": 512}
+    try:
+        async with bits.budget.stream(ctx, **args):
+            pass
+        async with memory.sessions() as db:
+            assert (await db.get(CoordinationRun, run.id)).tokens == 160
+        with pytest.raises(ProviderError, match="Lost after send"):
+            async with bits.budget.stream(ctx, **args):
+                pytest.fail("The disconnected provider cannot return a stream")
+        with pytest.raises(CoordinationError, match="reserved tokens") as blocked:
+            async with bits.budget.stream(ctx, **args):
+                pytest.fail("An unknown call must retain its full reservation")
+        assert blocked.value.code == "run_budget"
+        async with memory.sessions() as db:
+            final = await db.get(CoordinationRun, run.id)
+            receipts = list(await db.scalars(select(ModelCallReceipt).where(ModelCallReceipt.run_id == run.id)))
+            day = await db.scalar(select(CoordinationDay).where(CoordinationDay.user_id == 1))
+            assert final.calls == len(bits.client.calls) == 2
+            assert final.tokens == 160 + next(receipt.tokens for receipt in receipts if receipt.status == "unknown")
+            assert day.tokens == sum(receipt.tokens for receipt in receipts)
+            assert day.microdollars == final.microdollars == sum(receipt.microdollars for receipt in receipts)
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_cancellation_joins_stream_and_holds_uncertain_call(memory):
     started, closed = asyncio.Event(), asyncio.Event()
     bits = await setup(memory, [])

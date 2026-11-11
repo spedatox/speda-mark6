@@ -33,6 +33,17 @@ def insert_for(db, model):
     return (sqlite_insert if db.bind.dialect.name == "sqlite" else pg_insert)(model)
 
 
+def reported_chat_tokens(policy, usage):
+    """Accept complete chat usage; leave unknown or partial reports reserved."""
+    if policy.spec.protocol != "chat" or not isinstance(usage, dict):
+        return None
+    prompt, output, total = (usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens"))
+    if (all(type(value) is int for value in (prompt, output, total)) and
+            prompt > 0 and output >= 0 and total == prompt + output):
+        return min(total, 20_000_001)  # Any larger report already exceeds every supported run limit.
+    return None
+
+
 class ReplayStream:
     def __init__(self, payload, policy):
         self.final = LLMMessage(content=[Block(**b) for b in payload["content"]],
@@ -142,9 +153,15 @@ class CoordinationBudget:
             call_cap_exceeded = (
                 not run.policy.get("shared_call_cap_exempt", False) and run.calls + 1 > fixed.run.calls
             )
-            if (call_cap_exceeded or run.tokens + tokens > fixed.run.tokens or
-                    (fixed.enforce_limits and run.microdollars + cost > fixed.run.microdollars)):
-                raise CoordinationError("run_budget", "The shared run budget is exhausted")
+            if call_cap_exceeded:
+                raise CoordinationError("run_budget", f"The run reached its {fixed.run.calls:,}-call model limit.")
+            if run.tokens + tokens > fixed.run.tokens:
+                remaining = max(0, fixed.run.tokens - run.tokens)
+                raise CoordinationError("run_budget",
+                    f"The next model call needs {tokens:,} reserved tokens. The run has {remaining:,} of "
+                    f"{fixed.run.tokens:,} tokens left.")
+            if fixed.enforce_limits and run.microdollars + cost > fixed.run.microdollars:
+                raise CoordinationError("run_budget", "The next model call exceeds the run spending limit.")
             active = await db.scalar(select(func.count()).select_from(ModelCallReceipt).where(
                 ModelCallReceipt.run_id == run.id, ModelCallReceipt.status.in_(["started", "unknown"])))
             if active >= fixed.run.concurrency:
@@ -200,12 +217,23 @@ class CoordinationBudget:
             payload = {"content": [b.model_dump() for b in result.content],
                 "stop_reason": result.stop_reason, "usage": result.usage,
                 "continuation": getattr(result, "continuation", None)}
+            actual_tokens = reported_chat_tokens(policy, result.usage)
             async with write_session(self.sessions) as db:
-                await db.execute(update(ModelCallReceipt).where(ModelCallReceipt.id == receipt_id)
-                    .values(status="complete", response=payload, usage=result.usage))
+                run = await db.get(CoordinationRun, context.run_id) if actual_tokens is not None else None
+                settle = run is not None and run.policy.get("shared_call_cap_exempt", False)
+                if settle:
+                    # Serialize token settlement with new admissions. Daily and monetary
+                    # reservations retain their original conservative ceilings.
+                    await db.execute(update(CoordinationControl).where(CoordinationControl.user_id == context.user_id)
+                                     .values(version=CoordinationControl.version))
+                reserved = await db.scalar(update(ModelCallReceipt).where(ModelCallReceipt.id == receipt_id,
+                    ModelCallReceipt.status != "complete").values(status="complete", response=payload, usage=result.usage)
+                    .returning(ModelCallReceipt.tokens))
+                if settle and reserved is not None:
+                    await db.execute(update(CoordinationRun).where(CoordinationRun.id == context.run_id)
+                                     .values(tokens=CoordinationRun.tokens + actual_tokens - reserved))
             async with self._capacity:
                 self._capacity.notify_all()
-            # Reservations remain charged at their ceiling. No guessed cache refunds.
         except BaseException:
             async def hold():
                 async with write_session(self.sessions) as db:
