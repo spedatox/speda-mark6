@@ -184,16 +184,26 @@ class ProjectCheckpointSkill(ProjectStatusSkill):
 class DecisionSkill(Skill):
     name, read_only = "record_decision", False
     description = ("Record a room proposal, evidence event numbers, objections and disposition. "
-        "Updates require the current version. Agent recommendations are distinct from owner acceptance. "
-        "Preserve unresolved disagreement; this operational record is not a personal memory write.")
+        "Use recommended to record your recommendation. The tool saves an agent's accepted input as recommended. "
+        "Updates require the current version, and only the owner can update an accepted decision. "
+        "Preserve unresolved disagreement. Returns the saved room decision or a denial.")
     input_schema = Decision.model_json_schema()
 
     def available(self, context):
         return bool(context.coordination and context.room_id and context.task_role != "worker")
 
     async def execute(self, args, context):
-        return json.dumps(await context.coordination.record_decision(context.user_id, context.room_id,
-            Decision.model_validate(args), context=context))
+        decision = Decision.model_validate(args)
+        if decision.disposition == "accepted":
+            decision.disposition = "recommended"
+        try:
+            result = await context.coordination.record_decision(
+                context.user_id, context.room_id, decision, context=context)
+        except CoordinationError as exc:
+            if exc.code not in {"owner_decision", "decision_version", "decision_evidence"}:
+                raise
+            return json.dumps({"status": "denied", "code": exc.code, "message": str(exc)})
+        return json.dumps(result)
 
 
 class ProjectReviewSkill(ProjectStatusSkill):
