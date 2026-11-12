@@ -25,7 +25,7 @@ from app.schemas.coordination import Collaboration, SpendingPolicy
 from app.schemas.llm import PolicyDocument, ThinkingRequest, ProviderError
 from app.schemas.memory_runtime import MemoryBudget, MemoryPacket
 from app.schemas.sse import SSEEventType
-from app.services.coordination_budget import CoordinationError, digest, insert_for
+from app.services.coordination_budget import CoordinationError, digest, insert_for, run_expired, call_deadline
 from app.services.memory_store import capture_source
 
 
@@ -332,7 +332,7 @@ class Coordinator:
                     "output_tokens": self.policy.settings.chat_max_output_tokens,
                     "shared_call_cap_exempt": self.profiles.require(aid).shared_call_cap_exempt,
                     'origin':origin, 'output_mode':output_mode, 'trigger_payload':trigger_payload or {}},
-                limits=spending.model_dump(), deadline=time.time() + spending.run.seconds)
+                limits=spending.model_dump(), deadline=time.time() + spending.run.seconds if spending.run.seconds else 0)
             db.add(run)
             run.policy = {**run.policy, 'owner_instructions':body.owner_instructions}
             if room.project_id and self.projects:
@@ -409,7 +409,7 @@ class Coordinator:
                 .order_by(CoordinationRun.created_at, CoordinationRun.id))).scalars())
             next_run = None
             for run in waiting:
-                if run.cancelled or run.deadline <= time.time():
+                if run.cancelled or run_expired(run):
                     run.status = "cancelled" if run.cancelled else "expired"
                     await self.event(db, room, "run_stopped", "system", {"status": run.status,
                         "reason": "Queued message cancelled or its admitted deadline expired"}, run.id)
@@ -432,7 +432,7 @@ class Coordinator:
         async with self.sessions() as db:
             run = await db.get(CoordinationRun, context.run_id)
             if (run is None or run.user_id != context.user_id or run.cancelled or
-                    run.status not in {"running", "waiting_tasks"} or run.deadline <= time.time()):
+                    run.status not in {"running", "waiting_tasks"} or run_expired(run)):
                 raise CoordinationError("inactive_run", "This run is no longer admitted")
             if run.executor != self.identity or run.lease_until <= time.time():
                 raise CoordinationError("executor_fenced", "This executor no longer owns the run")
@@ -625,7 +625,7 @@ class Coordinator:
             role='background' if stored.get('origin') == 'n8n' else 'interactive',
             request=ThinkingRequest.model_validate(stored["thinking"]) if stored.get("thinking") else None,
             snapshot=(stored["revision"], PolicyDocument.model_validate(stored["document"])),
-            deadline=time.monotonic() + max(0, run.deadline - time.time()))
+            deadline=call_deadline(run))
         policy = replace(policy, fallbacks=())
         profile = run.profiles[step.agent_id]
         if step.history is None:
@@ -824,7 +824,7 @@ class Coordinator:
                 run = await db.get(CoordinationRun, run_id)
                 if run is None or run.executor != self.identity or run.status not in {"running", "waiting_tasks"}:
                     return
-                if run.cancelled or run.deadline <= time.time():
+                if run.cancelled or run_expired(run):
                     if run_id in self.live:
                         self.live[run_id].cancel()
                     return
@@ -858,7 +858,7 @@ class Coordinator:
                     run = await db.get(CoordinationRun, run_id)
                     room = await self.owned_room(db, run.user_id, run.room_id, lock=True)
                     user = await db.get(User, run.user_id)
-                    if run.cancelled or run.deadline <= time.time():
+                    if run.cancelled or run_expired(run):
                         raise CoordinationError("stopped", "Run cancelled or deadline reached")
                     await self.release_replies(db, run_id)
                     await db.flush()
@@ -908,7 +908,7 @@ class Coordinator:
                         continue
                     active = await db.get(CoordinationRun, run_id)
                     if (active.cancelled or active.executor != self.identity or active.lease_until <= time.time()
-                            or active.deadline <= time.time()):
+                            or run_expired(active)):
                         raise CoordinationError("inactive_run", "Run stopped before final delivery")
                     current.result, current.status = text, "succeeded"
                     # Keep attributed assistant originals; never file an agent's
@@ -1157,7 +1157,7 @@ class Coordinator:
             run = await db.get(CoordinationRun, run_id)
             room = await self.owned_room(db, owner, run.room_id, lock=True)
             await db.refresh(run)
-            if run.status != "reconciling" or run.cancelled or run.deadline <= time.time() or room.active_run:
+            if run.status != "reconciling" or run.cancelled or run_expired(run) or room.active_run:
                 raise CoordinationError("resume_refused", "Run cannot resume under its original authority/deadline; start a new bounded turn")
             if run.executor != self.identity and run.lease_until > time.time():
                 raise CoordinationError("executor_live", "The previous executor may still own this run")

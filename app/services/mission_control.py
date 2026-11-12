@@ -6,7 +6,7 @@ from app.database import write_session
 from sqlalchemy import select, update
 from app.models.coordination import (AgentStep, CoordinationRun, ProjectTask, RoomEvent,
     SupervisorInput, SupervisorBoundary, WorkerReview, WorkerCheck, TaskInput)
-from app.services.coordination_budget import CoordinationError, digest
+from app.services.coordination_budget import CoordinationError, digest, run_expired
 
 
 class MissionControl:
@@ -34,7 +34,7 @@ class MissionControl:
             expected = getattr(body, 'expected_step_id', None)
             if expected and expected != step.id:
                 raise CoordinationError('steering_target_changed', 'The active reply changed; retain the draft and address a new turn')
-            if run.executor != self.coordinator.identity or run.lease_until <= time.time() or run.deadline <= time.time():
+            if run.executor != self.coordinator.identity or run.lease_until <= time.time() or run_expired(run):
                 raise CoordinationError('executor_unavailable', 'Supervisor is unavailable; inspect before retrying')
             waiting = list(await db.scalars(select(SupervisorInput.id).where(
                 SupervisorInput.step_id == step.id, SupervisorInput.status.in_(['queued', 'delivering']))))

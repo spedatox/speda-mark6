@@ -11,6 +11,7 @@ from app.models.memory_serving import MemoryChange
 from app.models.coordination import RoomEvent, CoordinationRun, AgentStep, Room, RoomAttachment
 from app.models.user import User
 from app.schemas.solus import parse_command
+from app.services.coordination_budget import run_expired
 from app.services.solus.commands import apply, SolusError, effective_settled, effective_dates
 
 
@@ -54,7 +55,7 @@ async def validate_agent(db, context):
     if (not context.coordination or not run or not room or not step or run.user_id!=context.user_id
             or run.room_id!=room.id or room.user_id!=context.user_id or room.session_id!=context.session_id
             or step.run_id!=run.id or step.agent_id!=context.agent_id or step.status!='running'
-            or run.cancelled or run.status!='running' or run.deadline<=time.time()
+            or run.cancelled or run.status!='running' or run_expired(run)
             or run.executor!=context.coordination.identity or run.lease_until<=time.time()):
         raise SolusError('Financial recording is fenced: the admitted contribution is no longer active.',409)
 

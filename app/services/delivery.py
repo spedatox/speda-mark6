@@ -10,7 +10,7 @@ from sqlalchemy import select,update
 from app.database import write_session
 from app.models.delivery import Delivery,TelegramLink
 from app.models.academic import Device
-from app.services.coordination_budget import digest,insert_for,CoordinationError
+from app.services.coordination_budget import digest,insert_for,CoordinationError,run_expired
 from app.services.remote_tools import request_bytes
 from app.services.speech_text import MAX_CHARS
 from app.schemas.llm import ProviderError
@@ -200,7 +200,7 @@ class Deliveries:
                 from app.models.coordination import CoordinationRun,AgentStep
                 run=await db.get(CoordinationRun,row.run_id)
                 step=await db.get(AgentStep,payload['manual_step'])
-                if not run or run.user_id!=owner or run.cancelled or run.executor!=payload['executor'] or run.status!='running' or run.deadline<=time.time() or run.lease_until<=time.time() or not step or step.run_id!=run.id or step.status!='running':
+                if not run or run.user_id!=owner or run.cancelled or run.executor!=payload['executor'] or run.status!='running' or run_expired(run) or run.lease_until<=time.time() or not step or step.run_id!=run.id or step.status!='running':
                     row.status='cancelled'; row.detail='The originating owner run stopped before dispatch.'; return self.view(row)
         detail=None
         try:

@@ -15,7 +15,7 @@ from sqlalchemy import select, update, func
 from app.models.coordination import Room, RoomEvent, CoordinationRun, ProjectTask, ModelCallReceipt, AgentStep
 from app.models.legion import LegionExecution, WorkerTicket, LegionInput, WorkerEventArtifact
 from app.models.model_policy import ToolExecutionReceipt
-from app.services.coordination_budget import CoordinationError, digest
+from app.services.coordination_budget import CoordinationError, digest, run_expired
 from app.schemas.coordination import Steering
 
 ACTIVE = {'admitted','queued','staging','running','cancel_requested'}
@@ -130,7 +130,7 @@ class WorkerControl:
             if row.cancelled or row.status in TERMINAL:
                 return False
             if (run.cancelled or run.status not in {'running','waiting_tasks'} or run.executor != self.coordinator.identity
-                    or run.lease_until <= time.time() or run.deadline <= time.time()):
+                    or run.lease_until <= time.time() or run_expired(run)):
                 row.status,row.result,row.finished_at='interrupted','Root admission ended before worker dispatch',datetime.utcnow()
                 return False
             if row.status != 'admitted':

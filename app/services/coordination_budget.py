@@ -63,6 +63,20 @@ class ReplayStream:
         return self.final
 
 
+def run_expired(run):
+    """A zero deadline means the owner chose no overall wall-clock limit."""
+    return run.deadline > 0 and run.deadline <= time.time()
+
+
+def call_deadline(run):
+    """Keep each provider call bounded even when the overall run is not."""
+    return time.monotonic() + (max(0, run.deadline - time.time()) if run.deadline else 120)
+
+
+def run_timeout(run):
+    return max(0, run.deadline - time.time()) if run.deadline else None
+
+
 class CoordinationBudget:
     def __init__(self, sessions, client):
         self.sessions, self.client = sessions, client
@@ -80,7 +94,8 @@ class CoordinationBudget:
                 async with self.sessions() as db:
                     stalled = and_(ModelCallReceipt.status == 'started', or_(
                         CoordinationRun.status.not_in(['running', 'waiting_tasks']),
-                        CoordinationRun.lease_until <= time.time(), CoordinationRun.deadline <= time.time()))
+                        CoordinationRun.lease_until <= time.time(),
+                        and_(CoordinationRun.deadline > 0, CoordinationRun.deadline <= time.time())))
                     query = select(func.count()).select_from(ModelCallReceipt).join(CoordinationRun,
                         CoordinationRun.id == ModelCallReceipt.run_id).where(CoordinationRun.user_id == context.user_id)
                     if exc.code == 'concurrency':
@@ -91,11 +106,11 @@ class CoordinationBudget:
                     if await db.scalar(query):
                         raise CoordinationError('outcome_unknown','An uncertain provider outcome occupies capacity; reconcile before more calls') from None
                 remaining=policy.deadline-time.monotonic()
-                if remaining <= 0:
+                if remaining <= 0 and not context.extra.get("no_run_deadline"):
                     raise CoordinationError('deadline','The original worker/model admission deadline expired') from None
                 try:
                     async with self._capacity:
-                        await asyncio.wait_for(self._capacity.wait(),min(.2,remaining))
+                        await asyncio.wait_for(self._capacity.wait(),.2 if context.extra.get("no_run_deadline") else min(.2,remaining))
                 except TimeoutError:
                     pass
 
@@ -127,7 +142,7 @@ class CoordinationBudget:
             control = await db.get(CoordinationControl, context.user_id)
             run = (await db.execute(select(CoordinationRun).where(CoordinationRun.id == context.run_id,
                 CoordinationRun.user_id == context.user_id))).scalar_one_or_none()
-            if run is None or run.cancelled or run.status not in {"running", "waiting_tasks"} or run.deadline <= time.time():
+            if run is None or run.cancelled or run.status not in {"running", "waiting_tasks"} or run_expired(run):
                 raise CoordinationError("inactive_run", "The run is stopped, expired or awaiting reconciliation")
             if run.executor != context.coordination.identity or run.lease_until <= time.time():
                 raise CoordinationError("executor_fenced", "The model-call executor no longer owns this run")
@@ -204,6 +219,11 @@ class CoordinationBudget:
     async def stream(self, context, **args):
         await context.coordination.ensure_active(context)
         policy = replace(args["policy"], fallbacks=())
+        async with self.sessions() as db:
+            run = await db.get(CoordinationRun, context.run_id)
+            if run and run.deadline == 0:
+                context.extra["no_run_deadline"] = True
+                policy = replace(policy, deadline=time.monotonic() + 120)
         args["policy"] = policy
         body = request_body(policy, args["system"], args["messages"], args.get("tools", []), args["max_tokens"])
         if hasattr(self.client, "configured") and not self.client.configured(policy.spec.ref):

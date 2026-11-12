@@ -22,7 +22,7 @@ from app.models.coordination import (Project, ProjectTask, CoordinationRun, Room
 from app.models.model_policy import ToolExecutionReceipt
 from app.models.legion import LegionExecution
 from app.schemas.llm import PolicyDocument, ThinkingRequest
-from app.services.coordination_budget import CoordinationError
+from app.services.coordination_budget import CoordinationError, run_expired, call_deadline, run_timeout
 from app.services.forge_adapter import ForgeEffects, ForgeModel
 from forge.config import ForgeSettings
 from forge.runtime import ExecutionSpec, execute
@@ -338,7 +338,7 @@ class Projects:
         async with write_session(self.sessions) as db:
             run = await db.get(CoordinationRun, run_id)
             room = await self.coordinator.owned_room(db, run.user_id, run.room_id, lock=True)
-            if not room.project_id or run.cancelled or run.deadline <= time.time():
+            if not room.project_id or run.cancelled or run_expired(run):
                 return False
             # Detached workers may finish before the public conversation settles.
             # Let its queued/running contributions finish before admitting an
@@ -432,7 +432,7 @@ class Projects:
                             waiting = True
                     if not waiting:
                         break
-                    if run.deadline <= time.time():
+                    if run_expired(run):
                         raise CoordinationError('deadline', 'Dependency wait reached the original run deadline')
                 # CAS also fences concurrent processes; Workshop fences projects.
                 if ready:
@@ -495,7 +495,7 @@ class Projects:
                 except TimeoutError:
                     async with self.sessions() as db:
                         run = await db.get(CoordinationRun, task.run_id)
-                    if run.deadline <= time.time() or run.cancelled:
+                    if run_expired(run) or run.cancelled:
                         signal.set()
             if not acquired:
                 async with write_session(self.sessions) as db:
@@ -567,7 +567,7 @@ class Projects:
             target = self.state / "artifacts" / task.id
             revision = await asyncio.to_thread(snapshot, source, target)
             policy_data = run.policy
-            deadline = time.monotonic() + max(0, run.deadline - time.time())
+            deadline = call_deadline(run)
             parent_policy = await self.coordinator.policy.resolve(model=policy_data.get("model"),
                 user_id=run.user_id, agent_id=task.owner_agent,
                 request=ThinkingRequest.model_validate(policy_data["thinking"]) if policy_data.get("thinking") else None,
@@ -630,7 +630,7 @@ class Projects:
                 allow_network=False, cell_backend="docker", cell_image=image)
             runtime_settings = ForgeSettings(workspace_root=self.state, cell_backend="docker", retry_attempts=0,
                 max_tokens=ctx.output_token_cap)
-            async with asyncio.timeout(max(0, run.deadline - time.time())):
+            async with asyncio.timeout(run_timeout(run)):
                 from app.services.task_inbox import TaskInbox
                 kwargs = {"inbox": TaskInbox(ctx, self.sessions)} if self.executor is execute else {}
                 if protocol and self.executor is execute:

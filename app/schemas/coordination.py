@@ -21,7 +21,7 @@ class RunLimits(Contract):
     calls: int = Field(default=16, ge=0, le=1000)
     tokens: int = Field(default=200000, ge=0, le=20000000)
     microdollars: int = Field(default=0, ge=0)
-    seconds: int = Field(default=300, ge=10, le=86400)
+    seconds: int = Field(default=0, ge=0, le=86400, description="Zero disables the overall run deadline; per-call and command timeouts still apply.")
     contributions: int = Field(default=6, ge=1, le=32)
     concurrency: int = Field(default=3, ge=1, le=8)
 
