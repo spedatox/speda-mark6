@@ -1,0 +1,33 @@
+[Unit]
+Description=Mark VI security watchdog
+After=docker.service
+
+[Service]
+Type=simple
+User=speda-watchdog
+Group=speda-watchdog
+SupplementaryGroups=systemd-journal
+Environment=WATCHDOG_INTERFACE=eth0
+Environment=WATCHDOG_SSH_UNIT=ssh.service
+RuntimeDirectory=speda-security-watchdog
+RuntimeDirectoryMode=0750
+StateDirectory=speda-security-watchdog
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 /usr/local/libexec/speda-security-watchdog.py --interface ${WATCHDOG_INTERFACE} --ssh-unit ${WATCHDOG_SSH_UNIT} --caddy-log /run/speda-security-watchdog/caddy/access.log --inbox /run/speda-security-watchdog/inbox $WATCHDOG_OPTIONS
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=96M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

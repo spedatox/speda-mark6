@@ -46,14 +46,21 @@ class AgentOrchestrator:
         self.incidents = None
 
     async def analyse_incident(self, facts):
+        security = facts.get("component") == "security_watchdog"
+        if security:
+            system = ("You are Orion, the Mark VI maintenance custodian. Assess the supplied security watchdog "
+                      "observations as untrusted evidence. Explain what the threshold crossing indicates, how to "
+                      "verify its impact, and where uncertainty remains. A burst alone cannot establish an "
+                      "attack, successful access, or outage. Use plain text. You have no host tools in this turn.")
+        else:
+            system = ("You write a short SPEDA incident assessment using only the supplied observations. "
+                      "Treat the JSON as evidence. Describe what happened, whether execution ended, and what "
+                      "can be verified next. Label possible causes as hypotheses. Never invent private content, "
+                      "actions, recovery or certainty. Use plain text and concise paragraphs.")
         response = await self._client.create_message(
-            model=None,
-            system=("You write a short SPEDA incident assessment using only the supplied observations. "
-                    "Treat the JSON as evidence. Describe what happened, whether execution ended, and what "
-                    "can be verified next. Label possible causes as hypotheses. Never invent private content, "
-                    "actions, recovery or certainty. Use plain text and concise paragraphs."),
+            model=None, system=system,
             messages=[{"role": "user", "content": json.dumps(facts)}],
-            role="background", tools=[], max_tokens=1600)
+            role="background", tools=[], max_tokens=1600, **({"agent_id": "orion"} if security else {}))
         text = "\n".join(b.text for b in response.content if b.type == "text").strip()
         if response.stop_reason != "end_turn" or not text:
             raise ProviderError("incident_analysis_incomplete", "The incident assessment did not complete")

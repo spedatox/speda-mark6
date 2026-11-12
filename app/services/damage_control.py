@@ -3,8 +3,10 @@ import asyncio
 import json
 import linecache
 import logging
+import os
 import re
 import sqlite3
+import stat
 import time
 from collections import deque
 from contextlib import closing, contextmanager
@@ -16,6 +18,7 @@ from uuid import uuid4
 
 from app.models.delivery import TelegramLink, TelegramOwner
 from app.schemas.llm import ProviderError
+from app.security_watchdog import MAX_OBSERVATION_BYTES, Observation
 from app.services.incident_details import clean_message, explain, log_details, stack_locations
 
 logger = logging.getLogger(__name__)
@@ -112,11 +115,11 @@ class IncidentJournal:
             db.row_factory = sqlite3.Row
             yield db
 
-    def add(self, facts, status="pending", *, identity=None):
+    def add(self, facts, status="pending", *, identity=None, observed_at=None):
         identity = identity or uuid4().hex
         with self.connect() as db:
             db.execute("INSERT OR IGNORE INTO incidents(id, timestamp, facts, status) VALUES (?, ?, ?, ?)",
-                       (identity, time.time(), json.dumps(facts), status))
+                       (identity, observed_at if observed_at is not None else time.time(), json.dumps(facts), status))
         return identity
 
     def finish(self, identity, event=None, details=None):
@@ -144,7 +147,9 @@ class IncidentJournal:
     def next(self):
         with self.connect() as db:
             return db.execute("""SELECT * FROM incidents WHERE status IN ('pending', 'ready')
-                AND next_attempt <= ? ORDER BY COALESCE(json_extract(facts, '$.ended_turn'), 0) DESC,
+                AND next_attempt <= ? ORDER BY
+                CASE WHEN json_extract(facts, '$.component') = 'security_watchdog' THEN 2
+                     ELSE COALESCE(json_extract(facts, '$.ended_turn'), 0) END DESC,
                 timestamp, id LIMIT 1""", (time.time(),)).fetchone()
 
     def transition(self, identity, previous, status, *, analysis=None, remote_id=None, delay=0):
@@ -166,6 +171,8 @@ class DamageControl(logging.Handler):
     def __init__(self, path):
         super().__init__(logging.WARNING)
         self.journal = IncidentJournal(path)
+        self.security_inbox = path.parent / "security-inbox"
+        self.security_enabled = self.security_inbox.is_dir()
         self.loop = asyncio.get_running_loop()
         self.wake = asyncio.Event()
         self._release_check_kills = deque(maxlen=32)
@@ -199,6 +206,10 @@ class DamageControl(logging.Handler):
         if record.name == __name__ or not record.name.startswith(("app.", "forge.", "uvicorn.", "asyncio")):
             return
         if record.levelno < logging.ERROR and not record.name.startswith(("app.", "forge.")):
+            return
+        if self.security_enabled and record.name == "app.middleware.auth" and record.msg == "auth_rejected":
+            # Caddy 401 bursts have their own incident path. Retain the application
+            # log without queuing a model call and Telegram report for each request.
             return
         record.damage_control_handled = True
         facts = {"event": "runtime_log", "component": record.name, "severity": record.levelname,
@@ -281,11 +292,45 @@ class DamageControl(logging.Handler):
                 unavailable = True
             await asyncio.sleep(15)
 
+    def import_security_incidents(self):
+        # The host publishes by atomic rename. Commit the incident before acknowledging
+        # the file so a restart can safely replay it with the same journal identity.
+        files = sorted(path for path in self.security_inbox.glob("*.json")
+                       if re.fullmatch(r"[0-9a-f]{32}", path.stem) and not path.is_dir())
+        for path in files[:16]:
+            try:
+                fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+            except FileNotFoundError:
+                continue
+            except OSError:
+                if path.is_symlink():
+                    path.unlink(missing_ok=True)
+                    continue
+                raise
+            try:
+                with os.fdopen(fd, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise ValueError("Expected a regular observation file")
+                    raw = stream.read(MAX_OBSERVATION_BYTES + 1)
+                if len(raw) > MAX_OBSERVATION_BYTES:
+                    raise ValueError("Observation exceeds size limit")
+                observation = Observation.parse(raw)
+            except (ValueError, TypeError, RecursionError):
+                logger.warning("security_watchdog_observation_rejected", extra={"incident_id": path.stem})
+            else:
+                self.journal.add(observation.facts(), identity=path.stem, observed_at=observation.observed_at)
+            path.unlink(missing_ok=True)
+
     async def run(self, analyse, deliveries):
         token = _reporting.set(True)
         try:
             while True:
                 self.wake.clear()
+                if self.security_enabled:
+                    try:
+                        await asyncio.to_thread(self.import_security_incidents)
+                    except (OSError, sqlite3.Error):
+                        logger.error("security_watchdog_inbox_unavailable", exc_info=True)
                 try:
                     row = self.journal.next()
                     if row:
@@ -306,6 +351,7 @@ class DamageControl(logging.Handler):
         facts = {"incident_id": identity,
                  "observed_at": datetime.fromtimestamp(row["timestamp"], timezone.utc).isoformat(timespec="seconds"),
                  **json.loads(row["facts"])}
+        security = facts.get("component") == "security_watchdog"
         if row["status"] == "pending":
             if not self.journal.transition(identity, "pending", "analysing"):
                 return
@@ -327,7 +373,8 @@ class DamageControl(logging.Handler):
                     or (configured_owner and configured_owner != principal.sender_id)
                     or not deliveries.token("speda")):
                 raise ValueError("Owner Telegram route is unavailable")
-            report = await asyncio.to_thread(render_report, facts, analysis)
+            if not security:
+                report = await asyncio.to_thread(render_report, facts, analysis)
         except Exception as exc:
             logger.warning("damage_control_delivery_preparation_failed", extra={"error_type": type(exc).__name__})
             self.journal.transition(identity, "ready", "ready", delay=60)
@@ -335,14 +382,18 @@ class DamageControl(logging.Handler):
         if not self.journal.transition(identity, "ready", "sending"):
             return
         try:
-            title = "Damage Control Protocol"
-            if facts.get("ended_turn"):
-                title += " | Turn ended"
-            source = facts.get("agent") or facts.get("service")
-            event = facts["event"].replace("_", " ")
-            caption = f"{title}\n{source + ' | ' if source else ''}{event}\n{identity}"
-            result = await deliveries.telegram("speda", "sendDocument", {"chat_id": link.chat_id, "caption": caption},
-                files={"document": (f"damage-control-{identity}.pdf", report, "application/pdf")})
+            if security:
+                text = f"Mark VI Security Watchdog\n{facts['summary']}\n{facts['observed_at']}\nIncident {identity}"
+                result = await deliveries.telegram("speda", "sendMessage", {"chat_id": link.chat_id, "text": text})
+            else:
+                title = "Damage Control Protocol"
+                if facts.get("ended_turn"):
+                    title += " | Turn ended"
+                source = facts.get("agent") or facts.get("service")
+                event = facts["event"].replace("_", " ")
+                caption = f"{title}\n{source + ' | ' if source else ''}{event}\n{identity}"
+                result = await deliveries.telegram("speda", "sendDocument", {"chat_id": link.chat_id, "caption": caption},
+                    files={"document": (f"damage-control-{identity}.pdf", report, "application/pdf")})
             remote_id = result.get("message_id") if isinstance(result, dict) else None
             if type(remote_id) is not int:
                 raise ValueError("Telegram did not return a message ID")

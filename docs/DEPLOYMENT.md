@@ -162,3 +162,6 @@ recorded facts if model analysis is unavailable. Telegram uploads without a
 verified acknowledgement remain `unknown` for inspection. A missing owner link
 holds the report until pairing is available. Set `DAMAGE_CONTROL_ENABLED=false`
 and restart to disable capture and delivery.
+
+For host-side SSH and HTTP brute-force alerts, HTTP floods, and unusually
+high ingress rates, see the [Mark VI security watchdog](deployment/security-watchdog/README.md).

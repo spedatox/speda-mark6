@@ -26,7 +26,7 @@ class SystemOpsSkill(Skill):
         "In owner-started turns, including collaborations, action=exec runs the command as root on "
         "the host. Use read_file and write_file with absolute host paths. Commands have no runtime "
         "limit unless you supply a timeout. Use status, services, incidents, diagnostics and "
-        "service_logs for common checks. Use restart_service "
+        "service_logs for common checks. Use security_incidents for watchdog warnings and flood indicators. Use restart_service "
         "for a managed restart. For an app restart, give the owner the operation ID and finish the turn. "
         "Use operation_status to check a running, scheduled or uncertain command before repeating it."
     )
@@ -35,7 +35,7 @@ class SystemOpsSkill(Skill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["status", "services", "incidents", "diagnostics", "exec", "read_file", "write_file",
+                "enum": ["status", "services", "incidents", "security_incidents", "diagnostics", "exec", "read_file", "write_file",
                          "service_logs", "restart_service", "operation_status"],
                 "default": "status",
             },
@@ -66,12 +66,14 @@ class SystemOpsSkill(Skill):
         if not self.available(context):
             return json.dumps({"status": "denied", "reason": "Available to Orion in owner-started conversations."})
         action = args.get("action", "status")
-        if action == "incidents":
+        if action in {"incidents", "security_incidents"}:
             if self.journal is None:
                 return json.dumps({"status": "unavailable", "reason": "Damage Control journal unavailable."})
             from app.services.incident_journal import JournalView
+            security = action == "security_incidents"
             report = await asyncio.to_thread(JournalView(self.journal).list, reviewed=True,
-                                             severity="critical", search="service_", limit=10, offset=0)
+                                             severity=None if security else "critical",
+                                             search="security_watchdog" if security else "service_", limit=10, offset=0)
             return json.dumps({"status": "ok", **report}, ensure_ascii=False)
         if action not in {"status", "services"}:
             response = await host_operation(args, context)

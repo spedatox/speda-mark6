@@ -20,7 +20,8 @@ _events = f"""SELECT incidents.*, {_fingerprint} AS fingerprint,
     inspection.reviewed_at, inspection.assessment_state, inspection.assessment, inspection.assessed_at,
     CASE
         WHEN json_extract(facts, '$.event') = 'synthetic_protocol_test' THEN 'test'
-        WHEN json_extract(facts, '$.ended_turn') = 1
+        WHEN json_extract(facts, '$.severity') = 'CRITICAL'
+             OR json_extract(facts, '$.ended_turn') = 1
              OR json_extract(facts, '$.impact') = 'outcome_uncertain'
              OR json_extract(facts, '$.event') IN
                 ('service_unexpected_exit', 'service_out_of_memory', 'service_unhealthy') THEN 'critical'

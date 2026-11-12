@@ -18,6 +18,22 @@ _secret = re.compile(
 _static_routes = {"/config", "/chat", "/health", "/health/ready", "/health/live", "/n8n", "/models", "/iacon/drain"}
 
 _guide = {
+    "security_ssh_brute_force": ("SSH authentication failures crossed the watchdog threshold.",
+                                 "Compare failed attempts and successful SSH logins around the observation time."),
+    "security_http_brute_force": ("HTTP credential rejections crossed the watchdog threshold.",
+                                  "Check whether the rejected requests match client configuration changes or repeated credential guesses."),
+    "security_http_flood": ("Caddy logged a high volume of HTTP responses.",
+                            "Compare origin request rates, response health, and provider traffic metrics."),
+    "security_ingress_bps": ("The public interface received an unusually high volume of traffic.",
+                             "Compare interface utilization, provider traffic metrics, and origin reachability."),
+    "security_ingress_pps": ("The public interface received an unusually high packet rate.",
+                             "Compare provider packet rates and host packet drops around the observation time."),
+    "security_ssh_visibility": ("SSH journal coverage was incomplete.",
+                                 "Check the SSH unit, journal access and log rate limits."),
+    "security_http_visibility": ("Caddy access log coverage was incomplete.",
+                                  "Check the access logger, file permissions, rotation, and request rates."),
+    "security_network_visibility": ("Public interface counter reads failed.",
+                                     "Verify the interface name and that its counters are readable by the watchdog."),
     "auth_rejected": ("SPEDA rejected an HTTP request without a valid application credential.",
                       "If this coincided with your own request, check the client connection settings."),
     "n8n_auth_rejected": ("SPEDA rejected a scheduler callback because its authentication check failed.",
