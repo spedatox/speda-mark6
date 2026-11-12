@@ -148,7 +148,6 @@ class IgorApi(
             }
             opts.keepMessages?.let { put("keep_messages", it) }
             if (opts.regenerate) put("regenerate", true)
-            opts.cwd?.let { put("cwd", it) }
             opts.requestId?.let { put("request_id", it) }
             opts.projectId?.let { put("project_id", it) }
             opts.clientContext?.let { cc ->
