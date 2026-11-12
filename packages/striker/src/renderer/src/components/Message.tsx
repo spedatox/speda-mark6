@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge, SubagentRun } from '../lib/types'
+import { stepState } from '../lib/types'
+import { TurnError } from './TurnError'
 import { useChatContext } from '../store/chat'
 import { useSettings } from '../store/settings'
 import { downloadFile } from '../lib/api'
@@ -177,14 +179,6 @@ export function resultSummary(tool: ToolBadge): string | null {
   return t.length > 38 ? t.slice(0, 38) + '…' : t
 }
 
-/** Done / running / failed — read off the result, never invented. */
-export function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
-  if (live && !tool.result) return 'running'
-  const r = (tool.result ?? '').toLowerCase()
-  if (/^(error|traceback|exception)\b/.test(r) || r.includes('error:')) return 'failed'
-  return 'done'
-}
-
 // Red/green line diff. edit_file passes old→new; write_file passes new only.
 function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
   const rows: { sign: '+' | '-'; text: string }[] = []
@@ -247,7 +241,7 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
   const isCmd   = tool.name === 'run_command'
     || (tool.name === 'system_ops' && action !== 'read_file' && action !== 'write_file')
   const hasDetail = isEdit || isWrite || isCmd || !!tool.result || Object.keys(inp).length > 0
-  const pending = live && !tool.result
+  const state = stepState(tool, live)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -260,11 +254,12 @@ function ToolRow({ tool, live }: { tool: ToolBadge; live: boolean }) {
           fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--hb-text-dim)',
         }}
       >
-        {pending
+        {state === 'running'
           ? <Spinner />
           : <span style={{
               width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: 'var(--hb-cyan-dim)',
+              background: state === 'failed' ? 'var(--hb-red)'
+                : state === 'unconfirmed' ? 'var(--hb-text-faint)' : 'var(--hb-cyan-dim)',
             }} />}
         <span style={{ color: 'var(--hb-icon-bright)', flexShrink: 0 }}>{verb}</span>
         {target && (
@@ -1212,15 +1207,11 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
         {selectedSubagent && <SubagentDetailView key={selectedSubagent.id} run={message.subagents?.find(run => run.id === selectedSubagent.id) ?? selectedSubagent} onClose={() => setSelectedSubagent(null)} />}
 
         {message.isError && (
-          <div style={{
-            color: '#f87171', userSelect: 'text',
-            background: 'rgba(248,113,113,0.07)',
-            border: '1px solid rgba(248,113,113,0.2)',
-            borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
-            marginTop: message.content || message.tools.length ? '0.5rem' : 0,
-          }}>
-            {message.errorNote || message.content || 'Something went wrong.'}
-          </div>
+          <TurnError
+            error={message.errorNote || message.content || 'Something went wrong.'}
+            onRetry={onRegenerate}
+            style={{ marginTop: message.content || message.tools.length ? '0.5rem' : 0 }}
+          />
         )}
 
         {/* Downloadable files Speda produced this turn */}
@@ -1250,7 +1241,7 @@ export default function Message({ message, onDelete, onRegenerate, onEditAndRese
             <ActionBtn title={speaking ? 'Stop reading' : 'Read aloud'} onClick={readAloud} color={speaking ? 'var(--accent)' : undefined}>
               <IconSpeaker />
             </ActionBtn>
-            {onRegenerate && (
+            {onRegenerate && !message.isError && (
               <ActionBtn title="Regenerate response" onClick={onRegenerate}>
                 <IconRefresh />
               </ActionBtn>

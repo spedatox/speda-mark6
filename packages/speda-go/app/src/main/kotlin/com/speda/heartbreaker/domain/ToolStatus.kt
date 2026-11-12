@@ -87,12 +87,12 @@ fun ToolBadge.resultSummary(): String? {
     return if (first.length > 38) first.take(38) + "…" else first
 }
 
-enum class ToolStepState { Running, Failed, Done }
+enum class ToolStepState { Running, Unconfirmed, Failed, Done }
 
-/** Done / running / failed — read off the result, never invented. Port of stepState. */
+/** Port of stepState. A tool without a receipt has no confirmed outcome. */
 fun ToolBadge.stepState(live: Boolean): ToolStepState {
-    if (live && result == null) return ToolStepState.Running
-    val r = (result ?: "").lowercase()
+    val r = result?.trimStart()?.lowercase()
+        ?: return if (live) ToolStepState.Running else ToolStepState.Unconfirmed
     if (Regex("^(error|traceback|exception)\\b").containsMatchIn(r) || r.contains("error:")) {
         return ToolStepState.Failed
     }

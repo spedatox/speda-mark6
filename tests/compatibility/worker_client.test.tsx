@@ -15,6 +15,8 @@ import ProjectWorkspace, { ProjectFolderPicker } from '@client/components/Projec
 import { projectRequest } from '@client/lib/projectWorkspace'
 import { useProjectNavigation } from '@client/lib/useProjectNavigation'
 import { CloudProjectForm, CloudProjectPanel } from '@client/components/CloudProjects'
+import { stepState } from '@client/lib/types'
+import { TurnError } from '@client/components/TurnError'
 
 const execution = 'a'.repeat(32), step = 'b'.repeat(32)
 const config = { apiBase: 'https://worker.test', apiKey: 'fixture', agentId: 'optimus' }
@@ -24,6 +26,31 @@ const worker = (sequence = 5, status = 'running') => ({ id: execution, execution
   source: 'forge', seenEventIds: [] })
 const message = (id = '11') => ({ id, role: 'assistant', content: 'Supervisor reply', tools: [],
   isStreaming: false, isError: false, coordinationStepId: step, sessionId: 1 })
+
+test('checkpoint steps only show success after a tool result confirms it', () => {
+  const tool = { id: 'checkpoint', name: 'project_checkpoint' }
+  assert.equal(stepState(tool, true), 'running')
+  assert.equal(stepState(tool, false), 'unconfirmed')
+  assert.equal(stepState({ ...tool, result: 'Error: Mission completion blocked.' }, false), 'failed')
+  assert.equal(stepState({ ...tool, result: '{"checkpoint":{"status":"active"}}' }, false), 'done')
+})
+
+test('turn error keeps the message visible and exposes retry only when available', () => {
+  let retries = 0
+  const error = 'The connection closed before the reply finished.'
+  const view = Renderer.create(<TurnError error={error} retryLabel="Tekrar dene" onRetry={() => retries++} />)
+  try {
+    assert.equal(view.root.findByProps({ role: 'alert' }).children[1].props.children, error)
+    const button = view.root.findByType('button')
+    assert.equal(button.props.children, 'Tekrar dene')
+    act(() => button.props.onClick())
+    assert.equal(retries, 1)
+    view.update(<TurnError error={error} />)
+    assert.equal(view.root.findAllByType('button').length, 0)
+  } finally {
+    view.unmount()
+  }
+})
 
 test('folder picker selects an existing host folder and creates a new folder explicitly', async t => {
   const saved=globalThis.fetch, selected:string[]=[], requests:any[]=[]

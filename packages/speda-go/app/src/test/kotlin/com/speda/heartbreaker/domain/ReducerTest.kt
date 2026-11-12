@@ -86,6 +86,17 @@ class ReducerTest {
     }
 
     @Test
+    fun checkpointStepOnlyShowsSuccessAfterToolResultConfirmsIt() {
+        val tool = ToolBadge(id = "checkpoint", name = "project_checkpoint")
+        assertEquals(ToolStepState.Running, tool.stepState(live = true))
+        assertEquals(ToolStepState.Unconfirmed, tool.stepState(live = false))
+        assertEquals(ToolStepState.Failed,
+            tool.copy(result = "Error: Mission completion blocked.").stepState(live = false))
+        assertEquals(ToolStepState.Done,
+            tool.copy(result = """{"checkpoint":{"status":"active"}}""").stepState(live = false))
+    }
+
+    @Test
     fun subagentTools_correlateParallelResultsStrictlyById() {
         var state = ChatState(messages = persistentListOf(assistant("m", streaming = true)))
 

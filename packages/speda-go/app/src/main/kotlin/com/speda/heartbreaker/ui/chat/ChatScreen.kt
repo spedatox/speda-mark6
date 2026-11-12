@@ -310,7 +310,7 @@ fun ChatScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             if (live?.isError == true) {
-                                TurnErrorBanner(
+                                TurnError(
                                     error = live.errorNote?.takeIf { it.isNotBlank() }
                                         ?: LocalStrings.current.message.somethingWentWrong,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),

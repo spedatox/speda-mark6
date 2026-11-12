@@ -156,25 +156,34 @@ class ProjectCheckpointSkill(ProjectStatusSkill):
     description = ('Save a versioned mission objective, acceptance criteria, progress, next steps, blockers and checks in the existing Workshop checkpoint. '
         'Use project_status to read the current Workshop revision, then keep the plan current across engineering or security turns. '
         'Do not overwrite a newer checkpoint, claim unperformed checks or treat this planning record as owner authorization to publish. '
-        'Returns the canonical Workshop checkpoint receipt; active or unreconciled work prevents declaring the mission complete.')
+        'Use active for ongoing maintenance, even when the incident itself has been resolved. '
+        'Returns the saved checkpoint or the specific reasons it could not be saved, so you can correct the request or explain what remains.')
     from app.schemas.coordination import Checkpoint
     input_schema = Checkpoint.model_json_schema()
 
     async def execute(self, args, context):
         from app.schemas.coordination import Checkpoint
-        from app.services.coordination_budget import CoordinationError
         await context.coordination.ensure_active(context)
         body = Checkpoint.model_validate(args)
+        projects = context.coordination.projects
         if body.status == 'complete':
-            from sqlalchemy import select
-            from app.models.coordination import ProjectTask, WorkerReview
-            async with context.coordination.sessions() as db:
-                tasks = (await db.execute(select(ProjectTask, WorkerReview).outerjoin(WorkerReview,
-                    WorkerReview.task_id == ProjectTask.id).where(ProjectTask.project_id == context.project_id))).all()
-            if any(t.status != 'succeeded' or not r or r.verdict != 'accepted'
-                    or r.artifact_revision != (t.result or {}).get('revision') for t, r in tasks):
-                raise CoordinationError('mission_incomplete', 'Outstanding work or artifact acceptance prevents mission completion')
-        result = await context.coordination.projects.checkpoint(context.user_id, context.project_id, body)
+            blockers = await projects.checkpoint_blockers(context.user_id, context.project_id)
+            if body.next_steps or body.blockers:
+                blockers.insert(0, 'The submitted checkpoint still lists next steps or blockers.')
+            if blockers:
+                details = '\n'.join(f'- {reason}' for reason in blockers[:12])
+                if len(blockers) > 12:
+                    details += f'\n- {len(blockers) - 12} more blockers. Inspect project_status.'
+                return (
+                    'Error: Mission completion blocked. Checkpoint was not saved.\n'
+                    f'{details}\nSave verified progress with status active while work remains.'
+                )
+        try:
+            result = await projects.checkpoint(context.user_id, context.project_id, body)
+        except CoordinationError as exc:
+            if exc.code != 'checkpoint_conflict':
+                raise
+            return f'Error: {exc}. Checkpoint was not saved. Read project_status before retrying.'
         await context.coordination.emit(context.run_id, 'mission_checkpoint', context.agent_id,
             {'project_id': context.project_id, 'status': body.status, 'objective': body.objective,
              'authority': 'Supervisor planning record, not owner authorization'}, context.step_id)

@@ -402,8 +402,14 @@ class AgentOrchestrator:
             elif stop_reason == "tool_use":
                 iterations += 1
                 tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-                for call in tool_use_blocks:
-                    self._registry.validate_call(call, context)
+                invalid_arguments = {}
+                for index, call in enumerate(tool_use_blocks):
+                    try:
+                        self._registry.validate_call(call, context)
+                    except ProviderError as exc:
+                        if exc.code != "invalid_arguments":
+                            raise
+                        invalid_arguments[index] = str(exc)
 
                 tool_results = []
                 for tool_index, tool_block in enumerate(tool_use_blocks):
@@ -413,6 +419,19 @@ class AgentOrchestrator:
                         session_id=context.session_id,
                         request_id=context.request_id,
                     )
+                    if invalid_arguments:
+                        # Preflight rejects the whole batch before any side effect.
+                        # Pair each tool use with a result so the model can correct it.
+                        issue = invalid_arguments.get(tool_index)
+                        result = ("Error: Invalid tool arguments. Call skipped." if issue else
+                                  "Error: Call skipped because another tool in the batch had invalid arguments.")
+                        detail = f"Error: {issue}. Call skipped." if issue else result
+                        tool_results.append({"type": "tool_result", "tool_use_id": tool_block.id,
+                            "is_error": True, "content": f"{detail} Submit any calls still needed with corrected arguments."})
+                        yield SSEEvent(type=SSEEventType.TOOL_RESULT,
+                            data={"id": tool_block.id, "result": result},
+                            session_id=context.session_id, request_id=context.request_id)
+                        continue
                     log.info(
                         "tool_call",
                         extra={

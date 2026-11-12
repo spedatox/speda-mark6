@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge, SubagentRun, ReportMeta } from '../lib/types'
+import { stepState } from '../lib/types'
+import { TurnError } from './TurnError'
 import { SubagentPanel } from './SubagentPanel'
 import { useSidePane } from './SidePane'
 import { useChatContext } from '../store/chat'
@@ -198,14 +200,6 @@ export function resultSummary(tool: ToolBadge): string | null {
   return t.length > 38 ? t.slice(0, 38) + '…' : t
 }
 
-/** Done / running / failed — read off the result, never invented. */
-export function stepState(tool: ToolBadge, live: boolean): 'running' | 'failed' | 'done' {
-  if (live && !tool.result) return 'running'
-  const r = (tool.result ?? '').toLowerCase()
-  if (/^(error|traceback|exception)\b/.test(r) || r.includes('error:')) return 'failed'
-  return 'done'
-}
-
 // Red/green line diff. edit_file passes old→new; write_file passes new only.
 function DiffBlock({ removed, added }: { removed?: string; added?: string }) {
   const rows: { sign: '+' | '-'; text: string }[] = []
@@ -308,8 +302,6 @@ function ToolRow({ tool, live, subagents, onSelectSubagent }: {
           fontSize: '0.875rem', color: 'var(--hb-text-dim)',
         }}
       >
-        {/* Status glyph — a tick when it landed, a ring while it runs, a cross
-            when the result came back an error. Three states, one column. */}
         {state === 'running' ? (
           <span style={{
             width: 15, height: 15, borderRadius: '50%', flexShrink: 0,
@@ -321,6 +313,11 @@ function ToolRow({ tool, live, subagents, onSelectSubagent }: {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-red)"
             strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}>
             <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        ) : state === 'unconfirmed' ? (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-text-faint)"
+            strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}>
+            <path d="M7 12h10"/>
           </svg>
         ) : (
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hb-green)"
@@ -405,7 +402,7 @@ function ToolFeed({ tools, streaming, subagents, onSelectSubagent }: {
   if (!tools.length) return null
 
   const liveIdx = streaming ? tools.length - 1 : -1
-  const running = streaming && !tools[tools.length - 1].result
+  const running = stepState(tools[tools.length - 1], streaming) === 'running'
   const failed = tools.filter(t => stepState(t, false) === 'failed').length
 
   return (
@@ -765,52 +762,6 @@ function StreamingCursor() {
         animation: 'caretBreathe 1.15s ease-in-out infinite, caretSheen 2.4s linear infinite',
       }}
     />
-  )
-}
-
-/** The retry affordance on a failed turn. Labelled rather than icon-only, and
- *  always visible — an error banner is the one place the owner should not have
- *  to go hunting on hover for the way out. */
-function RetryBtn({ onClick }: { onClick: () => void }) {
-  const t = useT()
-  const [hover, setHover] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
-        padding: '0.3rem 0.625rem', borderRadius: '0.375rem',
-        border: '1px solid rgba(248,113,113,0.35)',
-        background: hover ? 'rgba(248,113,113,0.16)' : 'rgba(248,113,113,0.06)',
-        color: '#f87171', fontSize: '0.8rem', fontWeight: 500,
-        cursor: 'pointer', transition: 'background 0.1s',
-      }}
-    >
-      <IconRefresh />
-      {t.message.tryAgain}
-    </button>
-  )
-}
-
-export function TurnError({ error, onRetry, style }: {
-  error: string
-  onRetry?: () => void
-  style?: React.CSSProperties
-}) {
-  return (
-    <div style={{
-      color: '#f87171', userSelect: 'text', overflowWrap: 'anywhere',
-      background: 'rgba(248,113,113,0.07)',
-      border: '1px solid rgba(248,113,113,0.2)',
-      borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.9rem',
-      ...style,
-    }}>
-      <div role="alert">{error}</div>
-      {onRetry && <div style={{ marginTop: '0.5rem' }}><RetryBtn onClick={onRetry} /></div>}
-    </div>
   )
 }
 
@@ -1591,6 +1542,7 @@ export default function Message({ message, showAttribution = true, onDelete, onR
           <TurnError
             error={message.errorNote || message.content || t.message.somethingWentWrong}
             onRetry={onRegenerate}
+            retryLabel={t.message.tryAgain}
             style={{ marginTop: message.content || message.tools.length ? '0.5rem' : 0 }}
           />
         )}
@@ -1622,7 +1574,7 @@ export default function Message({ message, showAttribution = true, onDelete, onR
             <ActionBtn title={speaking ? t.message.stopReading : t.message.readAloud} onClick={readAloud} color={speaking ? 'var(--accent)' : undefined}>
               <IconSpeaker />
             </ActionBtn>
-            {onRegenerate && (
+            {onRegenerate && !message.isError && (
               <ActionBtn title={t.message.regenerateResponse} onClick={onRegenerate}>
                 <IconRefresh />
               </ActionBtn>

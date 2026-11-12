@@ -9,7 +9,7 @@ import {
   splitPanels, hasArtifacts, captionOf, fenceKindOf, STREAMS_LIVE, type VoicePanel,
 } from '../lib/voicePanels'
 import VoiceActivity from './VoiceActivity'
-import { TurnError } from './Message'
+import { TurnError } from './TurnError'
 import type { ToolBadge } from '../lib/types'
 import type { CanvasSettings } from '../lib/voice'
 import type { MicState } from '../lib/mic'
@@ -547,6 +547,7 @@ export default function VoiceMode({
           <TurnError
             error={error}
             onRetry={onRetry}
+            retryLabel={t.message.tryAgain}
             style={{ pointerEvents: 'auto', maxWidth: 'min(100%, 640px)', maxHeight: 'min(30vh, 12rem)', overflowY: 'auto' }}
           />
         ) : <div

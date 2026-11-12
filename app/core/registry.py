@@ -306,8 +306,20 @@ class CapabilityRegistry:
             pinned = context.extra.get('mcp_schemas', {}).get(call.name)
             if pinned and pinned != fingerprint(self._mcp_definitions[call.name]):
                 raise ProviderError('mcp_schema_changed', 'MCP tool changed during this run; start a new turn after reviewing the connection')
-        if any(Draft202012Validator(definition["input_schema"]).iter_errors(call.input)):
-            raise ProviderError("invalid_arguments", "The model's tool arguments do not match the registered schema")
+        issue = next(Draft202012Validator(definition["input_schema"]).iter_errors(call.input), None)
+        if issue is not None:
+            # jsonschema's messages can include the entire submitted value.
+            # Give the model a field and a constraint without echoing that value.
+            if issue.validator == "required":
+                problem = issue.message
+            elif issue.validator == "type":
+                problem = f"expected type {issue.validator_value}"
+            elif issue.validator == "additionalProperties":
+                problem = "use only fields defined in the schema"
+            else:
+                problem = f"failed the {issue.validator} constraint"
+            raise ProviderError("invalid_arguments",
+                f"Tool arguments do not match the registered schema at {issue.json_path[:160]} ({problem[:200]})")
         if self._bounded_mail_automation(context) and self._mail_calendar_tool(call.name):
             self._check_mail_calendar_args(call.input, context)
 

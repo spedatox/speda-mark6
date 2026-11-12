@@ -191,20 +191,48 @@ async def test_truncated_responses_call_is_not_replayed_or_executed(memory):
     await bits.client.close()
 
 
-async def test_invalid_batch_has_no_partial_side_effects(memory):
+async def test_invalid_batch_can_be_corrected_without_losing_earlier_tool_results(memory):
     from tests.test_llm_streams import events
+
+    def batch(*calls):
+        return events(
+            {"choices": [{"delta": {"reasoning_content": "provider reasoning"}}]},
+            {"choices": [{"delta": {"tool_calls": [
+                {"index": index, "id": call_id, "function": {"name": "lookup", "arguments": json.dumps(args)}}
+                for index, (call_id, args) in enumerate(calls)
+            ]}}]},
+            {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}, "[DONE]",
+        )
+
+    requests = []
+    script = iter([
+        chat_events(tool=True),
+        batch(("good", {"query": "sister"}), ("bad", {})),
+        batch(("corrected", {"query": "sister"})),
+        chat_events(),
+    ])
+
     def handler(request):
-        delta = {"tool_calls": [
-            {"index": 0, "id": "good", "function": {"name": "lookup", "arguments": '{"query":"sister"}'}},
-            {"index": 1, "id": "bad", "function": {"name": "lookup", "arguments": '{}'}},
-        ]}
-        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=events(
-            {"choices": [{"delta": delta}]}, {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}, "[DONE]"))
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=next(script))
+
     bits = await setup(memory, handler)
     async with memory.sessions() as db:
         context = await bits.turns.start(db, ChatRequest(message="Read it"))
         output = [json.loads(value[6:]) async for value in bits.turns.stream(context)]
-    assert output[-1]["type"] == "error" and bits.lookup.calls == 0
+    assert output[-1]["type"] == "done" and bits.lookup.calls == 2
+    assert [item["data"]["id"] for item in output if item["type"] == "tool_result"] == [
+        "call_1", "good", "bad", "corrected",
+    ]
+    continuation = {m["tool_call_id"]: m["content"] for m in requests[2]["messages"] if m["role"] == "tool"}
+    assert continuation["call_1"] == "Owner's sister"
+    assert "another tool in the batch" in continuation["good"]
+    assert "'query' is a required property" in continuation["bad"]
+    async with memory.sessions() as db:
+        receipts = (await db.execute(select(ToolExecutionReceipt))).scalars().all()
+    assert {receipt.call_id: receipt.status for receipt in receipts} == {
+        "call_1": "completed", "corrected": "completed",
+    }
     await bits.client.close()
 
 

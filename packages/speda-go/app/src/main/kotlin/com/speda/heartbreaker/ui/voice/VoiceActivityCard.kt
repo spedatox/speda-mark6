@@ -166,6 +166,7 @@ fun VoiceActivityCard(
                     ) {
                         when (state) {
                             ToolStepState.Running -> Spinner(palette.accent)
+                            ToolStepState.Unconfirmed -> Mark(palette.textFaint)
                             ToolStepState.Failed -> Mark(palette.red)
                             ToolStepState.Done -> Mark(palette.green)
                         }

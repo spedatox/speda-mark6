@@ -16,6 +16,14 @@ export interface ToolBadge {
   afterChars?: number
 }
 
+/** A tool without a receipt has no confirmed outcome. */
+export function stepState(tool: ToolBadge, live: boolean): 'running' | 'unconfirmed' | 'failed' | 'done' {
+  if (tool.result == null) return live ? 'running' : 'unconfirmed'
+  const result = tool.result.trimStart().toLowerCase()
+  if (/^(error|traceback|exception)\b/.test(result) || result.includes('error:')) return 'failed'
+  return 'done'
+}
+
 /** One step a delegated agent took, for the subagent panel. */
 export interface SubagentStep {
   kind: 'tool' | 'text'

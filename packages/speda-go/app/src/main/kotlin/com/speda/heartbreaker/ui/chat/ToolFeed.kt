@@ -157,10 +157,9 @@ private fun ToolRow(tool: ToolBadge, live: Boolean) {
                 .then(if (hasDetail) Modifier.noRippleClick { open = !open } else Modifier)
                 .padding(vertical = 7.dp),
         ) {
-            // Status glyph — a tick when it landed, a ring while it runs, a cross
-            // when the result came back an error. Three states, one column.
             when (state) {
                 ToolStepState.Running -> Spinner(size = 13.dp)
+                ToolStepState.Unconfirmed -> HbText("–", color = palette.textFaint)
                 ToolStepState.Failed -> HbGlyphs.Close(palette.red, size = 12.dp)
                 ToolStepState.Done -> HbGlyphs.Check(palette.green, size = 13.dp)
             }

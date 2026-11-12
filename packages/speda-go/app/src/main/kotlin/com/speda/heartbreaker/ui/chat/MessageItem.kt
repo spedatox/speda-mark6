@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
@@ -48,11 +49,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role as SemanticsRole
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.speech.tts.TextToSpeech
@@ -83,19 +86,27 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 @Composable
-internal fun TurnErrorBanner(error: String, modifier: Modifier = Modifier, onRetry: (() -> Unit)? = null) {
-    val errorColor = Color(0xFFF87171)
-    Column(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(errorColor.copy(alpha = 0.07f))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+internal fun TurnError(error: String, modifier: Modifier = Modifier, onRetry: (() -> Unit)? = null) {
+    val palette = LocalHbPalette.current
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        HbText(error, style = HbType.read, color = errorColor,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Box(Modifier.size(6.dp).background(palette.red, CircleShape))
+        HbText(
+            error, style = HbType.read.copy(fontSize = 13.sp), color = palette.textDim,
+            modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
+        )
         if (onRetry != null) {
-            HbGlassButton(LocalStrings.current.voiceMode.retry, onClick = onRetry, contentColor = errorColor)
+            Box(
+                Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(6.dp))
+                    .clickable(role = SemanticsRole.Button, onClick = onRetry).padding(horizontal = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                HbText(LocalStrings.current.voiceMode.retry, color = palette.text,
+                    style = HbType.read.copy(fontSize = 13.sp, textDecoration = TextDecoration.Underline))
+            }
         }
     }
 }
@@ -103,7 +114,7 @@ internal fun TurnErrorBanner(error: String, modifier: Modifier = Modifier, onRet
 /**
  * One chat row. Assistant rows interleave text + tool activity at the char offset
  * each tool fired (buildSegments), show batched streamed text, and
- * keep streamed content on screen even when a mid-turn error banner appears —
+ * keep streamed content on screen even when a mid-turn error appears —
  * a faithful port of Message.tsx (M1 renders text as plain prose; the full
  * markdown/prose renderer lands in M2).
  */
@@ -352,8 +363,8 @@ private fun AssistantRow(
 
             if (message.isError) {
                 val top = if (message.content.isNotEmpty() || message.tools.isNotEmpty()) 8.dp else 0.dp
-                TurnErrorBanner(message.errorNote ?: message.content.ifEmpty { t.message.somethingWentWrong },
-                    modifier = Modifier.padding(top = top))
+                TurnError(message.errorNote ?: message.content.ifEmpty { t.message.somethingWentWrong },
+                    modifier = Modifier.padding(top = top), onRetry = onRegenerate)
             }
 
             // Action bar — tap the answer to reveal it once streaming ends
@@ -365,7 +376,9 @@ private fun AssistantRow(
                     CopyBtn(message.content)
                     ThumbsBtns()
                     ReadAloudBtn(message.content)
-                    if (onRegenerate != null) ActionBtn({ HbGlyphs.Refresh(it) }) { showActions = false; onRegenerate() }
+                    if (onRegenerate != null && !message.isError) {
+                        ActionBtn({ HbGlyphs.Refresh(it) }) { showActions = false; onRegenerate() }
+                    }
                     if (onDelete != null) ActionBtn({ HbGlyphs.Trash(it) }) { onDelete() }
                 }
             }

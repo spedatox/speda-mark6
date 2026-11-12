@@ -18,7 +18,7 @@ from sqlalchemy import select, update, func, case
 from sqlalchemy.exc import IntegrityError
 from app.core.context import AgentContext
 from app.models.coordination import (Project, ProjectTask, CoordinationRun, Room, CellReceipt,
-    AgentStep, TaskInput, WorkerCheck, ForgeBoundary, ProjectOperation)
+    AgentStep, TaskInput, WorkerCheck, ForgeBoundary, ProjectOperation, WorkerReview)
 from app.models.model_policy import ToolExecutionReceipt
 from app.models.legion import LegionExecution
 from app.schemas.llm import PolicyDocument, ThinkingRequest
@@ -195,6 +195,28 @@ class Projects:
                 "task": t.task, "acceptance": t.acceptance, "status": t.status,
                 "cancel_requested": t.cancelled, "dependencies": t.dependencies,
                 "workspace": t.workspace, "base_revision": t.base_revision, "result": t.result} for t in tasks]}
+
+    async def checkpoint_blockers(self, owner, project_id):
+        await self.owned(owner, project_id)
+        async with self.sessions() as db:
+            tasks = (await db.execute(select(ProjectTask, WorkerReview).outerjoin(
+                WorkerReview, WorkerReview.task_id == ProjectTask.id
+            ).where(ProjectTask.project_id == project_id).order_by(ProjectTask.id))).all()
+
+        blockers = []
+        for task, review in tasks:
+            if task.status != 'succeeded':
+                reason = f'task status is {task.status}'
+            elif review is None:
+                reason = 'artifact review is missing'
+            elif review.artifact_revision != (task.result or {}).get('revision'):
+                reason = 'review is for an older or different artifact revision'
+            elif review.verdict != 'accepted':
+                reason = f'artifact review verdict is {review.verdict}'
+            else:
+                continue
+            blockers.append(f'Task {task.id}: {reason}.')
+        return blockers
 
     async def checkpoint(self, owner, project_id, body):
         project = await self.owned(owner, project_id)

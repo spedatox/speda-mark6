@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { resultSummary, stepState, toolSummary } from './Message'
+import { resultSummary, toolSummary } from './Message'
+import { stepState } from '../lib/types'
 import { useT } from '../lib/i18n'
 import type { ToolBadge } from '../lib/types'
 
@@ -194,6 +195,7 @@ export default function VoiceActivity({ tools, streaming, hasText }: Props) {
                 <span style={{ flexShrink: 0, width: 14, alignSelf: 'center' }}>
                   {state === 'running' ? <Spinner />
                     : state === 'failed' ? <Glyph color="var(--hb-red)" d="M18 6L6 18M6 6l12 12" />
+                    : state === 'unconfirmed' ? <Glyph color="var(--hb-text-faint)" d="M7 12h10" />
                     : <Glyph color="var(--hb-green)" d="M20 6L9 17l-5-5" />}
                 </span>
                 <span

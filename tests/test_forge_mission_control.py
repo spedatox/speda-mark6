@@ -441,12 +441,59 @@ async def test_supervisor_checkpoint_uses_workshop_cas_and_blocks_false_completi
         'acceptance':['Preserve source and inspect artifacts'], 'progress':'Implementation retained', 'status':'active'}
     try:
         await ProjectCheckpointSkill().execute(body, context)
-        with pytest.raises(CoordinationError, match='changed'):
-            await ProjectCheckpointSkill().execute(body, context)
+        conflict = await ProjectCheckpointSkill().execute(body, context)
+        assert conflict.startswith('Error: Checkpoint changed')
         current = (await bits.projects.inspect(1, bits.project['id']))['workshop']
-        with pytest.raises(CoordinationError, match='prevents mission completion'):
-            await ProjectCheckpointSkill().execute({**body,'expected_revision':current['revision'],'status':'complete'}, context)
+        complete = {**body, 'expected_revision': current['revision'], 'status': 'complete'}
+        denial = await ProjectCheckpointSkill().execute(complete, context)
+        assert denial.startswith('Error: Mission completion blocked')
+        assert f'Task {task.id}: artifact review is missing.' in denial
         assert (await MissionControl(bits.coordinator).snapshot(context))['checkpoint']['objective'] == body['objective']
+        assert (await bits.projects.inspect(1, bits.project['id']))['workshop'] == current
+        await MissionControl(bits.coordinator).review(context, ArtifactReview(
+            task_id=task.id, artifact_revision=task.result['revision'], expected_version=0,
+            verdict='accepted', rationale='Reviewed the retained release artifact'))
+        saved = json.loads(await ProjectCheckpointSkill().execute(complete, context))
+        assert saved['checkpoint']['status'] == 'complete'
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_scourge_can_save_maintenance_and_finish_reply_after_completion_is_blocked(memory, tmp_path):
+    from app.skills.collaboration import ProjectCheckpointSkill
+
+    async def executor(spec, **kwargs):
+        return ExecutionResult(spec.job_id, 'failed', 'Worker did not run', error='Test infrastructure failure')
+
+    bits = await project_setup(memory, tmp_path, [delegate('decepticon'), reply('The check was assigned.')], executor)
+    try:
+        room = await bits.coordinator.create(1, CreateRoom(lead='scourge', project_id=bits.project['id']))
+        await send(bits, room, 'Assign a check', input_id='assign')
+        project = await bits.projects.inspect(1, bits.project['id'])
+        task, = project['tasks']
+        assert task['status'] == 'failed'
+        current = project['workshop']
+        body = {'expected_revision': current['revision'], 'objective': 'Incident resolved',
+            'progress': 'Containment verified', 'next_steps': ['Monitor for recurrence']}
+        await bits.engine._registry.register_skill(ProjectCheckpointSkill())
+        for status in ('complete', 'active'):
+            bits.client.script.append(LLMMessage([
+                Block(type='tool_use', id=f'checkpoint_{status}', name='project_checkpoint',
+                      input={**body, 'status': status}),
+            ], 'tool_use'))
+        bits.client.script.append(reply('I saved the incident outcome and the ongoing maintenance steps.'))
+        run = await send(bits, room, 'Record the incident as resolved and keep monitoring.')
+        events = [e for e in (await bits.coordinator.events(1, room['id']))['events'] if e['run_id'] == run['id']]
+        assert run['status'] == 'succeeded', events
+        tool_results = [e['payload']['data']['result'] for e in events if e['kind'] == 'tool_result']
+        assert 'still lists next steps' in tool_results[0]
+        assert f"Task {task['id']}: task status is failed." in tool_results[0]
+        assert json.loads(tool_results[1])['checkpoint']['status'] == 'active'
+        assert any(e['kind'] == 'delta' and 'ongoing maintenance' in e['payload']['text'] for e in events)
+        state = await bits.projects.inspect(1, bits.project['id'])
+        assert state['workshop']['revision'] == current['revision'] + 1
+        assert state['workshop']['checkpoint']['next_steps'] == body['next_steps']
+        assert state['tasks'][0]['status'] == 'failed'
     finally:
         await bits.coordinator.shutdown()
 
