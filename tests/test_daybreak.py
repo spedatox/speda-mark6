@@ -97,7 +97,7 @@ async def test_response_receipt_and_denied_access_are_clear(memory):
 
 async def test_cyber_model_uses_stable_pseudonymous_safety_identifier(memory):
     policy = service(memory)
-    await policy.save(1, 0, PolicyDocument(cyber_programs={"openai:gpt-6-cyber": "daybreak_red"}))
+    await policy.save(42, 0, PolicyDocument(cyber_programs={"openai:gpt-6-cyber": "daybreak_red"}))
     requests = []
     def handler(request):
         requests.append(json.loads(request.content))

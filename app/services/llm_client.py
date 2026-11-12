@@ -362,11 +362,11 @@ class ProviderStream:
         if self.final.continuation:
             self.final.continuation["receipt"] = {**self.policy.receipt(), "attempts": self.attempts,
                 "usage": self.final.usage, "outcome": self.final.stop_reason}
-            if protocol == "responses" and "access_programs" in final_raw:
+            if self.policy.spec.protocol == "responses" and "access_programs" in final_raw:
                 programs = final_raw["access_programs"]
                 self.final.continuation["receipt"]["selected_cyber_program"] = (
                     programs.get("cyber") if isinstance(programs, dict) else None)
-            if protocol == "responses" and isinstance(final_raw.get("model"), str):
+            if self.policy.spec.protocol == "responses" and isinstance(final_raw.get("model"), str):
                 self.final.continuation["receipt"]["response_model"] = final_raw["model"]
         self.consumed = True
 
