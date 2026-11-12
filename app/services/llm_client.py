@@ -1,6 +1,8 @@
 """Pooled native/compat transports with bounded deadlines and honest stream outcomes."""
 import asyncio
 from contextlib import asynccontextmanager
+import hashlib
+import hmac
 import json
 import logging
 from urllib.parse import quote
@@ -103,6 +105,10 @@ class LLMClient:
                     request=policy.requested if policy.source in {"turn", "parent"} else None,
                     snapshot=(policy.revision, policy.snapshot), deadline=policy.deadline)
                 body = request_body(selected, system, messages, tools or [], max_tokens)
+                if selected.spec.requires_safety_identifier:
+                    secret = self.settings.speda_api_key.encode("utf-8")
+                    digest = hmac.new(secret, str(user_id).encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+                    body["safety_identifier"] = f"user_{digest}"
                 if cache_key and selected.spec.protocol == "responses":
                     body["prompt_cache_key"] = cache_key
                 selected_stream = ProviderStream(self, selected, body)
@@ -120,7 +126,8 @@ class LLMClient:
                     await selected_stream.close()
                     if reservation:
                         await asyncio.shield(self.spending.finish(reservation,
-                            "rejected" if exc.code.startswith("http_") else "unknown"))
+                            "rejected" if exc.code.startswith("http_") or exc.code in {
+                                "invalid_access_program", "unsupported_access_program", "access_program_not_enabled"} else "unknown"))
                     if not exc.retryable or attempt == len(candidates):
                         raise
                     logger.warning("provider_fallback_after_error",
@@ -197,6 +204,18 @@ class ProviderStream:
             if self.response.status_code >= 400:
                 status = self.response.status_code
                 # Never include raw provider errors/headers, which can contain secrets.
+                if self.policy.spec.protocol == "responses" and status in {400, 403}:
+                    try:
+                        error_code = (json.loads((await self.response.aread())[:4096]).get("error") or {}).get("code")
+                    except (ValueError, TypeError, AttributeError):
+                        error_code = None
+                    explanations = {
+                        "invalid_access_program": "Daybreak program is incompatible with the selected model",
+                        "unsupported_access_program": "The selected model does not support this Daybreak program",
+                        "access_program_not_enabled": "Daybreak access is not enabled for the API key's organization and project",
+                    }
+                    if isinstance(error_code, str) and error_code in explanations:
+                        raise ProviderError(error_code, explanations[error_code])
                 raise ProviderError(f"http_{status}", f"Provider request failed (HTTP {status})", retryable=status == 429 or status >= 500)
             if "text/event-stream" not in self.response.headers.get("content-type", ""):
                 raise ProviderError("invalid_stream", "Provider did not return an event stream")
@@ -343,6 +362,12 @@ class ProviderStream:
         if self.final.continuation:
             self.final.continuation["receipt"] = {**self.policy.receipt(), "attempts": self.attempts,
                 "usage": self.final.usage, "outcome": self.final.stop_reason}
+            if protocol == "responses" and "access_programs" in final_raw:
+                programs = final_raw["access_programs"]
+                self.final.continuation["receipt"]["selected_cyber_program"] = (
+                    programs.get("cyber") if isinstance(programs, dict) else None)
+            if protocol == "responses" and isinstance(final_raw.get("model"), str):
+                self.final.continuation["receipt"]["response_model"] = final_raw["model"]
         self.consumed = True
 
     async def get_final_message(self):

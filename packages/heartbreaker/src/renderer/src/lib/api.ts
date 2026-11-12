@@ -561,6 +561,21 @@ export async function setModelThinking(
   }
 }
 
+export async function setModelDaybreak(
+  config: AppConfig, model: string, enabled: boolean,
+): Promise<{ daybreak_selection: 'standard' | 'daybreak_blue' | 'daybreak_red'; daybreak_program: 'daybreak_blue' | 'daybreak_red'; daybreak_required: boolean }> {
+  const res = await fetch(`${config.apiBase}/models/daybreak`, {
+    method: 'POST',
+    headers: { ...authHeaders(config), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, enabled }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchModels(config: AppConfig): Promise<ModelInfo[]> {
   try {
     const res = await fetch(`${config.apiBase}/models`, {

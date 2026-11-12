@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -89,6 +90,7 @@ fun Composer(
     /** Set how hard one model is asked to think — a persisted server-side
      *  setting, not a per-turn flag, so every agent on that model follows it. */
     onModelThinking: (String, String) -> Unit,
+    onModelDaybreak: suspend (String, Boolean) -> Boolean,
     onSend: (String, List<ImageBlock>, List<DocBlock>) -> Boolean,
     onStop: () -> Unit,
     /** Null until the backend has answered — the row shows as unknown, not as
@@ -121,6 +123,8 @@ fun Composer(
     var steering by remember(draftScope) { mutableStateOf(false) }
     val currentDraftScope by androidx.compose.runtime.rememberUpdatedState(draftScope)
     var pickerOpen by remember { mutableStateOf(false) }
+    var daybreakBusy by remember { mutableStateOf(false) }
+    var daybreakError by remember(model) { mutableStateOf(false) }
 
     // The catalogue row for the selected model. Null until /models answers, and
     // also when the pinned model is not in the catalogue at all: a model pinned
@@ -454,6 +458,18 @@ fun Composer(
                     models = models,
                     current = model,
                     onPick = { pickerOpen = false; onModelChange(it) },
+                    daybreakBusy = daybreakBusy,
+                    daybreakError = daybreakError,
+                    onDaybreakChange = { modelId, enabled ->
+                        if (!daybreakBusy) {
+                            daybreakBusy = true
+                            daybreakError = false
+                            scope.launch {
+                                daybreakError = !onModelDaybreak(modelId, enabled)
+                                daybreakBusy = false
+                            }
+                        }
+                    },
                 )
             }
 
@@ -557,7 +573,11 @@ private fun ModelInfo.providerKey(): String =
  * screen.
  */
 @Composable
-private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (String) -> Unit) {
+private fun ModelPicker(
+    models: List<ModelInfo>, current: String, onPick: (String) -> Unit,
+    daybreakBusy: Boolean, daybreakError: Boolean,
+    onDaybreakChange: (String, Boolean) -> Unit,
+) {
     val palette = LocalHbPalette.current
     val t = LocalStrings.current
 
@@ -599,6 +619,39 @@ private fun ModelPicker(models: List<ModelInfo>, current: String, onPick: (Strin
                     )
                 }
                 if (open) {
+                    if (provider == "openai") item(key = "daybreak") {
+                        val selected = models.firstOrNull { it.id == current && it.providerKey() == "openai" && it.daybreakProgram != null }
+                        val selection = selected?.daybreakSelection
+                        val required = selected?.daybreakRequired == true
+                        val checked = selection in listOf("daybreak_blue", "daybreak_red") || required
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                HbText(t.composer.daybreak, style = HbType.read, color = palette.textDim)
+                                HbText(
+                                    when {
+                                        daybreakError -> t.composer.daybreakSaveFailed
+                                        selected == null -> t.composer.daybreakChoose
+                                        required -> t.composer.daybreakRequired
+                                        selection == null -> t.composer.daybreakAuto
+                                        else -> selected.name
+                                    },
+                                    style = HbType.readout.copy(fontSize = 10.sp),
+                                    color = if (daybreakError) palette.amberBright else palette.textFaint,
+                                )
+                            }
+                            Switch(
+                                checked = checked,
+                                enabled = selected != null && !daybreakBusy && !(required && selection != null),
+                                onCheckedChange = { enabled ->
+                                    if (selected != null) onDaybreakChange(selected.id, if (selection == null) true else enabled)
+                                },
+                            )
+                        }
+                    }
                     items(list, key = { it.id }) { m ->
                         ModelRow(model = m, active = m.id == current, onClick = { onPick(m.id) })
                     }

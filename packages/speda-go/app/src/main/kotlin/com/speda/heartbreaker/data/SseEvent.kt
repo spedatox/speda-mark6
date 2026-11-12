@@ -37,6 +37,9 @@ data class ModelInfo(
      *  Ollama and NVIDIA — the control shows disabled, not hidden. */
     @SerialName("thinking_supported") val thinkingSupported: Boolean = true,
     @SerialName("thinking_options") val thinkingOptions: List<String>? = null,
+    @SerialName("daybreak_program") val daybreakProgram: String? = null,
+    @SerialName("daybreak_selection") val daybreakSelection: String? = null,
+    @SerialName("daybreak_required") val daybreakRequired: Boolean = false,
 )
 
 /** Detached turns the backend is currently running (lib/api ActiveRun). */

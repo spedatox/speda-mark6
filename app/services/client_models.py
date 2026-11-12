@@ -1,6 +1,6 @@
 """Legacy presentation over the single revisioned native provider policy."""
 from app.schemas.llm import ThinkingRequest
-from app.services.model_policy import parse_model_ref, thinking_wire
+from app.services.model_policy import cyber_wire, parse_model_ref, thinking_wire
 
 
 def present_thinking(request):
@@ -38,7 +38,10 @@ async def catalog(policy, owner=1, discovery=None):
         "thinking_pinned": spec.ref in document.models,
         "thinking_supported": spec.control != "none", "thinking_options": choices(spec),
         "thinking_control": spec.control, "thinking_budget_min": spec.budget_min,
-        "thinking_budget_max": spec.budget_max, "policy_revision": revision}
+        "thinking_budget_max": spec.budget_max, "policy_revision": revision,
+        "daybreak_program": spec.daybreak_program,
+        "daybreak_selection": document.cyber_programs.get(spec.ref),
+        "daybreak_required": spec.daybreak_program == "daybreak_red"}
         for row in rows for spec in [policy.descriptor(row['id'], document)]]
 
 
@@ -61,3 +64,16 @@ async def set_thinking(policy, owner, model, level):
     await policy.save(owner, revision, document)
     return {"thinking": present_thinking(document.models.get(model)), "thinking_pinned": model in document.models,
             "policy_revision": revision + 1}
+
+
+async def set_daybreak(policy, owner, model, enabled):
+    revision, document = await policy.snapshot(owner)
+    spec = policy.descriptor(model, document)
+    if spec.daybreak_program is None:
+        raise ValueError("This model has no declared Daybreak support")
+    program = spec.daybreak_program if enabled else "standard"
+    cyber_wire(spec, program)
+    document.cyber_programs[model] = program
+    await policy.save(owner, revision, document)
+    return {"daybreak_program": spec.daybreak_program, "daybreak_selection": program,
+            "daybreak_required": spec.daybreak_program == "daybreak_red", "policy_revision": revision + 1}

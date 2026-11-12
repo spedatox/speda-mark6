@@ -643,6 +643,14 @@ class IgorApi(
             }.getOrDefault(false)
         }
 
+    suspend fun setModelDaybreak(config: AppConfig, model: String, enabled: Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = buildJsonObject { put("model", model); put("enabled", enabled) }
+                postJson(config, "/models/daybreak", body) != null
+            }.getOrDefault(false)
+        }
+
     suspend fun fetchWelcome(config: AppConfig, agentId: String): String = withContext(Dispatchers.IO) {
         runCatching {
             getString(config, "/welcome/$agentId")?.let {

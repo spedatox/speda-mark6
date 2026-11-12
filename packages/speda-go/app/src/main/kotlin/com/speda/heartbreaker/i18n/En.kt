@@ -48,6 +48,11 @@ val En = AppStrings(
         budgetUnknown = "Budget mode · —",
         language = { other -> "Language · switch to $other" },
         noModelsReported = "// no models reported",
+        daybreak = "Daybreak",
+        daybreakChoose = "Select a supported OpenAI model first.",
+        daybreakAuto = "API default; tap to enable explicitly.",
+        daybreakRequired = "This model requires Daybreak Red. Select another model to turn it off.",
+        daybreakSaveFailed = "Could not save Daybreak. Try again.",
     ),
     fileCard = AppStrings.FileCard(
         download = "DOWNLOAD",

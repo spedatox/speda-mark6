@@ -48,6 +48,11 @@ val Tr = AppStrings(
         budgetUnknown = "Tasarruf modu · —",
         language = { other -> "Dil · $other diline geç" },
         noModelsReported = "// kullanılabilir model yok",
+        daybreak = "Daybreak",
+        daybreakChoose = "Önce desteklenen bir OpenAI modeli seçin.",
+        daybreakAuto = "API varsayılanı; açıkça etkinleştirmek için dokunun.",
+        daybreakRequired = "Bu model Daybreak Red gerektirir. Kapatmak için başka model seçin.",
+        daybreakSaveFailed = "Daybreak kaydedilemedi. Yeniden deneyin.",
     ),
     fileCard = AppStrings.FileCard(
         download = "İNDİR",

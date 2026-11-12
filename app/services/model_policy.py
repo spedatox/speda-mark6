@@ -68,6 +68,19 @@ def thinking_wire(spec: ModelSpec, request: ThinkingRequest):
     return {"reasoning_effort": request.value}
 
 
+def cyber_wire(spec: ModelSpec, program: str | None):
+    if program is None:
+        return {}
+    provider, _ = parse_model_ref(spec.ref)
+    if provider != "openai" or spec.protocol != "responses" or spec.daybreak_program is None:
+        raise ValueError("This model has no declared Daybreak support")
+    if program == "standard" and spec.daybreak_program == "daybreak_red":
+        raise ValueError("This model requires Daybreak Red access")
+    if program != "standard" and program != spec.daybreak_program:
+        raise ValueError("Daybreak program does not match this model")
+    return {"access_programs": {"cyber": program}}
+
+
 class ModelPolicy:
     def __init__(self, sessions, profile, settings):
         self.sessions, self.profile, self.settings = sessions, profile, settings
@@ -113,6 +126,14 @@ class ModelPolicy:
             expected = {"anthropic": "anthropic", "openai": "responses", "gemini": "google", "vertex": "google"}.get(provider, "chat")
             if spec.protocol != expected and not (provider == "openai" and spec.protocol == "chat"):
                 raise ValueError("Model protocol does not match its provider connection")
+            if spec.daybreak_program and (provider != "openai" or spec.protocol != "responses"):
+                raise ValueError("Daybreak requires an OpenAI Responses model")
+            if spec.requires_safety_identifier and (provider != "openai" or spec.protocol != "responses"):
+                raise ValueError("Safety identifiers require an OpenAI Responses model")
+        for ref, program in document.cyber_programs.items():
+            if program is None:
+                raise ValueError("Daybreak policy cannot contain null")
+            cyber_wire(self.descriptor(ref, document), program)
         for ref, request in document.models.items():
             thinking_wire(self.descriptor(ref, document), request)
         for role, request in document.roles.items():
@@ -184,7 +205,7 @@ class ModelPolicy:
             if parent is None:
                 raise ValueError("Inherit requires a parent policy")
             selected, source = parent.requested, "parent"
-        wire = thinking_wire(spec, selected)
+        wire = {**thinking_wire(spec, selected), **cyber_wire(spec, doc.cyber_programs.get(spec.ref))}
         return EffectivePolicy(spec, selected, wire, source, revision, doc.show_thinking,
             deadline or monotonic()+self.settings.llm_request_timeout_seconds,
             tuple(doc.fallbacks), doc)
@@ -235,7 +256,7 @@ class ModelPolicy:
             else:
                 base = parent
             selected, source = base.requested, 'parent'
-        applied = thinking_wire(spec, selected)
+        applied = {**thinking_wire(spec, selected), **cyber_wire(spec, doc.cyber_programs.get(spec.ref))}
         return EffectivePolicy(spec, selected, applied, source, revision, doc.show_thinking,
             deadline or (parent.deadline if parent is not None else monotonic()+self.settings.llm_request_timeout_seconds),
             (), doc)

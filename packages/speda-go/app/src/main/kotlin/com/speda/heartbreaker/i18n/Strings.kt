@@ -114,6 +114,11 @@ data class AppStrings(
          *  readout — see lib/language.ts on the desktop for what it moves. */
         val language: (String) -> String,
         val noModelsReported: String,
+        val daybreak: String,
+        val daybreakChoose: String,
+        val daybreakAuto: String,
+        val daybreakRequired: String,
+        val daybreakSaveFailed: String,
     )
 
     data class FileCard(

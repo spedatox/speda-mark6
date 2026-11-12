@@ -21,6 +21,8 @@ class ModelSpec(BaseModel):
     can_disable: bool = False
     vision: bool = False
     supports_summary: bool = False
+    daybreak_program: Literal["daybreak_blue", "daybreak_red"] | None = None
+    requires_safety_identifier: bool = False
     budget_min: int = 1024
     budget_max: int = 32768
     revision: int = 1
@@ -35,6 +37,7 @@ class PolicyDocument(BaseModel):
     worker_models: dict[str, str] = Field(default_factory=dict)
     workers: dict[str, ThinkingRequest] = Field(default_factory=dict)
     models: dict[str, ThinkingRequest] = Field(default_factory=dict)
+    cyber_programs: dict[str, Literal["standard", "daybreak_blue", "daybreak_red"]] = Field(default_factory=dict)
     roles: dict[str, ThinkingRequest] = Field(default_factory=dict)
     agents: dict[str, ThinkingRequest] = Field(default_factory=dict)
     show_thinking: bool = False

@@ -405,6 +405,11 @@ fun ChatScreen(
                         models = graph.api.fetchModels(config)
                     }
                 },
+                onModelDaybreak = { modelId, enabled ->
+                    val saved = graph.api.setModelDaybreak(config, modelId, enabled)
+                    models = graph.api.fetchModels(config)
+                    saved
+                },
                 language = settings.locale,
                 onLanguageChange = { next ->
                     scope.launch {

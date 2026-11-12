@@ -10,7 +10,7 @@ import { mayClearSteeringDraft } from '../lib/useLiveSteering'
 import { useSettings } from '../store/settings'
 import { useProfile } from './Sidebar'
 import { useIsMobile } from '../lib/useIsMobile'
-import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode, setModelThinking } from '../lib/api'
+import { fetchModels, fileToImageBlock, fileToDocBlock, getBudgetMode, setBudgetMode, setModelThinking, setModelDaybreak } from '../lib/api'
 import { MicSession, micAvailable, type MicState } from '../lib/mic'
 import { useLanguage } from '../lib/language'
 import { LOCALES, type Locale } from '../lib/i18n'
@@ -321,9 +321,12 @@ function ProviderRow({ label, count, open, holdsActive, onClick }: {
  * no room for a second dropdown. They are separate AXES though: the agent can
  * think on Claude and speak with an OpenAI voice, and nothing couples them.
  */
-function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice }: {
+function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSelectVoice,
+  onDaybreakChange, daybreakBusy, daybreakError }: {
   models: ModelInfo[]; activeId: string; onSelect: (id: string) => void
   voices: ModelInfo[]; activeVoiceId: string; onSelectVoice: (id: string) => void
+  onDaybreakChange: (model: string, enabled: boolean) => void
+  daybreakBusy: boolean; daybreakError: string | null
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -373,6 +376,11 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
   }, [open, place])
 
   const active = models.find(m => m.id === activeId)
+  const daybreakModel = active?.provider === 'openai' && active.daybreak_program ? active : null
+  const daybreakSelection = daybreakModel?.daybreak_selection ?? null
+  const daybreakOn = daybreakSelection === 'daybreak_blue' || daybreakSelection === 'daybreak_red'
+  const daybreakRequired = daybreakModel?.daybreak_required === true
+  const daybreakDisabled = !daybreakModel || daybreakBusy || (daybreakRequired && daybreakOn)
   const label  = active ? shortModelName(active.name) : shortModelName(activeId)
   const [hover, setHover] = useState(false)
 
@@ -506,6 +514,36 @@ function ModelPicker({ models, activeId, onSelect, voices, activeVoiceId, onSele
                   holdsActive={provider === activeProvider}
                   onClick={() => setExpanded(p => (p === provider ? null : provider))}
                 />
+                {tab === 'text' && provider === 'openai' && expanded === provider && (
+                  <div style={{ padding: '0.55rem 0.8rem', borderBottom: '1px solid var(--hb-edge)',
+                    background: 'rgba(var(--hb-accent-rgb),0.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+                      <span style={{ color: 'var(--hb-text-dim)', fontSize: '0.78rem' }}>{t.inputBar.daybreak}</span>
+                      <button type="button" role="switch"
+                        aria-label={t.inputBar.daybreak}
+                        aria-checked={daybreakSelection === null && !daybreakRequired ? 'mixed' : daybreakOn || daybreakRequired}
+                        disabled={daybreakDisabled}
+                        onClick={() => daybreakModel && onDaybreakChange(daybreakModel.id,
+                          daybreakSelection === null ? true : !daybreakOn)}
+                        style={{ width: 30, height: 18, borderRadius: 10, padding: 2,
+                          border: '1px solid var(--hb-edge-bright)',
+                          background: daybreakOn || daybreakRequired ? 'var(--hb-cyan)' : 'var(--hb-holo-fill)',
+                          cursor: daybreakDisabled ? 'not-allowed' : 'pointer', opacity: daybreakDisabled ? 0.45 : 1,
+                          display: 'flex', alignItems: 'center', justifyContent: daybreakOn || daybreakRequired ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ width: 12, height: 12, borderRadius: '50%', background: 'white',
+                          display: 'block', lineHeight: '12px', textAlign: 'center', color: '#333', fontSize: 10 }}>
+                          {daybreakSelection === null && !daybreakRequired ? '–' : ''}
+                        </span>
+                      </button>
+                    </div>
+                    <div role={daybreakError ? 'alert' : undefined} style={{ marginTop: 4, fontSize: '0.68rem',
+                      color: daybreakError ? '#e69883' : 'var(--hb-icon-dim)' }}>
+                      {daybreakError || (daybreakBusy ? t.inputBar.daybreakPending : !daybreakModel
+                        ? t.inputBar.daybreakChoose : daybreakRequired ? t.inputBar.daybreakRequired
+                          : daybreakSelection === null ? t.inputBar.daybreakAuto : t.inputBar.daybreakSaved)}
+                    </div>
+                  </div>
+                )}
                 {expanded === provider && items.map(m => (
                   <ModelItem
                     key={m.id}
@@ -813,6 +851,8 @@ export default function InputBar({
   const [dragOver, setDragOver]     = useState(false)
   const [listening, setListening]   = useState(false)
   const [models, setModels]         = useState<ModelInfo[]>([])
+  const [daybreakBusy, setDaybreakBusy] = useState(false)
+  const [daybreakError, setDaybreakError] = useState<string | null>(null)
   const [voices, setVoices]         = useState<ModelInfo[]>([])
   const [budget, setBudget]         = useState(true)
   const [bgMode, setBgMode]         = useState(false)
@@ -822,6 +862,21 @@ export default function InputBar({
   const dragDepth = useRef(0)
 
   useEffect(() => { fetchModels(config).then(setModels).catch(() => {}) }, [config])
+
+  const changeDaybreak = useCallback(async (modelId: string, enabled: boolean) => {
+    if (daybreakBusy) return
+    setDaybreakBusy(true)
+    setDaybreakError(null)
+    try {
+      const ack = await setModelDaybreak(config, modelId, enabled)
+      setModels(prev => prev.map(m => m.id === modelId ? { ...m, ...ack } : m))
+    } catch (error) {
+      setDaybreakError(error instanceof Error ? error.message : 'Daybreak save failed')
+      fetchModels(config).then(setModels).catch(() => {})
+    } finally {
+      setDaybreakBusy(false)
+    }
+  }, [config, daybreakBusy])
 
   // The row for the model currently selected — the slider beside the picker
   // reflects and sets this one. Undefined until /models answers, and also when
@@ -1318,6 +1373,9 @@ export default function InputBar({
                 voices={voices}
                 activeVoiceId={settings.voiceModel}
                 onSelectVoice={id => update({ voiceModel: id })}
+                onDaybreakChange={changeDaybreak}
+                daybreakBusy={daybreakBusy}
+                daybreakError={daybreakError}
               />
 
               {/* Deliberately NOT hidden while streaming: barge-in means

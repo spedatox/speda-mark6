@@ -58,6 +58,34 @@ See [Z.ai's thinking contract](https://docs.z.ai/guides/capabilities/thinking).
 
 OpenAI Responses preserves structured output and encrypted continuation items
 with `store:false`. See [OpenAI's reasoning guide](https://developers.openai.com/api/docs/guides/reasoning).
+Daybreak is an explicit, per-model owner policy in `cyber_programs`. Set an
+approved OpenAI Responses model as `main_model` (or choose it for a turn), then
+save the matching program through `PUT /model-policy` with its current revision:
+
+```json
+{
+  "expected_revision": 0,
+  "policy": {
+    "main_model": "openai:gpt-6-sol",
+    "cyber_programs": {"openai:gpt-6-sol": "daybreak_blue"}
+  }
+}
+```
+
+Read `GET /model-policy` first and preserve its other fields when saving the
+complete document. `gpt-6-sol`, `gpt-6.1-sol`, and `gpt-6-astra` use
+`daybreak_blue`; `gpt-5.6-cyber` and `gpt-6-cyber` use `daybreak_red`.
+The Blue-value `gpt-6.1-sol` and `gpt-6-astra` models still require Daybreak
+Red organization and project access.
+`gpt-5.5-cyber-preview` is existing-access only and retires February 1, 2027.
+For eligible Blue models, `standard` explicitly selects standard safeguards.
+An absent mapping omits `access_programs` and leaves the API default in force.
+Invalid model/program pairs are rejected before saving. The selected program and
+response model, when returned by OpenAI, appear in the private provider receipt.
+Daybreak requires organization and project approval plus an API key from that
+project; this setting does not grant access. GPT-6-Cyber additionally needs model
+approval and an IP allowlist. Its requests include a stable pseudonymous safety
+identifier derived from the owner ID. See [OpenAI Docs: Daybreak](https://developers.openai.com/api/docs/guides/daybreak).
 Anthropic signatures and Google thought-signature parts are preserved in their
 original protocol shape. DeepSeek no longer forces reasoning off just because
 tools are present; its adapter replays the original reasoning field. See

@@ -274,6 +274,10 @@ export interface ModelInfo {
    *  so the absence is legible rather than mysterious. */
   thinking_supported?: boolean
   thinking_options?: ThinkingLevel[]
+  /** Explicit Responses cyber selection; null means the API chooses its default. */
+  daybreak_program?: 'daybreak_blue' | 'daybreak_red' | null
+  daybreak_selection?: 'standard' | 'daybreak_blue' | 'daybreak_red' | null
+  daybreak_required?: boolean
 }
 
 /** One question in a mid-turn interaction from a peer. */

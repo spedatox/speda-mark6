@@ -25,6 +25,11 @@ class ClientThinking(BaseModel):
     level: str | None = Field(default=None, max_length=64)
 
 
+class ClientDaybreak(BaseModel):
+    model: str = Field(min_length=1, max_length=255)
+    enabled: bool
+
+
 class BudgetMode(BaseModel):
     enabled: bool
 
@@ -52,6 +57,15 @@ async def thinking(request: Request, body: ClientThinking):
     from app.services.client_models import set_thinking
     try:
         return await set_thinking(request.app.state.model_policy, 1, body.model, body.level)
+    except ValueError as exc:
+        raise HTTPException(409 if "conflict" in str(exc) else 422, str(exc)) from exc
+
+
+@router.post("/models/daybreak")
+async def daybreak(request: Request, body: ClientDaybreak):
+    from app.services.client_models import set_daybreak
+    try:
+        return await set_daybreak(request.app.state.model_policy, 1, body.model, body.enabled)
     except ValueError as exc:
         raise HTTPException(409 if "conflict" in str(exc) else 422, str(exc)) from exc
 
