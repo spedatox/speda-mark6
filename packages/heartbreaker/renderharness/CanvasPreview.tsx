@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import VoiceCanvas from '../src/renderer/src/components/VoiceCanvas'
 import MovableVoiceOrb from '../src/renderer/src/components/MovableVoiceOrb'
 import { splitPanels, type VoicePanel } from '../src/renderer/src/lib/voicePanels'
-import primeDiagram from '../../../app/profiles/markvi-diagram.svg?raw'
+import orderFlowDiagram from '../../../app/profiles/markvi-diagram.svg?raw'
 
 const fence = (kind: string, body: string) => `\`\`\`${kind}\n${body}\n\`\`\``
 const silence = () => 0
@@ -47,7 +47,7 @@ export default function CanvasPreview({ fixtures, onClose }: { fixtures: [string
     ],
   }))
   const source = [practice, explore,
-    fence('svg | Prime check input guard', primeDiagram),
+    fence('svg | Push and pull around the order', orderFlowDiagram),
     fence('timeline | Tuesday timeline', '09:00 — Workplace Application I\n16:20 — Appointment at Etlik Hospital'),
     fixtures[2][1], fixtures[0][1], fence('chart | Attendance overview', JSON.stringify({ type: 'bar', xKey: 'course', series: [{ key: 'hours', label: 'Hours' }], data: [
     { course: 'Logistics', hours: 3 }, { course: 'Marketing Principles', hours: 7 }, { course: 'Data Structures', hours: 9 }, { course: 'Workplace Application', hours: 16 },

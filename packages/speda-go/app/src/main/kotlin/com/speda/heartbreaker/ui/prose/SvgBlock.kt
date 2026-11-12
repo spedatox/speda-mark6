@@ -58,9 +58,20 @@ import kotlin.math.roundToInt
 @Composable
 fun SvgBlock(raw: String, modifier: Modifier = Modifier) {
     val t = LocalStrings.current
-    val svg = remember(raw) { runCatching { SVG.getFromString(raw) }.getOrNull() }
+    val assets = LocalContext.current.assets
+    val themed = "mkvi-diagram" in raw
+    val css = remember(assets, themed) {
+        if (themed) assets.open("markvi-diagram.css").bufferedReader().use { it.readText() } else null
+    }
+    val svg = remember(raw, css) {
+        val fitted = if (css != null && !looksLikeStreamingSvg(raw)) runCatching {
+            fitMarkViLabels(raw, css)
+        }.getOrDefault(raw) else raw
+        runCatching { SVG.getFromString(fitted) }.getOrNull()
+            ?: if (fitted != raw) runCatching { SVG.getFromString(raw) }.getOrNull() else null
+    }
     when {
-        svg != null -> SvgSurface(svg, modifier, themed = "mkvi-diagram" in raw)
+        svg != null -> SvgSurface(svg, modifier, css)
         // A fence still streaming (no closing tag yet) shows the quiet skeleton,
         // not a scary parse error that vanishes a frame later.
         looksLikeStreamingSvg(raw) -> Materializing(t.proseKind.diagram, modifier)
@@ -70,16 +81,14 @@ fun SvgBlock(raw: String, modifier: Modifier = Modifier) {
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun SvgSurface(svg: SVG, modifier: Modifier, themed: Boolean) {
+private fun SvgSurface(svg: SVG, modifier: Modifier, css: String?) {
     val palette = LocalHbPalette.current
     val labels = LocalStrings.current.proseKind
     val description = remember(svg) {
         listOfNotNull(svg.documentTitle, svg.documentDescription).filter { it.isNotBlank() }.joinToString(". ")
     }
-    val assets = LocalContext.current.assets
-    val diagram = remember(assets, palette, themed) {
-        if (!themed) null else {
-            val css = assets.open("markvi-diagram.css").bufferedReader().use { it.readText() }
+    val diagram = remember(palette, css) {
+        css?.let {
             val colors = mapOf(
                 "PANEL" to palette.petrol, "TEXT" to palette.text, "MUTED" to palette.textDim,
                 "ACCENT" to palette.accentBright, "GOOD" to palette.green, "BAD" to palette.red,

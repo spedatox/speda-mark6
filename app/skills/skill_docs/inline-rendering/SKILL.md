@@ -81,7 +81,9 @@ SVG renders inline, scales perfectly, needs no libraries, and looks native. Use 
 everything that is NOT a line/bar/area/pie chart: economic diagrams, flowcharts, supply-demand
 graphs, network diagrams and illustrations. Use native timeline fences for dated sequences.
 
-Hand-draw the SVG. Compute the coordinates yourself. Example — a clean dark-theme diagram:
+Hand-draw the SVG and compute the coordinates from the text and geometry. When the
+system prompt supplies the Mark VI SVG design pack, use its classes and type sizes.
+The following example uses the standalone SVG palette.
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="Inter, sans-serif">
@@ -100,11 +102,10 @@ Hand-draw the SVG. Compute the coordinates yourself. Example — a clean dark-th
 ### SVG rules (NON-NEGOTIABLE)
 
 - NO background rect. The SVG must be transparent — the dark chat shows through.
-- Text colours: `#e3e3e3` (primary), `#9aa0a6` (muted labels).
-- Lines/strokes: `#8ab4f8` (blue), `#7ce8d5` (teal), `#ff6b6b` (red), `#c8a4ff` (purple),
-  `#3a3a3a` (axes/grid).
 - Always set a `viewBox` (e.g. `0 0 720 420`) and DO NOT set width/height — it scales to fit.
-- Use `font-family="Inter, sans-serif"`.
+- For standalone SVGs, use `font-family="Inter, sans-serif"`, `#e3e3e3` for
+  primary text, and `#9aa0a6` for muted labels. Use `#8ab4f8`, `#7ce8d5`,
+  `#ff6b6b`, `#c8a4ff`, or `#3a3a3a` for lines and axes.
 
 ## Rule 2 — Interactive HTML for adjustable inputs and live results
 
@@ -158,10 +159,10 @@ coherent subject per panel and keep complete event names, addresses and labels.
 Use native table/calendar/chart/timeline blocks so their layouts adapt to panel
 width. The owner can scroll the board, scroll a panel, resize it, or expand it.
 HTML controls stay interactive and preserve values when expanded/restored.
-For SVGs, use at least 14–16px text at the authored viewBox size and generous
-spacing; wide diagrams can scroll horizontally. Never scale an entire diagram
-down merely to fit a dense overview. Use stat blocks for a short metric or value,
-not long prose headings; put an explanation in a card or narration panel.
+For standalone SVGs, use at least 14–16 units for text at the authored viewBox
+size. The themed Mark VI classes have their own sizes. Give labels generous
+spacing and stack steps when a horizontal flow would crowd them. Use stat blocks
+for short values and put explanations in a card or narration panel.
 
 Use ordinary Markdown tables with a `| --- | --- |` header delimiter. Never fence
 ordinary tables as `text`; no ASCII boxes or manual space alignment. Existing
@@ -433,11 +434,16 @@ Multiple series (grouped bar / multi-line):
 For diagrams, flowcharts, network graphs, and anything
 that isn't rectangular data series, hand-write an **SVG**.
 
-SVG must be transparent (NO background rect), use a `viewBox` with no width/height,
-text in `#e3e3e3`/`#9aa0a6`, strokes in `#8ab4f8`/`#7ce8d5`/`#ff6b6b`/`#c8a4ff`.
+SVG must be transparent (NO background rect) and use a `viewBox` with no width/height.
+For standalone SVGs, use text in `#e3e3e3`/`#9aa0a6` and strokes in
+`#8ab4f8`/`#7ce8d5`/`#ff6b6b`/`#c8a4ff`.
 
 **Layout & spacing — labels must NEVER overlap (critical):**
 - Add generous padding inside the viewBox — keep all content ≥24px from every edge.
+- Size each node around its longest line using the actual font size. Leave at
+  least 16 units of horizontal padding on each side. SVG text does not wrap
+  automatically. Set explicit positions for additional lines or stack the steps
+  in separate rows when a horizontal layout runs out of space.
 - Position every text label so it does not touch or overlap geometry, points, or
   another label. If two labels would land near the same spot, push them apart and
   use a short leader line instead of stacking them.

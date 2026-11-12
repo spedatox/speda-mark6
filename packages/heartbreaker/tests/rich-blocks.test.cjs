@@ -98,15 +98,8 @@ test('widget host isolates executable content and resize channels', () => {
   assert.match(policy, /script-src 'self';/)
 })
 
-test('vector preview includes drawn content outside the authored viewBox', () => {
+function runVectorRuntime(svg, globals = {}) {
   const source = buildWidgetDocument('<svg viewBox="0 0 400 150"></svg>', {}, true)
-  const attributes = {}
-  const svg = {
-    viewBox: { baseVal: { x: 0, y: 0, width: 400, height: 150 } },
-    getBBox: () => ({ x: -25, y: 15, width: 510, height: 160 }),
-    setAttribute: (key, value) => { attributes[key] = value },
-    style: { setProperty() {} },
-  }
   const messages = []
   vm.runInNewContext(source.match(/<script>([\s\S]+)<\/script>/)[1], {
     document: {
@@ -119,11 +112,60 @@ test('vector preview includes drawn content outside the authored viewBox', () =>
     getComputedStyle: () => ({ zoom: '1' }),
     addEventListener() {},
     MutationObserver: class { observe() {} },
+    ...globals,
+  })
+  return messages
+}
+
+test('vector preview includes drawn content outside the authored viewBox', () => {
+  const attributes = {}
+  const messages = runVectorRuntime({
+    classList: { contains: () => false },
+    viewBox: { baseVal: { x: 0, y: 0, width: 400, height: 150 } },
+    getBBox: () => ({ x: -25, y: 15, width: 510, height: 160 }),
+    setAttribute: (key, value) => { attributes[key] = value },
+    style: { setProperty() {} },
   })
   const [x, y, width, height] = attributes.viewBox.split(' ').map(Number)
   assert.ok(x < -25 && y + height > 175 && x + width > 485)
   assert.equal(attributes.preserveAspectRatio, 'xMidYMid meet')
   assert.equal(messages[0].ratio, width / height)
+})
+
+test('themed node labels fit their own box while captions and shorter lines keep their size', () => {
+  class SVGRectElement {
+    x = { baseVal: { value: 20 } }
+    y = { baseVal: { value: 20 } }
+    width = { baseVal: { value: 140 } }
+    height = { baseVal: { value: 80 } }
+    matches() { return true }
+    hasAttribute() { return false }
+  }
+  class SVGTextElement {
+    children = []
+    style = {}
+    hasAttribute() { return false }
+    constructor(width, y) {
+      this.x = { baseVal: { numberOfItems: 1, getItem: () => ({ value: 90 }) } }
+      this.y = { baseVal: { numberOfItems: 1, getItem: () => ({ value: y }) } }
+      this.getComputedTextLength = () => width
+    }
+  }
+  const labels = [new SVGTextElement(45, 48), new SVGTextElement(192, 74), new SVGTextElement(192, 130)]
+  for (const label of labels) label.parentElement = { children: [new SVGRectElement(), ...labels] }
+  runVectorRuntime({
+    classList: { contains: () => true },
+    viewBox: { baseVal: { x: 0, y: 0, width: 400, height: 150 } },
+    getBBox: () => ({ x: 20, y: 20, width: 140, height: 110 }),
+    querySelectorAll: () => labels,
+    setAttribute() {},
+    style: { setProperty() {} },
+  }, {
+    SVGTextElement,
+    SVGRectElement,
+    getComputedStyle: () => ({ textAnchor: 'middle', fontSize: '21px', zoom: '1' }),
+  })
+  assert.deepEqual(labels.map(label => label.style.fontSize), [undefined, '14.000px', undefined])
 })
 
 test('interactive hints describe only visible, enabled controls', () => {

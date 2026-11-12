@@ -20,8 +20,8 @@ Never claim that a visual was tested, an event fetched, or a tool action complet
 without evidence. Presentation does not grant tool permissions or spending.
 
 Use these exact renderer formats (each fence starts and ends on its own line):
-- `svg | Descriptive title`: transparent SVG with a viewBox, readable 14–16px+
-  labels, generous spacing and no label collisions. Use for conceptual models,
+- `svg | Descriptive title`: transparent SVG with a viewBox, readable labels,
+  generous spacing and no label collisions. Use for conceptual models,
   mechanisms, geometry, flows, annotated diagrams and causal relationships.
 - `html | Descriptive title`: self-contained responsive HTML + vanilla JS for
   custom interactions when the client has no suitable native renderer. Label
@@ -118,24 +118,34 @@ MARK_VI_SVG = r"""
 For an SVG diagram, use a `svg | Title` fence and put `class="mkvi-diagram"`
 on the root. The renderer supplies the active agent colors and typography.
 Use the supplied classes with plain SVG geometry. Do not hardcode colors,
-font sizes, backgrounds, styles or scripts for the pack.
-Use a compact viewBox around the artwork, typically 720 by 360–440. Leave
-24–32 units of margin, including around connector heads and text. Use
+font sizes, backgrounds, styles or scripts for the pack. Size the geometry for
+the actual type sizes in viewBox units: heading 30, label 26 bold, note 21,
+kicker 17 bold, branch 19 bold. Use
 `mkvi-kicker`, `mkvi-heading` and `mkvi-divider` for hierarchy. Use
 `mkvi-node` for steps, `mkvi-decision` on a diamond, and `mkvi-accept`
 or `mkvi-reject` for distinct outcomes. Use `mkvi-link` and `mkvi-arrow`
 on connectors, `mkvi-branch` for branch labels, `mkvi-label` for node labels,
-and `mkvi-note` for short secondary text. Put titles and descriptions in
-SVG title and desc elements. Use explicit text positions, short lines and
-orthogonal connectors with clear arrowheads. Keep branches separated, make
-the reading direction obvious, and fit labels comfortably inside their nodes.
-Split sprawling diagrams across panels. Use the native timeline, chart or
-table for ordered events, data series or comparisons.
+and `mkvi-note` for short secondary text. Include SVG title and desc elements.
+
+Lay out the words before drawing the shapes. Budget at least 16 units of
+horizontal padding on each side of a node and at least 28 units between text
+baselines. SVG text stays on one line unless you place separate lines with
+explicit coordinates. When estimating, allow about 0.7 times the font size per
+character and more for wide glyphs or capitals. A 140-unit node with that
+padding has 108 units for text, enough for roughly six bold label characters.
+Widen the node, wrap the label, or give each step its own row when space is
+tight. Keep the viewBox close to the artwork with at least 24 units of outer
+margin. Favor top-to-bottom flows for long labels in narrow panels.
+
+Before emitting the fence, check that each text line fits within its padding,
+that titles fit within the viewBox, and that connectors and their arrowheads
+clear text and unrelated nodes. Split sprawling diagrams across panels. Use
+native timelines, charts or tables for dated events, data series or comparisons.
 """
 
 MARK_VI_SVG_EXAMPLE = r"""
 Example geometry and hierarchy. Adapt the content and layout to the question:
-```svg | Prime check input guard
+```svg | Push and pull around the order
 """ + Path(__file__).with_name('markvi-diagram.svg').read_text(encoding='utf-8') + "```\n"
 
 CANVAS_REVISION = hashlib.sha256(

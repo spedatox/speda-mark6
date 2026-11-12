@@ -43,6 +43,34 @@ const declared=original?.width>0 && original.height>0
       return value && /^\\d+(?:\\.\\d+)?(?:px)?$/.test(value) ? parseFloat(value) : 0;
     })];
 let last='',queued=false,fit='';
+function fitDiagramLabels(){
+  if(!svg?.classList.contains('mkvi-diagram')) return;
+  for(const text of svg.querySelectorAll('text.mkvi-label, text.mkvi-note')){
+    if(!(text instanceof SVGTextElement)) continue;
+    if(text.children.length || ['style','transform','dx','dy','rotate','textLength'].some(name=>text.hasAttribute(name))) continue;
+    if(text.x.baseVal.numberOfItems!==1 || text.y.baseVal.numberOfItems!==1) continue;
+    const x=text.x.baseVal.getItem(0).value, y=text.y.baseVal.getItem(0).value;
+    let node;
+    for(const rect of text.parentElement.children){
+      if(!(rect instanceof SVGRectElement) || !rect.matches('.mkvi-node,.mkvi-decision,.mkvi-accept,.mkvi-reject') || rect.hasAttribute('transform')) continue;
+      const left=rect.x.baseVal.value, top=rect.y.baseVal.value;
+      const width=rect.width.baseVal.value, height=rect.height.baseVal.value;
+      if(x>left && x<left+width && y>top && y<top+height && (!node || width*height<node.area)){
+        node={left,right:left+width,area:width*height};
+      }
+    }
+    if(!node) continue;
+    const style=getComputedStyle(text);
+    const anchor=style.textAnchor;
+    const start=x-node.left, end=node.right-x;
+    const room=anchor==='middle' ? 2*Math.min(start,end)-12 : (anchor==='end' ? start : end)-6;
+    const width=text.getComputedTextLength(), size=parseFloat(style.fontSize);
+    if(room>0 && width>room && size>0){
+      text.style.fontSize=(size*room/width).toFixed(3)+'px';
+    }
+  }
+}
+fitDiagramLabels();
 const initialZoom=body.style.zoom;
 if(!svg) addEventListener('message',event=>{
   const scale=event.data?.scale;

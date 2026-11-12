@@ -1,25 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" class="mkvi-diagram" viewBox="0 0 720 400" role="img" aria-labelledby="title desc">
-  <title id="title">Prime check input guard</title>
-  <desc id="desc">If n is one or less, return false. Otherwise continue to divisor checks.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" class="mkvi-diagram" viewBox="0 0 560 555" role="img" aria-labelledby="title desc">
+  <title id="title">What triggers the work?</title>
+  <desc id="desc">Expected demand triggers forecasting and stock positioning. The actual customer order triggers allocation, picking, packing and delivery.</desc>
   <defs>
-    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
       <path class="mkvi-arrow" d="M0 0 L10 5 L0 10 Z"/>
     </marker>
   </defs>
-  <text class="mkvi-kicker" x="32" y="35">ALGORITHM / FIRST DECISION</text>
-  <text class="mkvi-heading" x="32" y="72">Prime check: input guard</text>
-  <path class="mkvi-divider" d="M32 94 H688"/>
-  <path class="mkvi-link" d="M257 200 H181 V284" marker-end="url(#tip)"/>
-  <path class="mkvi-link" d="M463 200 H539 V284" marker-end="url(#tip)"/>
-  <polygon class="mkvi-decision" points="360,112 514,178 360,244 206,178"/>
-  <text class="mkvi-label" x="360" y="174" text-anchor="middle">n ≤ 1?</text>
-  <text class="mkvi-note" x="360" y="201" text-anchor="middle">Before the loop</text>
-  <text class="mkvi-branch" x="142" y="242" text-anchor="middle">YES</text>
-  <text class="mkvi-branch" x="575" y="242" text-anchor="middle">NO</text>
-  <rect class="mkvi-reject" x="34" y="292" width="294" height="80" rx="12"/>
-  <rect class="mkvi-accept" x="392" y="292" width="294" height="80" rx="12"/>
-  <text class="mkvi-label" x="181" y="325" text-anchor="middle">Return false</text>
-  <text class="mkvi-note" x="181" y="352" text-anchor="middle">Primes are greater than 1</text>
-  <text class="mkvi-label" x="539" y="325" text-anchor="middle">Continue</text>
-  <text class="mkvi-note" x="539" y="352" text-anchor="middle">Test divisors up to √n</text>
+  <text class="mkvi-heading" x="32" y="52">What triggers the work?</text>
+  <path class="mkvi-divider" d="M32 72 H528"/>
+
+  <text class="mkvi-branch" x="32" y="125">PUSH</text>
+  <text class="mkvi-note" x="32" y="153">Expected demand</text>
+  <rect class="mkvi-node" x="220" y="92" width="308" height="74" rx="12"/>
+  <text class="mkvi-label" x="244" y="122">Forecast</text>
+  <text class="mkvi-note" x="244" y="150">Estimate demand</text>
+  <path class="mkvi-link" d="M374 171 V193" marker-end="url(#tip)"/>
+  <rect class="mkvi-node" x="220" y="198" width="308" height="74" rx="12"/>
+  <text class="mkvi-label" x="244" y="228">Make and position</text>
+  <text class="mkvi-note" x="244" y="256">Stock near likely buyers</text>
+
+  <path class="mkvi-divider" d="M184 307 H356 M392 307 H528"/>
+  <text class="mkvi-branch" x="32" y="313">Customer order</text>
+  <path class="mkvi-link" d="M374 278 V337" marker-end="url(#tip)"/>
+
+  <text class="mkvi-branch" x="32" y="376">PULL</text>
+  <text class="mkvi-note" x="32" y="404">Actual order</text>
+  <rect class="mkvi-accept" x="220" y="343" width="308" height="74" rx="12"/>
+  <text class="mkvi-label" x="244" y="373">Allocate</text>
+  <text class="mkvi-note" x="244" y="401">Select the ordered size</text>
+  <path class="mkvi-link" d="M374 422 V444" marker-end="url(#tip)"/>
+  <rect class="mkvi-accept" x="220" y="449" width="308" height="74" rx="12"/>
+  <text class="mkvi-label" x="244" y="479">Pick and pack</text>
+  <text class="mkvi-note" x="244" y="507">Deliver to the buyer</text>
 </svg>
