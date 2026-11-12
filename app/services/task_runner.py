@@ -26,15 +26,15 @@ class TaskRunner:
             raise ProviderError("missing_policy", "Worker requires an admitted parent policy")
         activity = self.activity or getattr(parent.coordination, 'workers', None)
         if spec.backend == 'forge':
-            if not parent.coordination or not parent.project_id or not parent.coordination.projects:
-                raise ProviderError('project_required','Bind the chat to a native project before assigning Autobots or Decepticons')
+            if not parent.coordination or not parent.coordination.projects or not parent.run_id:
+                raise ProviderError('worker_unavailable', 'Forge requires an admitted Coordinator run')
             from app.schemas.coordination import Delegate
             result = await parent.coordination.projects.delegate(parent, Delegate(
                 role='reviewer' if spec.worker_id == 'forge_reviewer' else spec.worker_id,task=prompt,
                 acceptance=args.get('acceptance') or ['Complete the assigned scope and report evidence and checks'],
                 dependencies=args.get('dependencies', [])))
             result.update(execution_id=result['task_id'],backend='forge',worker=spec.worker_id,
-                meaning='Admitted asynchronously in the bound project; inspect progress or steer by execution ID while continuing the conversation')
+                meaning='Admitted asynchronously; inspect progress or steer by execution ID while continuing the conversation')
             return json.dumps(result)
         if 'background' in args and 'run_in_background' in args and args['background'] != args['run_in_background']:
             raise ValueError('Conflicting worker background controls')

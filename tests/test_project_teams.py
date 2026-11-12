@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.models.coordination import AgentStep, CoordinationRun, ProjectTask
 from app.schemas.coordination import CreateProject, CreateRoom, Delegate, RoomInput
+from app.schemas.llm import Block, LLMMessage
 from app.services.coordination_budget import CoordinationError
 from forge.runtime import ExecutionResult
 from tests.test_coordination import reply, send
@@ -24,6 +25,37 @@ async def admitted_context(memory, bits, *, agent="speda"):
         step = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id))
     return memory.context(agent_id=agent, room_id=room['id'], run_id=run.id,
         step_id=step.id, project_id=bits.project['id'], tool_call_id='assign', coordination=bits.coordinator), room
+
+
+@pytest.mark.parametrize('agent,role,runtime', [
+    ('optimus', 'autobot', 'coder'),
+    ('scourge', 'decepticon', 'pentester'),
+])
+async def test_standalone_forge_executes_without_binding_chat(memory, tmp_path, agent, role, runtime):
+    async def executor(spec, **kwargs):
+        assert spec.role == runtime and not spec.allow_network
+        assert not list(spec.workspace.iterdir())
+        return ExecutionResult(spec.job_id, 'succeeded', 'Standalone check completed')
+
+    assignment = delegate(role) if agent == 'optimus' else LLMMessage([
+        Block(type='tool_use', id='delegate1', name='Task',
+              input={'worker_id': role, 'description': 'Check tools', 'prompt': 'Check local tooling'}),
+    ], 'tool_use')
+    bits = await project_setup(memory, tmp_path, [assignment, reply('Queued')], executor)
+    room = await bits.coordinator.create(1, CreateRoom(lead=agent))
+    try:
+        result = await send(bits, room)
+        assert result['status'] == 'succeeded'
+        events = (await bits.coordinator.events(1, room['id']))['events']
+        task = next(e['payload'] for e in events if e['kind'] == 'project_result')
+        assert task['role'] == role
+        assert task['artifact']['report'] == 'Standalone check completed'
+        assert not (await bits.projects.inspect(1, bits.project['id']))['tasks']
+        assert (await bits.coordinator.rooms(1))[0]['project_id'] is None
+        with pytest.raises(CoordinationError, match='configured workspace root'):
+            await bits.coordinator.create(1, CreateRoom(lead=agent, project_id=task['project_id']))
+    finally:
+        await bits.coordinator.shutdown()
 
 
 @pytest.mark.parametrize('agent,role,team,lead,runtime,read_only', [

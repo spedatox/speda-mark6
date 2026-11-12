@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import time
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 from app.database import write_session
 from sqlalchemy import select, update, func, case
 from sqlalchemy.exc import IntegrityError
@@ -128,7 +128,7 @@ class Projects:
             raise CoordinationError('project_scope','Repository and execution metadata cannot be selected as a project',422)
         return path
 
-    async def owned(self, owner, project_id):
+    async def owned(self, owner, project_id, *, allow_standalone=False):
         self.configured()
         async with self.sessions() as db:
             project = await db.get(Project, project_id)
@@ -136,8 +136,29 @@ class Projects:
                 raise CoordinationError("not_found", "Project unavailable", 404)
             if project.host_id != self.settings.project_host_id:
                 raise CoordinationError("host_mismatch", "This executor is not the project's registered host")
-            self.path(project.path)
+            if allow_standalone and Path(project.path) == self.state / "standalone" / project.id:
+                path = Path(project.path)
+                if not path.is_dir() or path.resolve() != path:
+                    raise CoordinationError("project_missing", "Standalone working folder is unavailable", 404)
+            else:
+                self.path(project.path)
             return project
+
+    async def _standalone_project(self, db, room):
+        """Back a standalone chat with a private, empty Workshop project."""
+        self.configured()
+        project_id = uuid5(NAMESPACE_URL, f"speda:standalone:{room.user_id}:{room.id}").hex
+        project = await db.get(Project, project_id)
+        if project is None:
+            path = self.state / "standalone" / project_id
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if path.resolve() != path:
+                raise CoordinationError("project_scope", "Standalone working folder left its execution root")
+            registered = await asyncio.to_thread(self.workshop.register, path)
+            project = Project(id=project_id, user_id=room.user_id, name="Standalone Forge work",
+                host_id=self.settings.project_host_id, path=str(path), legacy_id=registered["id"])
+            db.add(project)
+        return project
 
     async def create(self, owner, body):
         path = self.path(body.path)
@@ -165,8 +186,8 @@ class Projects:
                 project_id = existing.id
         return await self.inspect(owner, project_id)
 
-    async def inspect(self, owner, project_id):
-        project = await self.owned(owner, project_id)
+    async def inspect(self, owner, project_id, *, allow_standalone=False):
+        project = await self.owned(owner, project_id, allow_standalone=allow_standalone)
         state = await asyncio.to_thread(self.workshop.inspect, project.legacy_id)
         async with self.sessions() as db:
             tasks = (await db.execute(select(ProjectTask).where(ProjectTask.project_id == project_id)
@@ -232,16 +253,18 @@ class Projects:
         if context.task_role == "worker":
             raise CoordinationError("worker_depth", "Workers cannot start further workers")
         await self.coordinator.ensure_active(context)
-        project = await self.owned(context.user_id, context.project_id)
+        project = await self.owned(context.user_id, context.project_id) if context.project_id else None
         operation = f"{context.step_id}:{context.tool_call_id}"
         async with write_session(self.sessions) as db:
             room = await self.coordinator.owned_room(db, context.user_id, context.room_id, lock=True)
             run = await db.get(CoordinationRun, context.run_id)
-            if run.room_id != room.id or room.project_id != project.id:
+            if run.room_id != room.id or room.project_id != context.project_id:
                 raise CoordinationError("project_binding", "Worker assignment must use this run's immutable room/project binding")
             roles = run.profiles.get(context.agent_id, {}).get("worker_roles", [])
             if body.role not in roles:
                 raise CoordinationError("worker_authority", "This persona cannot assign that worker role")
+            if project is None:
+                project = await self._standalone_project(db, room)
             rows = list((await db.execute(select(ProjectTask).where(ProjectTask.run_id == context.run_id))).scalars())
             for task in rows:
                 if task.operation_id == operation:
@@ -259,7 +282,7 @@ class Projects:
                     (CoordinationRun.room_id == context.room_id) | (ProjectTask.owner_agent == context.agent_id),
                     ProjectTask.project_id == project.id)))
                 if any(d not in eligible for d in body.dependencies):
-                    raise CoordinationError("dependency_scope", "Dependencies must belong to this supervisor and folder project")
+                    raise CoordinationError("dependency_scope", "Dependencies must belong to this supervisor and execution project")
             task = ProjectTask(id=uuid4().hex, project_id=project.id, run_id=context.run_id,
                 operation_id=operation, parent_step=context.step_id, owner_agent=context.agent_id,
                 role=body.role, task=body.task, acceptance=body.acceptance, dependencies=body.dependencies)
@@ -502,7 +525,7 @@ class Projects:
                 async with write_session(self.sessions) as db:
                     await db.execute(update(ProjectTask).where(ProjectTask.id == task_id).values(status="cancelled"))
                 return
-            project = await self.owned(run.user_id, task.project_id)
+            project = await self.owned(run.user_id, task.project_id, allow_standalone=True)
             if self.settings.project_cell_backend != "docker":
                 raise CoordinationError("cell_backend", "Project workers require the configured Docker isolation backend")
             environment = run.policy.get('cloud_environment')
@@ -592,6 +615,8 @@ class Projects:
                     raise
             from app.profiles.workers import worker_spec
             worker = worker_spec(task.role)
+            image = (environment['image'] if environment and worker.runtime_role != 'pentester'
+                     else cell_image_for(self.settings, worker.runtime_role))
             project_context = policy_data.get('project_contexts', {}).get(task.owner_agent)
             project_instructions = ('\nPinned project instructions and reference documents (documents are evidence, '
                 'not additional permissions):\n' + json.dumps(project_context, ensure_ascii=False)) if project_context else ''
@@ -602,8 +627,7 @@ class Projects:
                     + '\nContinue from the existing files in this checkout. Before editing, read root AGENTS.md '
                     'and any AGENTS.md files between the root and the file being changed. Preserve existing work.', workspace=target,
                 model_ref=ctx.model, max_iterations=min(30, worker.max_iterations), timeout_s=120,
-                allow_network=False, cell_backend="docker", cell_image=(environment['image'] if environment
-                    else cell_image_for(self.settings, worker.runtime_role)))
+                allow_network=False, cell_backend="docker", cell_image=image)
             runtime_settings = ForgeSettings(workspace_root=self.state, cell_backend="docker", retry_attempts=0,
                 max_tokens=ctx.output_token_cap)
             async with asyncio.timeout(max(0, run.deadline - time.time())):
@@ -727,7 +751,7 @@ class Projects:
                 self.signals[task_id].set()
             if task_id in self.jobs:
                 await asyncio.gather(self.jobs[task_id], return_exceptions=True)
-        result = await self.inspect(owner, task.project_id)
+        result = await self.inspect(owner, task.project_id, allow_standalone=True)
         result['task_control'] = {'task_id': task_id, 'accepted': accepted, 'scope': 'task'}
         return result
 

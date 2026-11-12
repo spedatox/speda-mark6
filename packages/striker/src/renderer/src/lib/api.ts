@@ -101,8 +101,6 @@ export interface StreamOpts {
   keepMessages?: number
   /** Re-run on existing history without appending a new user message. */
   regenerate?: boolean
-  /** Working directory for an external-backend agent (the Forge / Optimus). */
-  cwd?: string
   /** The reply will be SPOKEN. Changes how the backend asks for it to be
    *  written — prose to be heard, artefacts fenced for the canvas — so it has to
    *  be known before the turn runs, not filtered out of it afterwards. */
@@ -150,7 +148,6 @@ export async function* streamChat(
       ...(opts.documents && opts.documents.length ? { documents: opts.documents } : {}),
       ...(opts.keepMessages != null ? { keep_messages: opts.keepMessages } : {}),
       ...(opts.regenerate ? { regenerate: true } : {}),
-      ...(opts.cwd ? { cwd: opts.cwd } : {}),
       ...(opts.requestId ? { request_id: opts.requestId } : {}),
       ...(opts.projectId ? { project_id: opts.projectId } : {}),
       // Surface awareness — tell Speda whether this turn came from the desktop

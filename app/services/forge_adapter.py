@@ -3,6 +3,7 @@ import asyncio
 import copy
 from dataclasses import asdict
 from sqlalchemy import select
+from app.database import write_session
 from app.models.model_policy import ToolExecutionReceipt
 from app.models.coordination import CellReceipt
 from app.models.coordination import WorkerCheck, ProjectTask, TaskInput
@@ -98,7 +99,7 @@ class ForgeEffects:
         self.protocol = protocol
 
     async def cell_lifecycle(self, status, backend, handle, workspace):
-        async with self.sessions() as db, db.begin():
+        async with write_session(self.sessions) as db:
             row = await db.get(CellReceipt, self.context.step_id)
             if row is None:
                 db.add(CellReceipt(task_id=self.context.step_id, status=status, backend=backend,
@@ -111,7 +112,7 @@ class ForgeEffects:
         await ctx.coordination.ensure_active(ctx)
         hashed = digest(call.input)
         check_id, workspace = None, None
-        async with self.sessions() as db, db.begin():
+        async with write_session(self.sessions) as db:
             prior = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == ctx.user_id, ToolExecutionReceipt.request_id == ctx.request_id,
                 ToolExecutionReceipt.call_id == call.id))).scalar_one_or_none()
@@ -145,7 +146,7 @@ class ForgeEffects:
         if self.protocol and result.is_error:
             self.protocol.capture({**turn_facts(ctx), "event": "forge_tool_returned_error",
                                    "tool": call.name, "ended_turn": False})
-        async with self.sessions() as db, db.begin():
+        async with write_session(self.sessions) as db:
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == ctx.user_id, ToolExecutionReceipt.request_id == ctx.request_id,
                 ToolExecutionReceipt.call_id == call.id))).scalar_one()

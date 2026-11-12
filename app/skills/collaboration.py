@@ -107,14 +107,15 @@ class StartGitHubProjectSkill(Skill):
 class ProjectDelegateSkill(Skill):
     name, read_only = "project_delegate", False
     description = ("Assign a bounded project task with explicit acceptance criteria to an anonymous "
-        "Autobot, Decepticon or reviewer. Uses this room's bound project and shared budget. "
+        "Autobot, Decepticon or reviewer. Uses the room's project when present and an isolated working folder in a standalone chat. "
+        "All assignments share the run's budget. "
         "Execution starts asynchronously while the conversation continues; admission is not completion. "
-        "Use legion_inspect and legion_control for progress and steering, and project_review to assess results. "
-        "Dependencies may be this supervisor's existing tasks from any chat in the same folder project.")
+        "Use legion_inspect and legion_control for progress and steering, and project_review to assess project results. "
+        "Dependencies must come from the same project or, for standalone work, the same chat.")
     input_schema = Delegate.model_json_schema()
 
     def available(self, context):
-        return bool(context.project_id and context.coordination and context.coordination.projects
+        return bool(context.run_id and context.coordination and context.coordination.projects
                     and context.coordination.projects.enabled and context.task_role != "worker")
 
     async def execute(self, args, context):

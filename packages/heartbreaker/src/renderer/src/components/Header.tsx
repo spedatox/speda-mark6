@@ -3,9 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useChatContext } from '../store/chat'
-import { useSettings } from '../store/settings'
 import { fetchProjects } from '../lib/api'
-import HisarBrowser from './HisarBrowser'
 import type { AppConfig } from '../lib/types'
 import { useT } from '../lib/i18n'
 import { useSidePane } from './SidePane'
@@ -24,78 +22,6 @@ import { useSidePane } from './SidePane'
  * COMPLETE) moved to the telemetry column, which is where the rest of the
  * session's instrumentation now lives.
  */
-
-/**
- * Workspace selector for anonymous Forge workers deployed through Legion.
- * Every Mark VI persona can delegate against the selected workspace.
- */
-function ForgeLink({ config, boundCwd, locked }: { config: AppConfig; boundCwd?: string; locked?: boolean }) {
-  const t = useT()
-  const { settings, update } = useSettings()
-  const [browserOpen, setBrowserOpen] = useState(false)
-  const cwd = locked ? boundCwd || '' : settings.forgeCwd
-  // Show the trailing folder name (the meaningful part). Hisar paths are always
-  // POSIX with forward slashes — the UI uses the vault path as-is.
-  const folderName = cwd ? (cwd.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || cwd) : ''
-
-  return (
-    <>
-      {browserOpen && (
-        <HisarBrowser
-          config={config}
-          current={cwd}
-          onSelect={(path) => {
-            update({ forgeCwd: path || '' })
-            setBrowserOpen(false)
-          }}
-          onClose={() => setBrowserOpen(false)}
-        />
-      )}
-      <span className="hb-hide-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <span className="hb-query-box" style={{
-          display: 'flex', alignItems: 'center', gap: 6, height: 24,
-          maxWidth: 200, padding: '0 0.2rem 0 0.45rem',
-        }}>
-          <button
-            disabled={locked}
-            onClick={() => setBrowserOpen(true)}
-            title={locked ? (cwd || 'This chat has no project folder') : cwd ? t.header.workspaceSet(cwd) : t.header.workspaceUnset}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
-              border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
-              fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.02em',
-              color: cwd ? 'var(--hb-text-dim)' : 'var(--hb-text-faint)',
-            }}
-          >
-            {/* Hisar vault glyph — cloud-download, marking it as the network vault */}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-            </svg>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {folderName || (locked ? 'No project folder' : t.header.setWorkspace)}
-            </span>
-          </button>
-          {cwd && !locked && (
-            <button
-              onClick={() => update({ forgeCwd: '' })}
-              title={t.header.clearWorkspace}
-              style={{
-                display: 'flex', alignItems: 'center', flexShrink: 0,
-                border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
-                color: 'var(--hb-text-faint)',
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
-        </span>
-      </span>
-    </>
-  )
-}
 
 /**
  * A rail tile. 44px glass square on the --r-tile corner. `active` is the ONLY
@@ -256,14 +182,12 @@ export default function Header({
   // list has nothing to read, so fall back to the store's activeProjectId and
   // resolve the name off the pinned list the sidebar already fetched.
   const [projectNames, setProjectNames] = useState<Record<number, string>>({})
-  const [projectFolders, setProjectFolders] = useState<Record<number, string>>({})
   useEffect(() => {
     if (!state.activeProjectId) return
     let alive = true
     fetchProjects(config).then(list => {
       if (alive) {
         setProjectNames(Object.fromEntries(list.map(p => [p.id, p.name])))
-        setProjectFolders(Object.fromEntries(list.map(p => [p.id, p.cwd])))
       }
     }).catch(() => { if (alive) setProjectNames({}) })
     return () => { alive = false }
@@ -362,10 +286,6 @@ export default function Header({
         className="hb-btn hb-tile" data-room-actions aria-label={t.room.actions} title={t.room.actions}
         onClick={() => window.dispatchEvent(new CustomEvent('speda:room-actions'))}
         style={{ width: 30, height: 30, flexShrink: 0, fontSize: 21 }}>⋯</button>}
-
-      {/* Forge link — Optimus engine state + workspace (Optimus only) */}
-      <ForgeLink config={config} locked={state.activeSessionId != null || state.activeProjectId != null}
-        boundCwd={activeSession?.cwd || (state.activeProjectId ? projectFolders[state.activeProjectId] : undefined)} />
 
       {/* The rail is NOT here — it floats above the telemetry column, out of
           this column's clipped overflow. Layout renders <DeckRail/>. This

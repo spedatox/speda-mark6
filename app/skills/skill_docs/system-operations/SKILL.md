@@ -60,8 +60,8 @@ Mark VI owns the persona, conversation, model, uploads, job ticket, and progress
 delivery. Forge receives one bounded assignment and owns the execution loop,
 repository tools, and disposable isolated sandbox called **the Cell**. Progress
 is shown in Heartbreaker's normal subagent window. Forge has no socket or upload
-relationship with the client. The owner must select a directory under
-`/Forge/workspaces`; Mark VI maps that vault path into the execution host.
+relationship with the client. A project chat supplies its project files.
+Standalone assignments start in a private working folder for the conversation.
 
 `autobot` (`forge_coder`) can inspect, edit, run commands and verify. `forge_reviewer` is
 read-only. `decepticon` (`forge_pentester`) performs authorized local assessment in the security

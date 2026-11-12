@@ -78,7 +78,6 @@ class IgorApi(
         val documents: List<DocBlock> = emptyList(),
         val keepMessages: Int? = null,
         val regenerate: Boolean = false,
-        val cwd: String? = null,
         /** The project a BRAND-NEW chat is being started in. Only read by the
          *  backend on the turn that creates the session — a chat's project is
          *  fixed at birth — so sending it every turn is harmless. */

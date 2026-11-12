@@ -19,7 +19,7 @@ _TASK_TOOL_DEFINITION: dict = {
         "or when intermediate results would significantly bloat this context window. "
         "Do not use this for lookups, writes, reminders, or tasks completable in 1–3 tool calls. "
         "Choose scout, researcher, analyst, judge, archivist or general for isolated read-only Legion work. "
-        "Autobot, Decepticon and Forge reviewer roles require this conversation's bound native project and use its execution queue. "
+        "Autobot, Decepticon and Forge reviewer roles run asynchronously in the chat's project or an isolated working folder for standalone tasks. "
         "Read-only work returns findings by default; background or run_in_background returns an admission to collect with legion_inspect or legion_status. "
         "All children share the admitted root budget and deadline, and workers cannot spawn more workers."
     ),
@@ -42,7 +42,7 @@ _TASK_TOOL_DEFINITION: dict = {
             },
             "worker_id": {"type":"string","enum":["scout","researcher","analyst","judge","archivist","general","autobot","decepticon","forge_reviewer"]},
             "subagent_type": {"type":"string"},
-            "background": {"type":"boolean","description":"Detach read-only work into a tracked child; result must be collected. Forge work always uses the bound project queue."},
+            "background": {"type":"boolean","description":"Detach read-only work into a tracked child; result must be collected. Forge work always queues asynchronously."},
             "run_in_background": {"type":"boolean","description":"Historical alias for background; conflicting values are refused."},
             "acceptance": {"type":"array","items":{"type":"string","maxLength":1000},"minItems":1,"maxItems":20},
             "dependencies": {"type":"array","items":{"type":"string"},"maxItems":20},

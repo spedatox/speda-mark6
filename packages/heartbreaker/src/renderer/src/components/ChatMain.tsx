@@ -706,7 +706,6 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       keepMessages: opts.keepMessages,
       regenerate: opts.regenerate,
       // Forge workspace for Optimus jobs; ignored by in-process agents.
-      cwd: state.activeSessionId || state.activeProjectId ? undefined : settings.forgeCwd || undefined,
       // Voice mode is a property of the TURN, not the session: the backend
       // asks for a spoken answer with its visuals fenced off, instead of a
       // document that then gets read aloud at the owner.
@@ -990,7 +989,7 @@ export default function ChatMain({ config, voiceOpen, onCloseVoice, partyEngaged
       }
       forceUpdate(n => n + 1)
     }
-  }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt, settings.forgeCwd,
+  }, [state.activeSessionId, state.activeProjectId, state.isStreaming, config, settings.model, settings.systemPrompt,
       settings.streamReconnectAttempts, settings.streamReconnectDelayMs, settings.streamStallSeconds, settings.streamDeadSeconds,
       dispatch, t, rememberVoice, reply, state.room?.members, state.viewEpoch, stopSpeaking])
 
