@@ -338,7 +338,7 @@ class Projects:
         async with write_session(self.sessions) as db:
             run = await db.get(CoordinationRun, run_id)
             room = await self.coordinator.owned_room(db, run.user_id, run.room_id, lock=True)
-            if run.cancelled or run.deadline <= time.time():
+            if not room.project_id or run.cancelled or run.deadline <= time.time():
                 return False
             # Detached workers may finish before the public conversation settles.
             # Let its queued/running contributions finish before admitting an
@@ -348,7 +348,7 @@ class Projects:
             if speaking:
                 return False
             tasks = list(await db.scalars(select(ProjectTask).where(ProjectTask.run_id == run_id,
-                ProjectTask.status == 'succeeded')))
+                ProjectTask.project_id == room.project_id, ProjectTask.status == 'succeeded')))
             existing = set(await db.scalars(select(AgentStep.operation_id).where(AgentStep.run_id == run_id)))
             reviewed = set(await db.scalars(select(WorkerReview.task_id).where(WorkerReview.task_id.in_([t.id for t in tasks]))))
             task = next((t for t in tasks if 'forge-review:' + t.id not in existing and t.id not in reviewed), None)

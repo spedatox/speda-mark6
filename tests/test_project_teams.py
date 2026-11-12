@@ -42,6 +42,7 @@ async def test_standalone_forge_executes_without_binding_chat(memory, tmp_path, 
               input={'worker_id': role, 'description': 'Check tools', 'prompt': 'Check local tooling'}),
     ], 'tool_use')
     bits = await project_setup(memory, tmp_path, [assignment, reply('Queued')], executor)
+    bits.projects.settings.project_supervision_enabled = True
     room = await bits.coordinator.create(1, CreateRoom(lead=agent))
     try:
         result = await send(bits, room)
@@ -50,6 +51,7 @@ async def test_standalone_forge_executes_without_binding_chat(memory, tmp_path, 
         task = next(e['payload'] for e in events if e['kind'] == 'project_result')
         assert task['role'] == role
         assert task['artifact']['report'] == 'Standalone check completed'
+        assert not any(e['payload'].get('mode') == 'mission_review' for e in events)
         assert not (await bits.projects.inspect(1, bits.project['id']))['tasks']
         assert (await bits.coordinator.rooms(1))[0]['project_id'] is None
         with pytest.raises(CoordinationError, match='configured workspace root'):
