@@ -48,6 +48,7 @@ export default function RoomConversation({ config, party, voiceMode, reply, onCl
     let timer: ReturnType<typeof setTimeout> | undefined
     let cursor = 0
     let roomId: string | undefined
+    const operationSteps = new Set<string>()
     const load = async () => {
       try {
         if (!roomId) {
@@ -61,8 +62,11 @@ export default function RoomConversation({ config, party, voiceMode, reply, onCl
           const page = await fetchRoomEvents(config, roomId, cursor, controller.signal)
           if (controller.signal.aborted) return
           dispatch({ type: 'SET_ROOM', payload: { room: page.room, sessionId: sid } })
-          for (const event of page.events) if (event.kind === 'membership') {
-            dispatch({ type: 'ROOM_MEMBERSHIP', payload: { event, sessionId: sid } })
+          for (const event of page.events) {
+            if (event.kind === 'step_waiting' && event.payload.mode !== 'consult' && event.step_id) operationSteps.add(event.step_id)
+            if (event.kind === 'membership' || (event.step_id && operationSteps.has(event.step_id))) {
+              dispatch({ type: 'ROOM_MEMBERSHIP', payload: { event, sessionId: sid } })
+            }
           }
           cursor = page.next_cursor
           more = page.events.length === 200

@@ -17,7 +17,7 @@ command. Orion has the same host tools when a colleague requests his turn.
 For example, `{"action":"exec","command":"hostname; id -un"}` verifies the
 host and execution identity. Use the same tool to manage Docker and systemd
 services, inspect host logs and work with host files. Check
-`operation_status` with the returned operation ID if a command is still running.
+`operation_status` with the returned operation ID for explicit inspection. In a coordinated turn, a running command suspends the turn until its durable result arrives; do not repeatedly poll it.
 
 When a colleague needs live server evidence, ask Orion using `collaborate`.
 Orion can run host commands and use the built-in diagnostics during peer turns.

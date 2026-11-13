@@ -18,6 +18,7 @@ import sys
 import tempfile
 import threading
 import time
+from uuid import uuid4
 from contextlib import closing
 
 ROOT = Path("/opt/speda-operations/orion-host-ops")
@@ -110,7 +111,8 @@ def run(argv, timeout, payload=None):
                 except ProcessLookupError:
                     pass
                 process.wait()
-                return result("timeout")
+                return result("timeout", exit_code=process.returncode, truncated=truncated,
+                    **{k:v.decode("utf-8", "replace") for k,v in output.items()})
             return result("ok" if code == 0 else "failed", exit_code=code,
                           truncated=truncated, **{k: v.decode("utf-8", "replace") for k, v in output.items()})
 
@@ -230,33 +232,109 @@ def restart(identity, service):
         return result("unknown", reason="Container restart was requested. Its ready state was not confirmed.")
 
 
+def canonical_hash(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+                                    separators=(",", ":")).encode()).hexdigest()
+
+
 def save(identity, reply):
-    with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db, db:
+    with closing(sqlite3.connect(ROOT / "receipts.sqlite3", timeout=30)) as db, db:
+        row = db.execute("SELECT fingerprint FROM operations WHERE id=?", (identity,)).fetchone()
         db.execute("UPDATE operations SET reply=? WHERE id=?", (json.dumps(reply), identity))
-    print(json.dumps({"operation_id": identity, "status": reply["status"],
-                      "exit_code": reply.get("exit_code")}), flush=True)
+        if row and reply['status'] not in {'started', 'scheduled', 'running'}:
+            version = db.execute("SELECT COUNT(*) FROM event_outbox WHERE json_extract(payload, '$.operation_id')=?", (identity,)).fetchone()[0] + 1
+            event = dict(schema_version=1, executor='orion-host-v1', executor_instance=socket.gethostname(),
+                event_id=uuid4().hex, operation_id=identity, fingerprint=row[0], state_version=version,
+                result=reply, result_hash=canonical_hash(reply))
+            db.execute("INSERT INTO event_outbox(event_id, payload) VALUES (?, ?)",
+                       (event['event_id'], json.dumps(event)))
 
 
-def run_restart(identity, service):
+def supervised_operation(identity):
+    with closing(sqlite3.connect(ROOT / "receipts.sqlite3", timeout=30)) as db, db:
+        row = db.execute("SELECT request, launched FROM operation_workers WHERE id=?", (identity,)).fetchone()
+        if not row or row[1]:
+            return  # Never rerun an admitted worker after uncertain execution.
+        db.execute("UPDATE operation_workers SET launched=1 WHERE id=?", (identity,))
+        request = json.loads(row[0])
     try:
-        reply = restart(identity, service)
-    except (OSError, ValueError, KeyError):
-        reply = result("unknown", reason="The host restart result could not be confirmed.")
+        action = request['action']
+        if action in HOST_COMMANDS:
+            reply = host_command(request)
+        elif action == 'restart_service':
+            reply = restart(identity, request['service'])
+        elif action == 'service_logs':
+            reply = service_logs(request['service'])
+        else:
+            reply = run(DIAGNOSTICS[request['diagnostic']], 10)
+    except Exception:
+        reply = result('unknown', reason='Worker result requires reconciliation.')
     save(identity, reply)
+
+
+def launch_operation(request):
+    identity = request['operation_id']
+    unit = 'speda-orion-result-' + identity
+    launch = run(['/usr/bin/systemd-run', '--quiet', '--service-type=exec',
+        '--unit=' + unit, '--uid=root', '--gid=root', '--property=UMask=0077',
+        '/usr/bin/python3', SCRIPT, 'operation', identity], 10)
+    if launch['status'] != 'ok':
+        state = run(['/usr/bin/systemctl', 'is-active', unit], 5)
+        if state['status'] == 'ok':
+            return
+        if operation_status(identity)['status'] not in {'started', 'scheduled', 'running'}:
+            return
+        save(identity, result('unknown', reason='Worker launch could not be established; do not replay.'))
+
+
+class EventHandler(socketserver.StreamRequestHandler):
+    def handle(self):
+        _, uid, _ = struct.unpack('3i', self.request.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        if uid != 0:
+            return
+        self.request.settimeout(15)
+        try:
+            subscription = json.loads(self.rfile.readline(LIMIT + 1))
+            if subscription.get('schema_version') != 1 or type(subscription.get('after')) is not int:
+                return
+            after = subscription['after']
+            while True:
+                with closing(sqlite3.connect(ROOT / 'receipts.sqlite3', timeout=30)) as db:
+                    rows = db.execute('SELECT sequence, payload FROM event_outbox WHERE sequence>? ORDER BY sequence LIMIT 100', (after,)).fetchall()
+                for sequence, payload in rows:
+                    event = {**json.loads(payload), 'sequence':sequence}
+                    self.wfile.write(json.dumps(event).encode()+b'\n')
+                    self.wfile.flush()
+                    ack = json.loads(self.rfile.readline(LIMIT + 1))
+                    if ack.get('ack') != sequence:
+                        return
+                    after = sequence
+                    with closing(sqlite3.connect(ROOT / 'receipts.sqlite3', timeout=30)) as db, db:
+                        db.execute('INSERT OR REPLACE INTO event_ack VALUES (1, ?)', (after,))
+                if not rows:
+                    self.wfile.write(b'{"type":"heartbeat"}\n')
+                    self.wfile.flush()
+                    time.sleep(1)
+        except (OSError, ValueError, sqlite3.Error):
+            return
+
+
+class EventServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+
+
+def serve_events():
+    path = ROOT / 'socket/events.sock'
+    path.unlink(missing_ok=True)
+    with EventServer(str(path), EventHandler) as server:
+        path.chmod(0o600)
+        server.serve_forever()
 
 
 def operation_status(identity):
     with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db:
         row = db.execute("SELECT reply FROM operations WHERE id=?", (identity,)).fetchone()
     return json.loads(row[0]) if row else result("unavailable", reason="Operation not found.")
-
-
-def run_host_command(request):
-    try:
-        reply = host_command(request)
-    except (OSError, ValueError, OverflowError):
-        reply = result("unknown", reason="The host command result could not be confirmed.")
-    save(request["operation_id"], reply)
 
 
 def admit(request):
@@ -282,28 +360,24 @@ def admit(request):
     required = {"exec": ("command",), "read_file": ("path",), "write_file": ("path", "content")}
     if any(key not in request for key in required.get(action, ())):
         return result("denied", reason="Missing operation arguments.")
-    fingerprint = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
+    fingerprint = canonical_hash(request)
     initial = result("scheduled") if action == "restart_service" else result("started")
     with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db, db:
         row = db.execute("SELECT fingerprint, reply FROM operations WHERE id=?", (identity,)).fetchone()
         if row:
             return json.loads(row[1]) if row[0] == fingerprint else result("denied", reason="Operation ID was reused.")
         db.execute("INSERT INTO operations VALUES (?, ?, ?)", (identity, fingerprint, json.dumps(initial)))
+        db.execute("INSERT INTO operation_workers(id, request, launched) VALUES (?, ?, 0)", (identity, json.dumps(request)))
     print(json.dumps({"operation_id": identity, "action": action, "service": service}), flush=True)
-    if action == "restart_service":
-        threading.Thread(target=run_restart, args=(identity, service), daemon=True).start()
-        return initial
-    if action in HOST_COMMANDS:
-        thread = threading.Thread(target=run_host_command, args=(request,), daemon=True)
-        thread.start()
-        thread.join(timeout=2)
-        return operation_status(identity)
-    try:
-        reply = service_logs(service) if action == "service_logs" else run(DIAGNOSTICS[diagnostic], 10)
-    except (OSError, ValueError, KeyError):
-        reply = result("unknown", reason="The host operation result could not be confirmed.")
-    save(identity, reply)
-    return reply
+    launch_operation(request)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        reply = operation_status(identity)
+        if reply['status'] not in {'started', 'scheduled', 'running'}:
+            return reply
+        time.sleep(.05)
+    return operation_status(identity)
+
 
 
 class Handler(socketserver.StreamRequestHandler):
@@ -326,13 +400,26 @@ class Handler(socketserver.StreamRequestHandler):
         self.wfile.write(json.dumps(reply).encode() + b"\n")
 
 
-def serve():
-    os.umask(0o077)
+def initialize_receipts():
     with closing(sqlite3.connect(ROOT / "receipts.sqlite3")) as db, db:
         db.execute("CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, reply TEXT NOT NULL)")
-        db.execute("UPDATE operations SET reply=? WHERE reply IN (?, ?)", (
-            json.dumps(result("unknown", reason="Broker restarted before the outcome was recorded.")),
-            json.dumps(result("started")), json.dumps(result("scheduled"))))
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE IF NOT EXISTS operation_workers(id TEXT PRIMARY KEY, request TEXT NOT NULL, launched INTEGER NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS event_outbox(sequence INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS event_ack(id INTEGER PRIMARY KEY, sequence INTEGER NOT NULL)")
+
+
+def serve():
+    os.umask(0o077)
+    initialize_receipts()
+    # Inspect durable evidence. A missing unit cannot prove that an effect never ran.
+    with closing(sqlite3.connect(ROOT / 'receipts.sqlite3')) as db:
+        unfinished = db.execute("SELECT id FROM operations WHERE json_extract(reply, '$.status') IN ('started','scheduled','running')").fetchall()
+    for (identity,) in unfinished:
+        state = run(['/usr/bin/systemctl', 'is-active', 'speda-orion-result-' + identity], 5)
+        if state['status'] != 'ok':
+            save(identity, result('unknown', reason='No live worker or terminal receipt; reconciliation required.'))
+    threading.Thread(target=serve_events, daemon=True).start()
     SOCKET.unlink(missing_ok=True)
     with socketserver.UnixStreamServer(str(SOCKET), Handler) as server:
         SOCKET.chmod(0o600)
@@ -342,6 +429,8 @@ def serve():
 if __name__ == "__main__":
     if sys.argv[1:] == ["worker"]:
         worker()
+    elif len(sys.argv) == 3 and sys.argv[1] == "operation" and ID.fullmatch(sys.argv[2]):
+        supervised_operation(sys.argv[2])
     elif sys.argv[1:] == ["serve"]:
         serve()
     else:

@@ -87,9 +87,17 @@ fun foldRoomMessages(messages: List<ChatMessage>, event: RoomEvent, placeholderI
         val rows = if (index < 0) messages + row else messages.mapIndexed { at, m -> if (at == index) row else m }
         return orderedRoomRows(rows.filter { it.id != placeholderId })
     }
+    if (existing == null && event.kind == "step_waiting") return messages + ChatMessage(
+        id = "coord:$step", role = Role.Assistant, content = p.roomText("text").orEmpty(),
+        speaker = event.speaker, coordinationStepId = step, sessionId = sessionId,
+        isStreaming = false, status = "Command running", roomSequence = event.sequence, roomOrder = event.sequence,
+        roomEventSequence = event.sequence)
     if (existing == null) return messages
     val data = p["data"] ?: JsonNull
     val next = when (event.kind) {
+        "step_waiting" -> existing.copy(isStreaming = false, status = "Command running")
+        "operation_finished" -> existing.copy(status = "Command ${p.roomText("status") ?: "finished"}")
+        "step_resumed" -> existing.copy(isStreaming = true, status = null)
         "delta" -> existing.copy(content = existing.content + p.roomText("text").orEmpty(), status = null)
         "message" -> existing.copy(content = p.roomText("text").orEmpty(), isStreaming = false,
             serverMessageId = (p["message_id"] as? JsonPrimitive)?.intOrNull, roomSequence = event.sequence,

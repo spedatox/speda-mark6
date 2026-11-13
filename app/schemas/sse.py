@@ -3,6 +3,7 @@ from enum import Enum
 
 
 class SSEEventType(str, Enum):
+    WAITING = "step_waiting"
     START = "start"
     CHUNK = "chunk"
     THINKING = "thinking"

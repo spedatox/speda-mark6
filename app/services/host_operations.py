@@ -4,13 +4,19 @@ import asyncio
 import hashlib
 import json
 
+EVENT_SOCKET_PATH = "/run/speda-orion-ops/events.sock"
+
 SOCKET_PATH = "/run/speda-orion-ops/broker.sock"
+
+
+def operation_identity(args, context):
+    return args.get("operation_id") if args["action"] == "operation_status" else hashlib.sha256(
+        f"{context.request_id}:{context.tool_call_id}".encode()).hexdigest()[:32]
 
 
 async def host_operation(args, context):
     action = args["action"]
-    operation_id = args.get("operation_id") if action == "operation_status" else hashlib.sha256(
-        f"{context.request_id}:{context.tool_call_id}".encode()).hexdigest()[:32]
+    operation_id = operation_identity(args, context)
     request = {**args, "operation_id": operation_id}
     payload = json.dumps(request, ensure_ascii=False).encode() + b"\n"
     if len(payload) > 128 * 1024:

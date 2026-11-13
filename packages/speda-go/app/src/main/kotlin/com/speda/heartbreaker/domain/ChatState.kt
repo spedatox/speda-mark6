@@ -90,7 +90,8 @@ fun reduce(state: ChatState, action: ChatAction): ChatState = when (action) {
     is ChatAction.SetRoom -> if (state.activeSessionId != action.sessionId) state else state.copy(room = updateRoom(state.room, action.room))
     is ChatAction.RoomFrame -> if (state.activeSessionId != action.sessionId) state else {
         val snapshot = action.event.payload["room"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.let { roomJson.decodeFromJsonElement<RoomInfo>(it) }
-        state.copy(room = snapshot?.let { updateRoom(state.room, it) } ?: state.room,
+        state.copy(isStreaming = if (action.placeholderId.isEmpty()) state.isStreaming else when (action.event.kind) { "step_waiting" -> false; "step_resumed" -> true; else -> state.isStreaming },
+            room = snapshot?.let { updateRoom(state.room, it) } ?: state.room,
             messages = consolidateWorkerAnchors(foldRoomMessages(state.messages, action.event, action.placeholderId, action.sessionId)).toPersistentList())
     }
     is ChatAction.FinishRoomTurn -> if (state.activeSessionId != action.sessionId) state else state.copy(isStreaming = false,

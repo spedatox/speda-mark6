@@ -12,6 +12,7 @@ from app.profiles.base import AgentProfile
 from app.schemas.sse import SSEEvent, SSEEventType
 from app.services.damage_control import exception_facts, tool_error_details, turn_facts
 from app.services.llm_client import LLMClient
+from app.schemas.tool_outcome import CompletedToolResult, PendingOperation, StepSuspended
 from app.schemas.llm import ProviderError
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,11 @@ class AgentOrchestrator:
                             protocol.finish(incident, context.extra.get("incident_terminal", "turn_error")
                                             if event.type == SSEEventType.ERROR else None)
                     yield event
+        except StepSuspended:
+            completed = True
+            if protocol:
+                protocol.finish(incident)
+            raise
         except (ProviderError, TimeoutError, ValueError) as exc:
             completed = True
             code = getattr(exc, "code", "deadline" if isinstance(exc, TimeoutError) else "invalid_request")
@@ -286,6 +292,15 @@ class AgentOrchestrator:
         tools = self._registry.list_tools(context)
         iterations = 0
         continuations = 0
+        saved = context.extra.pop("operation_boundary", None)
+        replay = None
+        if saved:
+            from app.schemas.llm import Block, LLMMessage
+            messages = list(saved["messages"])
+            assistant = messages.pop()
+            replay = LLMMessage(content=[Block(**b) for b in assistant["content"] if b["type"] != "_provider_state"],
+                stop_reason="tool_use", continuation=next((b for b in assistant["content"] if b["type"] == "_provider_state"), None))
+            iterations, continuations = saved["iterations"] - 1, saved["continuations"]
 
         yield SSEEvent(
             type=SSEEventType.START,
@@ -331,59 +346,62 @@ class AgentOrchestrator:
                 },
             )
 
-            tools = self._registry.list_tools(context)
-            from app.core.surface import transport_messages
-            call_args = dict(
-                model=context.model,
-                system=context.system_prompt,
-                messages=transport_messages(context,messages),
-                tools=tools,
-                max_tokens=context.output_token_cap or (self._model_policy.settings.chat_max_output_tokens if self._model_policy else 8096),
-            )
-            if context.effective_policy and context.effective_policy.snapshot.budget_mode:
-                call_args['max_tokens'] = min(call_args['max_tokens'], 2048)
-            if context.effective_policy is not None:
-                call_args["policy"] = context.effective_policy
-                call_args["user_id"] = context.user_id
-                call_args["agent_id"] = context.agent_id
-                call_args["role"] = context.task_role
-                call_args["cache_key"] = f"{context.user_id}:{context.agent_id}:{context.session_id}"
-            call_started = monotonic()
-            first_text = True
-            log.info("provider_payload", extra={"request_id": context.request_id,
-                "iteration": iterations, "payload_utf8_bytes": len(json.dumps({k:v for k,v in call_args.items() if k != "policy"}).encode("utf-8"))})
-            stream_context = (context.budget_handle.stream(context, **call_args) if context.budget_handle
-                              else self._client.stream_message(**call_args))
-            async with stream_context as stream:
-                async def deltas():
-                    if hasattr(stream, "event_stream"):
-                        async for kind, text in stream.event_stream():
-                            yield kind, text
-                    else:
-                        async for text in stream.text_stream:
-                            yield "text", text
-                async for kind, chunk in deltas():
-                    if kind == "thinking":
-                        if context.effective_policy and context.effective_policy.show_thinking:
-                            yield SSEEvent(type=SSEEventType.THINKING, data={"text": chunk},
-                                session_id=context.session_id, request_id=context.request_id)
-                        continue
-                    if first_text and chunk:
-                        log.info("provider_first_text", extra={"request_id": context.request_id,
-                            "iteration": iterations, "provider_ms": (monotonic()-call_started)*1000,
-                            "turn_ms": (monotonic()-turn_started)*1000})
-                        first_text = False
-                    yield SSEEvent(type=SSEEventType.CHUNK, data=chunk,
-                        session_id=context.session_id, request_id=context.request_id)
-                response = await stream.get_final_message()
+            if replay is not None:
+                response, replay = replay, None
+            else:
+                tools = self._registry.list_tools(context)
+                from app.core.surface import transport_messages
+                call_args = dict(
+                    model=context.model,
+                    system=context.system_prompt,
+                    messages=transport_messages(context,messages),
+                    tools=tools,
+                    max_tokens=context.output_token_cap or (self._model_policy.settings.chat_max_output_tokens if self._model_policy else 8096),
+                )
+                if context.effective_policy and context.effective_policy.snapshot.budget_mode:
+                    call_args['max_tokens'] = min(call_args['max_tokens'], 2048)
+                if context.effective_policy is not None:
+                    call_args["policy"] = context.effective_policy
+                    call_args["user_id"] = context.user_id
+                    call_args["agent_id"] = context.agent_id
+                    call_args["role"] = context.task_role
+                    call_args["cache_key"] = f"{context.user_id}:{context.agent_id}:{context.session_id}"
+                call_started = monotonic()
+                first_text = True
+                log.info("provider_payload", extra={"request_id": context.request_id,
+                    "iteration": iterations, "payload_utf8_bytes": len(json.dumps({k:v for k,v in call_args.items() if k != "policy"}).encode("utf-8"))})
+                stream_context = (context.budget_handle.stream(context, **call_args) if context.budget_handle
+                                  else self._client.stream_message(**call_args))
+                async with stream_context as stream:
+                    async def deltas():
+                        if hasattr(stream, "event_stream"):
+                            async for kind, text in stream.event_stream():
+                                yield kind, text
+                        else:
+                            async for text in stream.text_stream:
+                                yield "text", text
+                    async for kind, chunk in deltas():
+                        if kind == "thinking":
+                            if context.effective_policy and context.effective_policy.show_thinking:
+                                yield SSEEvent(type=SSEEventType.THINKING, data={"text": chunk},
+                                    session_id=context.session_id, request_id=context.request_id)
+                            continue
+                        if first_text and chunk:
+                            log.info("provider_first_text", extra={"request_id": context.request_id,
+                                "iteration": iterations, "provider_ms": (monotonic()-call_started)*1000,
+                                "turn_ms": (monotonic()-turn_started)*1000})
+                            first_text = False
+                        yield SSEEvent(type=SSEEventType.CHUNK, data=chunk,
+                            session_id=context.session_id, request_id=context.request_id)
+                    response = await stream.get_final_message()
 
-            if getattr(response, "policy", None) is not None:
-                from dataclasses import replace
-                context.effective_policy = replace(response.policy, fallbacks=())
-                context.model = response.policy.spec.ref
-                yield SSEEvent(type=SSEEventType.POLICY,
-                    data={**response.policy.receipt(), "attempts": response.attempts, "usage": response.usage,
-                          "outcome": response.stop_reason}, session_id=context.session_id, request_id=context.request_id)
+                if getattr(response, "policy", None) is not None:
+                    from dataclasses import replace
+                    context.effective_policy = replace(response.policy, fallbacks=())
+                    context.model = response.policy.spec.ref
+                    yield SSEEvent(type=SSEEventType.POLICY,
+                        data={**response.policy.receipt(), "attempts": response.attempts, "usage": response.usage,
+                              "outcome": response.stop_reason}, session_id=context.session_id, request_id=context.request_id)
 
             stop_reason = response.stop_reason
 
@@ -418,14 +436,19 @@ class AgentOrchestrator:
                             raise
                         invalid_arguments[index] = str(exc)
 
-                tool_results = []
+                tool_results = list(saved["prior_results"]) if saved else []
+                resume_cursor = saved["cursor"] if saved else 0
+                saved = None
                 for tool_index, tool_block in enumerate(tool_use_blocks):
-                    yield SSEEvent(
-                        type=SSEEventType.TOOL,
-                        data={"name": tool_block.name, "id": tool_block.id, 'input':tool_block.input},
-                        session_id=context.session_id,
-                        request_id=context.request_id,
-                    )
+                    if tool_index < resume_cursor:
+                        continue
+                    if not any(t['id'] == tool_block.id for t in context.extra.get('display_tools', [])):
+                        yield SSEEvent(
+                            type=SSEEventType.TOOL,
+                            data={"name": tool_block.name, "id": tool_block.id, 'input':tool_block.input},
+                            session_id=context.session_id,
+                            request_id=context.request_id,
+                        )
                     if invalid_arguments:
                         # Preflight rejects the whole batch before any side effect.
                         # Pair each tool use with a result so the model can correct it.
@@ -449,7 +472,17 @@ class AgentOrchestrator:
                     )
                     try:
                         files_before = len(context.extra.get('produced_files', []))
-                        result = await self._registry.execute_recorded(tool_block, context)
+                        waits = getattr(context.coordination, "operation_waits", None)
+                        if waits and self._registry.supports_pending(tool_block):
+                            await waits.boundary(context, messages, iterations, continuations, tool_index, tool_results)
+                        result = await self._registry.execute_outcome(tool_block, context)
+                        if isinstance(result, PendingOperation):
+                            await waits.suspend(context, result)
+                            yield SSEEvent(type=SSEEventType.WAITING, data={"operation_id": result.operation_id},
+                                session_id=context.session_id, request_id=context.request_id)
+                            raise StepSuspended()
+                        if isinstance(result, CompletedToolResult):
+                            result = result.text
                     except (ProviderError, TimeoutError):
                         context.extra["incident_terminal"] = "tool_stopped_turn"
                         context.extra["incident_tool"] = tool_block.name

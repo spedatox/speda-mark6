@@ -17,6 +17,7 @@ _SERVICE_NAME = re.compile(
 
 class SystemOpsSkill(Skill):
     name = "system_ops"
+    resumable_operations = True
     read_only = False
     memoize = False
     restricted_to = frozenset({"orion"})
@@ -27,8 +28,8 @@ class SystemOpsSkill(Skill):
         "the host. Use read_file and write_file with absolute host paths. Commands have no runtime "
         "limit unless you supply a timeout. Use status, services, incidents, diagnostics and "
         "service_logs for common checks. Use security_incidents for watchdog warnings and flood indicators. Use restart_service "
-        "for a managed restart. For an app restart, give the owner the operation ID and finish the turn. "
-        "Use operation_status to check a running, scheduled or uncertain command before repeating it."
+        "for a managed restart. Running commands suspend this turn until their saved result arrives. "
+        "Use operation_status for explicit inspection; uncertain commands require reconciliation before repeating them."
     )
     input_schema = {
         "type": "object",
@@ -76,6 +77,9 @@ class SystemOpsSkill(Skill):
                                              search="security_watchdog" if security else "service_", limit=10, offset=0)
             return json.dumps({"status": "ok", **report}, ensure_ascii=False)
         if action not in {"status", "services"}:
+            waits = getattr(context.coordination, "operation_waits", None)
+            if waits:
+                return await waits.submit({**args, "action": action}, context)
             response = await host_operation(args, context)
             return json.dumps(response, ensure_ascii=False)
         try:

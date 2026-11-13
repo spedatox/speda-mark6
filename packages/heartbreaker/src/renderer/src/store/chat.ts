@@ -126,6 +126,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const confirmed = event.kind === 'membership' ? event.payload.room as RoomInfo | undefined : undefined
       return { ...state, messages: foldRoomMessages(state.messages, event, state.roomStream.placeholderId, sessionId),
         room: confirmed ? updateRoom(state.room, confirmed) : state.room,
+        isStreaming: event.kind === 'step_waiting' ? false : event.kind === 'step_resumed' ? true : state.isStreaming,
         roomStream: { ...state.roomStream, cursor: event.sequence } }
     }
     case 'SET_CONFIG': {

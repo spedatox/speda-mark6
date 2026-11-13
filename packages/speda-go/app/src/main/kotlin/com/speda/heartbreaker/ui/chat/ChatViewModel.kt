@@ -526,6 +526,7 @@ class ChatViewModel(
         fun current() = viewEpoch == epoch && state.value.config == cfg && state.value.activeSessionId == sessionId
         roomJob = viewModelScope.launch {
             var cursor = 0L
+            val operationSteps = mutableSetOf<String>()
             var room: RoomInfo? = null
             while (isActive && current()) {
                 try {
@@ -535,8 +536,10 @@ class ChatViewModel(
                         val page = api.fetchRoomEvents(cfg, bound.id, cursor)
                         if (!current()) return@launch
                         dispatch(ChatAction.SetRoom(page.room, sessionId))
-                        // Raw Coordinator events include private consultations. Only membership notices belong here.
-                        page.events.filter { it.kind == "membership" }.forEach { dispatch(ChatAction.RoomFrame(it, "", sessionId)) }
+                        page.events.forEach { event ->
+                            if (event.kind == "step_waiting" && event.payload.roomText("mode") != "consult") event.stepId?.let { operationSteps.add(it) }
+                            if (event.kind == "membership" || event.stepId?.let { it in operationSteps } == true) dispatch(ChatAction.RoomFrame(event, "", sessionId))
+                        }
                         cursor = page.nextCursor
                         _roomConnection.value = null
                         if (page.events.size == 200) continue

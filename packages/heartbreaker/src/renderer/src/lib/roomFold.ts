@@ -51,6 +51,7 @@ export function foldRoomMessages(messages: ChatMessage[], event: RoomEvent, plac
   const step = event.step_id
   const index = messages.findIndex(message => message.coordinationStepId === step && !message.isWorkerAnchor)
   const existing = index >= 0 ? messages[index] : undefined
+  if (existing && event.sequence <= (existing.roomSequence ?? 0)) return messages
   if (event.kind === 'speaker_started') {
     if (event.payload.mode === 'consult') return messages
     const next: ChatMessage = { ...existing, id: roomMessageId(step), role: 'assistant', speaker: event.speaker,
@@ -61,9 +62,17 @@ export function foldRoomMessages(messages: ChatMessage[], event: RoomEvent, plac
     if (index >= 0) return orderedRoomRows(messages.map((message, at) => at === index ? next : message).filter(message => message.id !== placeholderId))
     return orderedRoomRows([...messages.filter(message => message.id !== placeholderId), next])
   }
+  if (!existing && event.kind === 'step_waiting') return [...messages, {
+    id: roomMessageId(step), role: 'assistant', content: String(event.payload.text ?? ''), tools: [],
+    speaker: event.speaker, coordinationStepId: step, sessionId, isStreaming: false, isError: false,
+    status: 'Command running', roomSequence: event.sequence, roomOrder: event.sequence,
+  }]
   if (!existing) return messages
   let next = existing
   switch (event.kind) {
+    case 'step_waiting': next = { ...existing, isStreaming: false, status: 'Command running' }; break
+    case 'operation_finished': next = { ...existing, status: `Command ${String(event.payload.status ?? 'finished')}` }; break
+    case 'step_resumed': next = { ...existing, isStreaming: true, status: undefined }; break
     case 'delta': next = { ...existing, content: existing.content + String(event.payload.text ?? '') }; break
     case 'message': next = { ...existing, content: String(event.payload.text ?? ''), isStreaming: false,
       serverMessageId: Number(event.payload.message_id), roomSequence: event.sequence, status: undefined, thinkingDone: true }; break
@@ -83,5 +92,5 @@ export function foldRoomMessages(messages: ChatMessage[], event: RoomEvent, plac
       next = { ...existing, isStreaming: false, isError: true, thinkingDone: true,
         errorNote: String(event.payload.reason ?? 'Contribution stopped'), status: undefined }; break
   }
-  return next === existing ? messages : messages.map((message, at) => at === index ? next : message)
+  return next === existing ? messages : messages.map((message, at) => at === index ? { ...next, roomSequence: event.sequence } : message)
 }

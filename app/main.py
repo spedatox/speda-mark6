@@ -301,6 +301,9 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     app.state.library = library
     app.state.library_controls = LibraryControls(indexer, budget)
     app.state.profiles = profiles
+    from app.services.operation_waits import OperationWaits
+    coordinator.operation_waits = OperationWaits(coordinator)
+    app.state.operation_waits = coordinator.operation_waits
     app.state.coordinator = coordinator
     app.state.coordination_budget = coordination_budget
     app.state.projects = projects
@@ -311,7 +314,9 @@ async def application_lifespan(app: FastAPI, incident_tasks):
         registry._skills['hisar'], configured=bool(settings.hisar_machine_token))
     recovery = asyncio.create_task(chat_turns.recover())
     if settings.orchestration_rooms_enabled:
+        await coordinator.operation_waits.recover()
         await coordinator.recover()
+        coordinator.operation_waits.start()
 
     logger.info(
         "startup_complete",
@@ -342,6 +347,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
         logger.warning('startup_recovery_failed',exc_info=False)
     await chat_turns.shutdown()
     await projects.cloud.shutdown()
+    await coordinator.operation_waits.close()
     await coordinator.shutdown()
     if incident_task:
         incident_task.cancel()

@@ -281,7 +281,8 @@ class ClientCompatibility:
                     if event['step_id'] in private or kind == 'consult_result':
                         continue
                     if kind in {'user_message', 'speaker_started', 'delta', 'message', 'membership', 'thinking',
-                            'tool', 'tool_result', 'file', 'contribution_stopped', 'contribution_skipped'}:
+                            'tool', 'tool_result', 'file', 'contribution_stopped', 'contribution_skipped',
+                            'operation_started', 'operation_finished', 'step_waiting', 'step_resumed'}:
                         yield encode('room_event', event)
                         continue
                 if kind == "speaker_started" and not structured and (mapping.agent_id == "warroom" or event["speaker"] != mapping.agent_id):

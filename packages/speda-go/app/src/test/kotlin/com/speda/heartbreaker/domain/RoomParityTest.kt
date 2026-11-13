@@ -14,6 +14,21 @@ class RoomParityTest {
         ChatMessage("local-user", Role.User, "Plan the week"), ChatMessage("placeholder", Role.Assistant, "", isStreaming = true, sessionId = 1)))
     private fun play(state: ChatState) = trace().fold(state) { s, e -> reduce(s, ChatAction.RoomFrame(e, "placeholder", 1)) }
 
+    @Test fun operation_wait_resume_and_replay_preserve_the_original_message() {
+        fun event(sequence: Long, kind: String, text: String? = null) = RoomEvent("room", sequence,
+            stepId = "operation", speaker = "orion", kind = kind,
+            payload = buildJsonObject { if (text != null) put("text", text) })
+        val events = listOf(event(1, "speaker_started"), event(2, "delta", "Running."),
+            event(3, "step_waiting"), event(4, "operation_finished"), event(5, "step_resumed"), event(6, "delta", " Done."))
+        val waiting = events.take(3).fold(begin()) { state, frame -> reduce(state, ChatAction.RoomFrame(frame, "placeholder", 1)) }
+        assertFalse(waiting.isStreaming)
+        assertEquals("Command running", waiting.messages.last().status)
+        val finished = events.drop(3).fold(waiting) { state, frame -> reduce(state, ChatAction.RoomFrame(frame, "placeholder", 1)) }
+        assertEquals("Running. Done.", finished.messages.last().content)
+        assertTrue(finished.isStreaming)
+        assertEquals(finished.messages, events.fold(finished) { state, frame -> reduce(state, ChatAction.RoomFrame(frame, "placeholder", 1)) }.messages)
+    }
+
     @Test fun shared_desktop_trace_keeps_peer_exchange_and_reply_ids_without_owner_relay() {
         val result = play(begin())
         val speakers = result.messages.filter { it.speaker != null }

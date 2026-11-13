@@ -323,6 +323,17 @@ class CapabilityRegistry:
         if self._bounded_mail_automation(context) and self._mail_calendar_tool(call.name):
             self._check_mail_calendar_args(call.input, context)
 
+    def supports_pending(self, call):
+        """Only registered executor adapters can opt into durable suspension."""
+        executor = self._skills.get(call.name) or self._adapters.get(call.name)
+        return bool(getattr(executor, 'resumable_operations', False))
+
+    async def execute_outcome(self, call, context):
+        """Typed runtime boundary; legacy executor strings remain ordinary results."""
+        from app.schemas.tool_outcome import CompletedToolResult, PendingOperation
+        result = await self.execute_recorded(call, context)
+        return result if isinstance(result, (CompletedToolResult, PendingOperation)) else CompletedToolResult(result)
+
     async def execute_recorded(self, call, context):
         """Validate authorization/schema, admit durably, then execute at most once.
 
@@ -368,6 +379,11 @@ class CapabilityRegistry:
                 result = await self.execute(call.name, call.input, context)
         else:
             result = await self.execute(call.name, call.input, context)
+        from app.schemas.tool_outcome import PendingOperation, CompletedToolResult
+        if isinstance(result, PendingOperation):
+            return result
+        if isinstance(result, CompletedToolResult):
+            result = result.text
         async with write_session(self._receipt_sessions) as db:
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == context.user_id,

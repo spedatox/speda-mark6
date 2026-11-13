@@ -25,6 +25,7 @@ from app.schemas.coordination import Collaboration, SpendingPolicy
 from app.schemas.llm import PolicyDocument, ThinkingRequest, ProviderError
 from app.schemas.memory_runtime import MemoryBudget, MemoryPacket
 from app.schemas.sse import SSEEventType
+from app.schemas.tool_outcome import StepSuspended
 from app.services.coordination_budget import CoordinationError, digest, insert_for, run_expired, call_deadline
 from app.services.memory_store import capture_source
 
@@ -756,6 +757,8 @@ class Coordinator:
                 budget["seen"] = sorted(shared.seen)
                 await db.execute(update(CoordinationRun).where(CoordinationRun.id == run.id)
                     .values(memory=asdict(context.memory_packet), memory_budget=budget))
+        if getattr(self, "operation_waits", None):
+            await self.operation_waits.restore(context)
         return context
 
     async def pin_prompt(self, context):
@@ -777,7 +780,8 @@ class Coordinator:
         await self.notify()
 
     async def _speak(self, run_id, step, context):
-        chunks, pending, flushed, error = [], "", time.monotonic(), None
+        chunks = [context.extra.get("operation_partial_text", "")]
+        pending, flushed, error = "", time.monotonic(), None
         try:
             async for event in self.orchestrator.run(context):
                 # Publish preceding prose before its tool/status boundary so the
@@ -787,6 +791,7 @@ class Coordinator:
                     pending, flushed = '', time.monotonic()
                 if event.type == SSEEventType.CHUNK:
                     chunks.append(event.data)
+                    context.extra["operation_partial_text"] = "".join(chunks)
                     pending += event.data
                     if len(pending) >= 512 or time.monotonic() - flushed > .25:
                         await self.emit(run_id, "delta", step.agent_id, {"text": pending}, step.id)
@@ -872,13 +877,20 @@ class Coordinator:
                             {"reason": "participant dismissed"}, run.id, step.id)
                         continue
                     step.status = "running"
-                    await self.event(db, room, "speaker_started", step.agent_id,
+                    resuming = False
+                    if getattr(self, "operation_waits", None):
+                        from app.models.operation_wait import ToolBoundary
+                        saved_boundary = await db.get(ToolBoundary, step.id)
+                        resuming = saved_boundary is not None and saved_boundary.status == "resume_ready"
+                    await self.event(db, room, "step_resumed" if resuming else "speaker_started", step.agent_id,
                         {"profile_revision": run.profiles[step.agent_id]["revision"], "mode": step.mode}, run.id, step.id)
                 context = await self.context_for(run, step, room, user)
                 reply_task = asyncio.create_task(self._speak(run_id, step, context))
                 self.replies[step.id] = reply_task
                 try:
                     text = await reply_task
+                except StepSuspended:
+                    continue
                 except (asyncio.CancelledError, CoordinationError):
                     if asyncio.current_task().cancelling():
                         raise
@@ -934,6 +946,14 @@ class Coordinator:
             async with write_session(self.sessions) as db:
                 run = await db.get(CoordinationRun, run_id)
                 room = await self.owned_room(db, run.user_id, run.room_id, lock=True)
+                waiting_operations = await db.scalar(select(func.count()).select_from(AgentStep).where(
+                    AgentStep.run_id == run_id, AgentStep.status.in_(['waiting_operations', 'resume_ready', 'held'])))
+                if waiting_operations:
+                    run.status = 'waiting_operations'
+                    run.executor, run.lease_until = None, 0
+                    if room.active_run == run.id:
+                        room.active_run = None
+                    return
                 jobs = await db.scalar(select(func.count()).select_from(ProjectTask).where(
                     ProjectTask.run_id == run_id))
                 children = await db.scalar(select(func.count()).select_from(LegionExecution).where(
@@ -1043,7 +1063,13 @@ class Coordinator:
             steps = (await db.execute(select(AgentStep).where(AgentStep.run_id == run_id)
                 .order_by(AgentStep.ordinal))).scalars().all()
             calls = (await db.execute(select(ModelCallReceipt).where(ModelCallReceipt.run_id == run_id))).scalars().all()
-            return {"id": run.id, "room_id": run.room_id, "status": run.status, "cancelled": run.cancelled,
+            from app.models.operation_wait import OperationBinding, OperationContinuation
+            continuations = list(await db.scalars(select(OperationContinuation).where(OperationContinuation.step_id.in_([s.id for s in steps]))))
+            operations = list(await db.scalars(select(OperationBinding).where(OperationBinding.run_id == run_id)))
+            return {"continuations": [{"step_id": q.step_id, "generation": q.generation, "status": q.status} for q in continuations],
+                "operations": [{"operation_id": o.operation_id, "state": o.state,
+                "deadline": o.deadline, "receipt_id": o.receipt_id} for o in operations],
+                "id": run.id, "room_id": run.room_id, "status": run.status, "cancelled": run.cancelled,
                 "deadline": run.deadline, "reserved": {"calls": run.calls, "tokens": run.tokens,
                 "microdollars": run.microdollars}, "contributions": run.contributions,
                 "steps": [{"id": s.id, "agent_id": s.agent_id, "status": s.status, "result": s.result} for s in steps],
@@ -1059,7 +1085,9 @@ class Coordinator:
             if run.status in {"succeeded", "cancelled", "failed", "partial", "expired"}:
                 return {"accepted": False, "status": run.status}
             run.cancelled = True
-            if run.status in {"queued", "waiting_room"}:
+            await db.execute(update(AgentStep).where(AgentStep.run_id == run_id,
+                AgentStep.status.in_(["waiting_operations", "resume_ready", "held"])).values(status="cancelled"))
+            if run.status in {"queued", "waiting_room", "waiting_operations"}:
                 run.status = "cancelled"
                 if room.active_run == run.id:
                     room.active_run = None
@@ -1086,9 +1114,9 @@ class Coordinator:
                 raise CoordinationError("not_found", "Contribution unavailable", 404)
             room = await self.owned_room(db, owner, run.room_id, lock=True)
             await db.refresh(step)
-            if step.status not in {"queued", "waiting_reply", "running", "cancel_requested"}:
+            if step.status not in {"queued", "waiting_reply", "running", "cancel_requested", "waiting_operations", "resume_ready", "held"}:
                 return {"accepted": False, "status": step.status}
-            step.status = "cancelled" if step.status in {"queued", "waiting_reply"} else "cancel_requested"
+            step.status = "cancelled" if step.status in {"queued", "waiting_reply", "waiting_operations", "resume_ready", "held"} else "cancel_requested"
             await self.event(db, room, "contribution_cancel_requested", "owner", {}, run.id, step.id)
         task = self.replies.get(step_id)
         if task:
@@ -1104,9 +1132,9 @@ class Coordinator:
                 raise CoordinationError("not_found", "Run unavailable", 404)
             room = await self.owned_room(db, owner, run.room_id, lock=True)
             steps = list(await db.scalars(select(AgentStep).where(AgentStep.run_id == run_id,
-                AgentStep.status.in_(["queued", "waiting_reply", "running", "cancel_requested"]))))
+                AgentStep.status.in_(["queued", "waiting_reply", "running", "cancel_requested", "waiting_operations", "resume_ready", "held"]))))
             for step in steps:
-                step.status = "cancelled" if step.status in {"queued", "waiting_reply"} else "cancel_requested"
+                step.status = "cancelled" if step.status in {"queued", "waiting_reply", "waiting_operations", "resume_ready", "held"} else "cancel_requested"
                 await self.event(db, room, "contribution_cancel_requested", "owner", {}, run.id, step.id)
             step_ids = [step.id for step in steps]
         tasks = [self.replies[sid] for sid in step_ids if sid in self.replies]
