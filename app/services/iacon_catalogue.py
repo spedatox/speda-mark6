@@ -10,6 +10,7 @@ from app.models.memory_serving import MemoryChange, MemoryServingUnit
 from app.schemas.iacon import Command
 from app.schemas.memory_runtime import EvidenceSection
 from app.services.memory_store import capture_source, digest, bump_epoch, fold
+from app.database import write_session
 
 
 class Conflict(ValueError):
@@ -52,6 +53,12 @@ class Catalogue:
     def __init__(self, store):
         self.store, self.sessions = store, store.sessions
 
+    async def intake_source(self, user_id, *, key, content):
+        """Reserve the writer before the immutable-key lookup and source insert."""
+        async with write_session(self.sessions) as db:
+            row = await capture_source(db, user_id=user_id, source_key='owner-intake:' + key, content=content)
+            return {'source_id': row.id, 'content_hash': row.content_hash}
+
     async def scope(self, db, user_id, row, sources):
         result = evidence_scope(row, sources)
         retired = await db.scalar(select(IaconSourceRetirement.source_id).where(
@@ -62,7 +69,7 @@ class Catalogue:
 
     async def apply(self, user_id, command: Command, *, actor="owner", db=None):
         if db is None:
-            async with self.sessions() as own, own.begin():
+            async with write_session(self.sessions) as own:
                 return await self.apply(user_id, command, actor=actor, db=own)
         if actor not in {"owner", "orion_review", "telegram_owner", "migration"}:
             raise ValueError("Unreviewed proposals cannot write canonical records")
@@ -220,7 +227,7 @@ class Catalogue:
             source_only_ids={s.id for s in sources.values() if not s.provenance.get("eligible_for_context", True)})
 
     async def refresh(self, user_id, record_id):
-        async with self.sessions() as db, db.begin():
+        async with write_session(self.sessions) as db:
             row = await db.get(IaconRecord, record_id)
             if not row or row.user_id != user_id:
                 raise ValueError("Unknown projection owner")

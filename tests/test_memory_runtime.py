@@ -114,9 +114,33 @@ async def test_immutable_source_key_cannot_be_overwritten(memory):
 async def test_future_validity_not_injected_as_current(memory):
     await memory.seed("Nora starts the role next year.", title="Nora", aliases=("Nora",),
         section_kwargs={"valid_from": date.today() + timedelta(days=365)})
-    packet = await MemoryRuntime(memory.store).prepare(memory.context("Nora role"))
+    # Verify temporal safety independently of shared-runner speed. The dedicated
+    # deadline tests retain the production ceilings and cancellation contract.
+    packet = await MemoryRuntime(memory.store, prepare_timeout=2.5).prepare(memory.context("Nora role"))
     assert packet.status not in {"unavailable", "deadline"}
     assert "starts the role" not in packet_json(packet)
+
+
+async def test_default_automatic_deadlines_keep_cold_and_warm_limits(memory, monkeypatch):
+    from app.schemas.memory_runtime import Deadline
+    budgets = []
+    original = Deadline.after
+    def record_budget(seconds):
+        budgets.append(seconds)
+        return original(2.5)  # This test inspects policy, not runner wall-clock speed.
+    monkeypatch.setattr(Deadline, 'after', record_budget)
+
+    class EmptyStore:
+        async def read(self, *args, **kwargs):
+            return {'epoch': 0, 'boundary': 0, 'units': [], 'sources': [], 'candidate_limit_reached': False}
+        async def epoch(self, *args, **kwargs):
+            return 0
+
+    runtime = MemoryRuntime(EmptyStore())
+    for _ in range(2):
+        packet = await runtime.prepare(memory.context())
+        assert packet.status not in {'unavailable', 'deadline'}
+    assert budgets == [0.5, 0.25]
 
 
 async def test_expired_review_is_unverified_not_completed(memory):

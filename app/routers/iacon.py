@@ -27,11 +27,8 @@ def scheduler(request: Request):
 
 @router.post("/sources")
 async def source(request: Request, body: SourceIntake):
-    from app.services.memory_store import capture_source
     try:
-        async with request.app.state.iacon.sessions() as db, db.begin():
-            row = await capture_source(db, user_id=1, source_key="owner-intake:" + body.key, content=body.text)
-            return {"source_id": row.id, "content_hash": row.content_hash}
+        return await request.app.state.iacon.intake_source(1, key=body.key, content=body.text)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
 

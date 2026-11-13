@@ -5,6 +5,77 @@ from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
 from app.database import write_session
 
 
+@pytest.mark.parametrize('operation', ['source', 'apply', 'refresh'])
+async def test_iacon_writers_reserve_before_evidence_reads(memory, operation):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.routers.iacon import router
+    from app.schemas.iacon import Command
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.memory_store import MemoryStore
+
+    source_id, _ = await memory.seed('I like cycling.', role='owner', publish=False)
+    command = Command(command_id='writer-test', kind='preference', title='Exercise',
+        payload={'text': 'I like cycling.'},
+        evidence=[{'source_id': source_id, 'start': 0, 'end': 15, 'quote': 'I like cycling.'}])
+    original = Catalogue(memory.store)
+    record = await original.apply(1, command) if operation == 'refresh' else None
+
+    # Match production's explicit BEGIN; otherwise aiosqlite's legacy transaction
+    # handling does not reproduce a deferred WAL reader failing its write upgrade.
+    @event.listens_for(memory.engine.sync_engine, 'connect')
+    def explicit_transactions(connection, _):
+        connection.isolation_level = None
+    @event.listens_for(memory.engine.sync_engine, 'begin')
+    def begin(connection):
+        connection.exec_driver_sql('BEGIN')
+    await memory.engine.dispose()
+    writers = []
+    interleaved = False
+
+    async def compete():
+        async with write_session(memory.sessions) as db:
+            await db.execute(text("UPDATE users SET name='Competing writer' WHERE id=1"))
+
+    class InterleavedSession(AsyncSession):
+        async def execute(self, statement, *args, **kwargs):
+            nonlocal interleaved
+            result = await super().execute(statement, *args, **kwargs)
+            sql = str(statement).lstrip()
+            table = 'iacon_work' if operation == 'apply' else 'memory_changes'
+            if not interleaved and sql.startswith('SELECT') and f'FROM {table}' in sql:
+                interleaved = True
+                writers.append(asyncio.create_task(compete()))
+                await asyncio.sleep(.15)
+            return result
+
+    sessions = async_sessionmaker(memory.engine, class_=InterleavedSession, expire_on_commit=False)
+    catalogue = Catalogue(MemoryStore(sessions))
+    try:
+        if operation == 'source':
+            app = FastAPI()
+            app.state.iacon = catalogue
+            app.include_router(router)
+            async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+                body = {'key': 'writer-test', 'text': 'I like cycling.'}
+                response = await client.post('/iacon/sources', json=body)
+                assert response.status_code == 200
+                assert (await client.post('/iacon/sources', json=body)).json() == response.json()
+                assert (await client.post('/iacon/sources', json={**body, 'text': 'Changed'})).status_code == 409
+        elif operation == 'apply':
+            result = await catalogue.apply(1, command)
+            assert (await catalogue.apply(1, command))['id'] == result['id']
+            assert len((await catalogue.get(1, result['id'], history=True))['revisions']) == 1
+        else:
+            await catalogue.refresh(1, record['id'])
+            assert (await catalogue.get(1, record['id']))['version'] == 1
+        assert interleaved
+        await asyncio.wait_for(asyncio.gather(*writers), 5)
+    finally:
+        await asyncio.gather(*writers, return_exceptions=True)
+
+
 async def test_competing_wal_writers_acquire_before_read_and_do_not_block_readers(tmp_path):
     engine=create_async_engine('sqlite+aiosqlite:///'+str(tmp_path/'coordination.db'))
     @event.listens_for(engine.sync_engine,'connect')
