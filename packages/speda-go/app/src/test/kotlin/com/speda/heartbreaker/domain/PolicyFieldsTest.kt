@@ -6,6 +6,23 @@ import org.junit.Test
 import java.io.File
 
 class PolicyFieldsTest {
+    @Test fun pickerDefaultsAndNativeThinkingFollowDraftRoutes() {
+        val root = Json.parseToJsonElement("""{
+          "x-thinking-options":{"openai:test":["default","low","high"],"other:test":["default"]},
+          "x-route-defaults":{"main":"openai:test","background":"other:test"}
+        }""").jsonObject
+        val draft = Json.parseToJsonElement("""{"main_model":"openai:test","agent_models":{},"telegram_models":{},"worker_models":{}}""").jsonObject
+        assertEquals(listOf("default","low","high"), PolicyFields.thinkingOptions("models.agents.speda", root, draft))
+        val changed = JsonObject(draft + ("agent_models" to buildJsonObject { put("speda", "other:test") }))
+        assertEquals(listOf("default"), PolicyFields.thinkingOptions("models.agents.speda", root, changed))
+        assertEquals(listOf("default","inherit"), PolicyFields.thinkingOptions("models.workers.scout", root, changed))
+        assertEquals(Json.parseToJsonElement("""{"mode":"budget","value":4096}"""), PolicyFields.thinkingValue("budget:4096"))
+        assertEquals("high", PolicyFields.thinkingSelection(PolicyFields.thinkingValue("high")))
+        val field = Json.parseToJsonElement("""{"type":"string","x-options":[{"value":"openai:test","label":"Model"}]}""").jsonObject
+        assertEquals(JsonPrimitive("openai:test"), PolicyFields.default(field, root))
+        val request = Json.parseToJsonElement("""{"type":"object","properties":{"mode":{"type":"string","enum":["provider_default"]},"value":{"default":null,"anyOf":[{"type":"string"},{"type":"null"}]}}}""").jsonObject
+        assertEquals(Json.parseToJsonElement("""{"mode":"provider_default","value":null}"""), PolicyFields.default(request, root))
+    }
     private val schema = Json.parseToJsonElement("""{
       "type":"object", "properties":{
         "run":{"${'$'}ref":"#/${'$'}defs/Run"},

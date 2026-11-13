@@ -4,6 +4,50 @@ import kotlinx.serialization.json.*
 
 /** Typed policy form operations shared by the native controls and their tests. */
 object PolicyFields {
+    fun pickerOptions(schema: JsonObject, name: String = "x-options"): List<JsonObject>? =
+        (schema[name] as? JsonArray)?.map { it.jsonObject }
+    fun thinkingOptions(path: String, root: JsonObject, document: JsonObject): List<String>? {
+        val match = Regex("^models\\.(models|agents|workers|roles)\\.(.+)$").matchEntire(path) ?: return null
+        val catalog = root["x-thinking-options"] as? JsonObject ?: return null
+        val (group, key) = match.destructured
+        fun text(value: JsonElement?) = (value as? JsonPrimitive)?.takeIf { it != JsonNull }?.content.orEmpty()
+        fun map(name: String) = (document[name] as? JsonObject).orEmpty().mapValues { text(it.value) }
+        val defaults = root["x-route-defaults"] as? JsonObject
+        val main = text(document["main_model"]).ifEmpty { text(defaults?.get("main")) }
+        val agentRoutes = map("agent_models").values + map("telegram_models").values
+        val refs = when (group) {
+            "agents" -> listOf(map("agent_models")[key] ?: main, map("telegram_models")[key]).filterNotNull()
+            "workers" -> map("worker_models")[key]?.let { listOf(it) } ?: (listOf(main) + agentRoutes)
+            "roles" -> if (key == "background") listOf(text(document["background_model"]).ifEmpty { text(defaults?.get("background")).ifEmpty { main } })
+                else agentRoutes.ifEmpty { listOf(main) } + (if (key == "worker") map("worker_models").values else emptyList())
+            else -> listOf(key)
+        }
+        val lists = refs.map { ref -> (catalog[ref] as? JsonArray)?.map { it.jsonPrimitive.content } ?: listOf("default") }
+        val result = lists.firstOrNull()?.filter { option -> lists.all { option in it } } ?: listOf("default")
+        return if (group == "workers" || (group == "roles" && key == "worker")) result + "inherit" else result
+    }
+    fun thinkingValue(option: String) = buildJsonObject {
+        put("mode", when {
+            option == "default" -> "provider_default"
+            option.startsWith("budget:") -> "budget"
+            option in listOf("off", "enabled", "inherit") -> option
+            else -> "effort"
+        })
+        put("value", when {
+            option.startsWith("budget:") -> JsonPrimitive(option.substringAfter(':').toInt())
+            option in listOf("default", "off", "enabled", "inherit") -> JsonNull
+            else -> JsonPrimitive(option)
+        })
+    }
+    fun thinkingSelection(value: JsonElement?): String {
+        val request = value as? JsonObject ?: return "default"
+        return when (val mode = (request["mode"] as? JsonPrimitive)?.content) {
+            "budget" -> "budget:${request["value"]?.jsonPrimitive?.content}"
+            "effort" -> request["value"]?.jsonPrimitive?.content.orEmpty()
+            "provider_default", null -> "default"
+            else -> mode
+        }
+    }
     fun resolve(schema: JsonObject, root: JsonObject): JsonObject {
         val ref = (schema["\$ref"] as? JsonPrimitive)?.content ?: return schema
         val target = (root["\$defs"] as? JsonObject)?.get(ref.substringAfterLast('/')) as? JsonObject ?: JsonObject(emptyMap())
@@ -33,8 +77,11 @@ object PolicyFields {
         val s = choices(schema, root).first()
         s["default"]?.takeIf { it != JsonNull }?.let { return it }
         (s["enum"] as? JsonArray)?.firstOrNull()?.let { return it }
+        pickerOptions(s)?.firstOrNull()?.get("value")?.let { return it }
         return when (type(s)) {
-            "object" -> JsonObject((s["properties"] as? JsonObject).orEmpty().mapValues { default(it.value.jsonObject, root) })
+            "object" -> JsonObject((s["properties"] as? JsonObject).orEmpty().mapValues {
+                if (resolve(it.value.jsonObject, root)["default"] == JsonNull) JsonNull else default(it.value.jsonObject, root)
+            })
             "array" -> JsonArray(emptyList())
             "boolean" -> JsonPrimitive(false)
             "integer", "number" -> JsonPrimitive((s["minimum"] as? JsonPrimitive)?.doubleOrNull
@@ -91,8 +138,18 @@ object PolicyFields {
         path.endsWith("microdollars") || path.endsWith("microdollars_per_token") -> if (tr) "1.000.000 mikrodolar = 1 ABD doları." else "1,000,000 microdollars = US\$1."
         else -> (schema["description"] as? JsonPrimitive)?.content.orEmpty()
     }
-    fun label(key: String, tr: Boolean): String = labels[key]?.let { if (tr) it.second else it.first }
+    fun label(key: String, tr: Boolean): String = when (key) {
+        "off" -> if (tr) "Kapalı" else "Off"
+        "enabled" -> if (tr) "Açık" else "Enabled"
+        "minimal" -> if (tr) "En düşük" else "Minimal"
+        "low" -> if (tr) "Düşük" else "Low"
+        "medium" -> if (tr) "Orta" else "Medium"
+        "high" -> if (tr) "Yüksek" else "High"
+        "xhigh" -> if (tr) "Çok yüksek" else "Extra high"
+        "max" -> if (tr) "Azami" else "Maximum"
+        else -> labels[key]?.let { if (tr) it.second else it.first }
         ?: key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
     private val labels = mapOf(
         "run" to ("Per-run limits" to "Çalıştırma sınırları"),
         "tokens" to ("Reserved token limit" to "Ayrılan token sınırı"),

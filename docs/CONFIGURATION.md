@@ -13,6 +13,16 @@ normal settings: labeled number and text fields, switches, dropdowns, and
 add/remove controls for named entries and ordered lists. No JSON editing is
 required. Nested model capabilities and price entries remain available.
 
+Known identities use pickers: models (including provider discovery and saved
+custom routes), agents, canonical worker roles, fallback models and price
+resources. Main/background routes include a Use default option. Thinking is
+one native-choice picker, recalculated against draft routes; shared roles offer
+the intersection of supported settings. Existing custom values remain visible
+and are never silently replaced. Quiet hours use hour pickers; startup model
+defaults and the owner timezone also use dropdowns. Numbers and credentials
+retain their appropriate input controls. Heartbreaker, Striker and SPEDA Go
+consume the same schema choice metadata; native writers still validate saves.
+
 - Models: routes, per-agent/role defaults, native thinking, output and tool limits.
 - Coordination: rooms, workers, run budgets and admitted model prices.
 - Global: daily/lifetime spending, concurrency and speech resource prices.

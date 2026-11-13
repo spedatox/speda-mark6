@@ -235,3 +235,42 @@ def test_supervisor_stop_has_a_bounded_owned_child_wait(monkeypatch):
             return 0
     assert supervisor.supervise(lambda *a,**k:Child())==0
     assert waits==[1,35] and len(sent)==1
+
+
+def test_startup_model_and_timezone_pickers_retain_owner_routes(tmp_path):
+    service=configuration(tmp_path,llm_main_model='openai:owner-custom')
+    fields={f['key']:f for g in service.snapshot()['groups'] for f in g['fields']}
+    for key in ('llm_main_model','llm_background_model','owner_timezone'):
+        assert fields[key]['type']=='select'
+        assert fields[key]['value'] in fields[key]['options']
+    assert fields['llm_main_model']['value']=='openai:owner-custom'
+    assert '' in fields['llm_main_model']['options']
+    assert 'Europe/Istanbul' in fields['owner_timezone']['options']
+
+
+async def test_policy_picker_catalog_uses_runtime_identities_and_preserves_custom_routes(memory):
+    bits=await setup(memory,[])
+    class Discovery:
+        async def available(self, policy, document):
+            return [{'id':'openai:catalog-test','name':'Discovered model'}]
+    service=PolicyConfiguration(bits.policy,bits.budget,GlobalBudget(memory.sessions),MaintenanceBudget(memory.sessions,bits.client),discovery=Discovery())
+    initial=(await service.snapshot(1))['policies']
+    models=next(p for p in initial if p['id']=='models')
+    fields=models['schema']['properties']
+    assert fields['main_model']['anyOf'][0]['x-options'][0]=={'value':'openai:catalog-test','label':'Discovered model · openai:catalog-test'}
+    assert {'value':'speda','label':'SPEDA'} in fields['agent_models']['x-key-options']
+    assert 'autobot' in {o['value'] for o in fields['worker_models']['x-key-options']}
+    assert 'forge_coder' not in {o['value'] for o in fields['worker_models']['x-key-options']}
+    assert {o['value'] for o in fields['roles']['x-key-options']}=={'interactive','background','worker'}
+    assert models['schema']['x-thinking-options']['openai:catalog-test']==['default']
+    custom={**models['value'],'main_model':'openai:owner-custom'}
+    saved=(await service.save(1,'models',models['revision'],custom))['policies']
+    current=next(p for p in saved if p['id']=='models')
+    assert current['value']==custom
+    assert 'openai:owner-custom' in {o['value'] for o in current['schema']['properties']['fallbacks']['items']['x-options']}
+    for policy in saved:
+        if 'prices' in policy['schema']['properties']:
+            assert 'openai:owner-custom' in {o['value'] for o in policy['schema']['properties']['prices']['x-key-options']}
+    hours=next(p for p in saved if p['id']=='iacon')['schema']['properties']['quiet_start']['x-options']
+    assert hours==[{'value':n,'label':f'{n:02d}:00'} for n in range(24)]
+    await bits.coordinator.shutdown()

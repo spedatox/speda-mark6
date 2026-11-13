@@ -27,8 +27,8 @@ const schema = { type: 'object', properties: {
 }, $defs: { Run: { type: 'object', required: ['tokens', 'calls'], properties: { tokens: { type: 'integer', minimum: 0, maximum: 20000000 }, calls: { type: 'integer', minimum: 0 } } } } }
 const base = { id: 'coordination', label: 'Run limits', revision: 1, schema, value: { paused: false, run: { tokens: 200000, calls: 16 }, prices: { 'existing:model': { microdollars_per_token: 1 } }, lifetime_tokens: null, fallbacks: ['first', 'second'], retained: 'keep me' } }
 const copy = value => JSON.parse(JSON.stringify(value))
-async function mount(locale = 'en') {
-  let policies = [copy(base)], failure = false, loadFailure = false
+async function mount(locale = 'en', initialPolicy = base) {
+  let policies = [copy(initialPolicy)], failure = false, loadFailure = false
   const saves = []
   const component = compile('components/ConfigPolicies.tsx', {
     '../lib/policyFields': fields, './PolicyField': { default: PolicyField }, './settingsUI': compile('components/settingsUI.tsx'),
@@ -61,6 +61,64 @@ test('number edit saves typed values and retains untouched nested settings', asy
   assert.deepEqual(h.saves[0].value, { ...base.value, run: { ...base.value.run, tokens: 2000000 } })
   assert.equal(h.tree.root.findByProps({ role: 'status' }).children.join(''), 'Saved')
   h.tree.unmount()
+})
+const modelChoices = [{ value: 'openai:test', label: 'Test reasoning model' }, { value: 'other:test', label: 'Other model' }]
+const pickerPolicy = { id: 'models', label: 'Models', revision: 2, schema: {
+  type: 'object', properties: {
+    main_model: { anyOf: [{ type: 'string', 'x-options': modelChoices }, { type: 'null' }] },
+    agent_models: { type: 'object', 'x-key-options': [{ value: 'speda', label: 'SPEDA' }], additionalProperties: { type: 'string', 'x-options': modelChoices } },
+    models: { type: 'object', 'x-key-options': modelChoices, additionalProperties: { type: 'object', properties: {
+      mode: { type: 'string', enum: ['provider_default', 'effort'] }, value: { default: null, anyOf: [{ type: 'string' }, { type: 'null' }] },
+    } } },
+    fallbacks: { type: 'array', items: { type: 'string', 'x-options': modelChoices }, maxItems: 3 },
+  }, 'x-thinking-options': { 'openai:test': ['default', 'low', 'high'], 'other:test': ['default'] },
+  'x-route-defaults': { main: 'openai:test', background: 'other:test' },
+}, value: { main_model: null, agent_models: {}, models: {}, fallbacks: [], retained: 'unchanged' } }
+
+test('model, agent, thinking and fallback pickers save typed selections and exclude duplicate entries', async () => {
+  const h = await mount('en', pickerPolicy)
+  const choose = async (label, value) => act(async () => h.tree.root.findByProps({ 'aria-label': label }).props.onChange({ target: { value } }))
+  assert.equal(h.tree.root.findByProps({ id: 'policy-models.main_model' }).type, 'select')
+  assert.equal(h.tree.root.findAllByProps({ type: 'checkbox' }).length, 0)
+  await h.input('policy-models.main_model', 'openai:test')
+  await choose('Models by agent new entry', 'speda')
+  await h.button('Add entry')
+  assert.equal(h.tree.root.findByProps({ id: 'policy-models.agent_models.speda' }).props.value, 'openai:test')
+  assert.equal(h.tree.root.findByProps({ 'aria-label': 'Models by agent new entry' }).props.disabled, true)
+  await choose('Model thinking new entry', 'openai:test')
+  await h.button('Add entry')
+  await h.input('policy-models.models.openai:test', 'high')
+  await h.button('Add item')
+  await h.input('policy-models.fallbacks.0', 'other:test')
+  assert.equal(h.tree.root.findAllByType('input').length, 0)
+  await h.button('Save settings')
+  assert.deepEqual(h.saves[0].value, { ...pickerPolicy.value, main_model: 'openai:test', agent_models: { speda: 'openai:test' },
+    models: { 'openai:test': { mode: 'effort', value: 'high' } }, fallbacks: ['other:test'] })
+  await h.input('policy-models.main_model', '')
+  await h.button('Save settings')
+  assert.equal(h.saves[1].value.main_model, null)
+  h.tree.unmount()
+})
+
+test('thinking choices follow draft routes and intersect supported settings without replacing saved values', () => {
+  const root = pickerPolicy.schema
+  const document = { main_model: 'openai:test', agent_models: {}, telegram_models: {}, worker_models: {} }
+  assert.deepEqual(copy(fields.thinkingOptions('models.agents.speda', root, document)), ['default', 'low', 'high'])
+  assert.deepEqual(copy(fields.thinkingOptions('models.agents.speda', root, { ...document, agent_models: { speda: 'other:test' } })), ['default'])
+  assert.deepEqual(copy(fields.thinkingOptions('models.workers.scout', root, { ...document, telegram_models: { speda: 'other:test' } })), ['default', 'inherit'])
+  assert.deepEqual(copy(fields.defaultValue(root.properties.models.additionalProperties, root)), { mode: 'provider_default', value: null })
+  assert.deepEqual(copy(fields.thinkingValue('budget:4096')), { mode: 'budget', value: 4096 })
+})
+
+test('unknown saved model stays visible and quiet-hour picker emits a number', async () => {
+  let value = 'legacy:custom', tree
+  const props = { schema: { type: 'string', 'x-options': modelChoices }, root: {}, value, path: 'models.main_model', label: 'Model', tr: false, onChange(next) { value = next } }
+  await act(async () => { tree = Renderer.create(React.createElement(PolicyField, props)) })
+  assert.ok(tree.root.findAllByType('option').some(o => o.props.value === 'legacy:custom'))
+  await act(async () => tree.update(React.createElement(PolicyField, { ...props, schema: { type: 'integer', 'x-options': [{ value: 22, label: '22:00' }] }, value: 22 })))
+  await act(async () => tree.root.findByType('select').props.onChange({ target: { value: '22' } }))
+  assert.equal(value, 22)
+  tree.unmount()
 })
 test('blank, fractional and out-of-range limits cannot save', async () => {
   const h = await mount()

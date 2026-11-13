@@ -282,15 +282,16 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.services.configuration import Configuration,PolicyConfiguration
     from app.services.backend_restart import BackendRestart
     app.state.configuration=Configuration(settings,instance_id=app.state.backend_instance_id)
-    app.state.policy_configuration=PolicyConfiguration(model_policy,coordination_budget,global_budget,budget)
+    from app.services.model_catalog import ModelCatalog
+    app.state.model_catalog = ModelCatalog(client)
+    app.state.policy_configuration=PolicyConfiguration(model_policy,coordination_budget,global_budget,budget,
+        profiles=profiles,discovery=app.state.model_catalog)
     from app.services.behavior_config import BehaviorConfiguration
     app.state.behavior_configuration=BehaviorConfiguration(coordinator,registry,app.state.policy_configuration,app.state.configuration)
     app.state.backend_restart=BackendRestart(app.state.configuration,coordinator,getattr(app.state,'request_backend_shutdown',None))
     global_budget.lifecycle=coordinator
     app.state.model_policy = model_policy
     app.state.llm_client = client
-    from app.services.model_catalog import ModelCatalog
-    app.state.model_catalog = ModelCatalog(client)
     app.state.global_budget = global_budget
     app.state.iacon = catalogue
     from app.services.client_memory import ClientMemory

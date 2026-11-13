@@ -51,7 +51,7 @@ fun ConfigPoliciesView(config: AppConfig, graph: AppGraph) {
             if (expanded[policy.id] == true) {
                 if (conflict) Hint(if (tr) "Bu ayarlar başka bir yerde değişti. Son kayıtlı değerleri kullanmak için değişiklikleri geri alın." else "These settings changed elsewhere. Discard your edits to use the latest saved values.")
                 (policy.schema["properties"] as? JsonObject)?.forEach { (name, schema) -> key(name) {
-                    PolicyFieldView(schema.jsonObject, policy.schema, (drafts[policy.id] ?: policy.value)[name], "${policy.id}.$name", PolicyFields.label(name, tr), tr, !busy && !loading) {
+                    PolicyFieldView(schema.jsonObject, policy.schema, (drafts[policy.id] ?: policy.value)[name], "${policy.id}.$name", PolicyFields.label(name, tr), tr, !busy && !loading, drafts[policy.id] ?: policy.value) {
                         if (policy.id !in revisions) revisions[policy.id] = policy.revision
                         drafts[policy.id] = JsonObject((drafts[policy.id] ?: policy.value) + (name to it))
                         message = ""

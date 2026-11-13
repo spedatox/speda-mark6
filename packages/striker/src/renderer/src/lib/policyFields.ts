@@ -1,12 +1,47 @@
 /** Schema-backed controls keep policy fields typed without exposing document syntax. */
 export type PolicyValue = null | boolean | number | string | PolicyValue[] | { [key: string]: PolicyValue }
 export interface PolicySchema {
+  'x-options'?: PolicyOption[]; 'x-key-options'?: PolicyOption[]
+  'x-thinking-options'?: Record<string, string[]>; 'x-route-defaults'?: { main: string; background: string }
   $ref?: string; type?: string; title?: string; description?: string; default?: PolicyValue
   enum?: PolicyValue[]; anyOf?: PolicySchema[]; properties?: Record<string, PolicySchema>
   additionalProperties?: PolicySchema | boolean; items?: PolicySchema; required?: string[]
   minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number
   minLength?: number; maxLength?: number; minItems?: number; maxItems?: number
   $defs?: Record<string, PolicySchema>
+}
+export interface PolicyOption { value: string | number; label: string }
+
+/** Intersect native thinking choices when a role applies to several routes. */
+export function thinkingOptions(path: string, root: PolicySchema, document: Record<string, PolicyValue>): string[] | undefined {
+  const match = /^models\.(models|agents|workers|roles)\.(.+)$/.exec(path)
+  if (!match || !root['x-thinking-options']) return undefined
+  const [, group, key] = match
+  const map = (name: string) => (document[name] ?? {}) as Record<string, string>
+  const main = String(document.main_model || root['x-route-defaults']?.main || '')
+  let refs = [key]
+  if (group === 'agents') refs = [map('agent_models')[key] || main, map('telegram_models')[key]].filter(Boolean)
+  if (group === 'workers') refs = map('worker_models')[key] ? [map('worker_models')[key]]
+    : [main, ...Object.values(map('agent_models')), ...Object.values(map('telegram_models'))]
+  if (group === 'roles') {
+    refs = key === 'background' ? [String(document.background_model || root['x-route-defaults']?.background || main)]
+      : [...Object.values(map('agent_models')), ...Object.values(map('telegram_models'))]
+    if (!refs.length) refs = [main]
+    if (key === 'worker') refs.push(...Object.values(map('worker_models')))
+  }
+  const available = refs.map(ref => root['x-thinking-options']![ref] ?? ['default'])
+  const result = available[0]?.filter(option => available.every(list => list.includes(option))) ?? ['default']
+  return group === 'workers' || (group === 'roles' && key === 'worker') ? [...result, 'inherit'] : result
+}
+export function thinkingValue(option: string): PolicyValue {
+  return { mode: option === 'default' ? 'provider_default' : option.startsWith('budget:') ? 'budget'
+    : ['off', 'enabled', 'inherit'].includes(option) ? option : 'effort',
+    value: option.startsWith('budget:') ? Number(option.slice(7)) : ['default', 'off', 'enabled', 'inherit'].includes(option) ? null : option }
+}
+export function thinkingSelection(value: PolicyValue | undefined): string {
+  const request = (value ?? {}) as Record<string, PolicyValue>
+  return request.mode === 'budget' ? `budget:${request.value}` : request.mode === 'effort' ? String(request.value)
+    : !request.mode || request.mode === 'provider_default' ? 'default' : String(request.mode)
 }
 
 export function resolveSchema(schema: PolicySchema, root: PolicySchema): PolicySchema {
@@ -24,8 +59,9 @@ export function defaultValue(schema: PolicySchema, root: PolicySchema): PolicyVa
   const s = choices(schema, root)[0]
   if (s.default !== undefined && s.default !== null) return structuredClone(s.default)
   if (s.enum) return s.enum[0]
+  if (s['x-options']?.length) return s['x-options'][0].value
   switch (s.type) {
-    case 'object': return Object.fromEntries(Object.entries(s.properties ?? {}).map(([k, v]) => [k, defaultValue(v, root)]))
+    case 'object': return Object.fromEntries(Object.entries(s.properties ?? {}).map(([k, v]) => [k, resolveSchema(v, root).default === null ? null : defaultValue(v, root)]))
     case 'array': return []
     case 'boolean': return false
     case 'integer': case 'number': return s.minimum ?? (s.exclusiveMinimum !== undefined ? s.exclusiveMinimum + (s.type === 'integer' ? 1 : 0.001) : 0)
@@ -34,6 +70,9 @@ export function defaultValue(schema: PolicySchema, root: PolicySchema): PolicyVa
 }
 
 const labels: Record<string, [string, string]> = {
+  off: ['Off', 'Kapalı'], enabled: ['Enabled', 'Açık'], minimal: ['Minimal', 'En düşük'],
+  low: ['Low', 'Düşük'], medium: ['Medium', 'Orta'], high: ['High', 'Yüksek'],
+  xhigh: ['Extra high', 'Çok yüksek'], max: ['Maximum', 'Azami'],
   run: ['Per-run limits', 'Çalıştırma sınırları'], tokens: ['Reserved token limit', 'Ayrılan token sınırı'],
   calls: ['Model call limit', 'Model çağrısı sınırı'], microdollars: ['Spending limit (microdollars)', 'Harcama sınırı (mikrodolar)'],
   seconds: ['Time limit (seconds)', 'Süre sınırı (saniye)'], contributions: ['Agent contribution limit', 'Ajan katkısı sınırı'],
@@ -45,7 +84,8 @@ const labels: Record<string, [string, string]> = {
   main_model: ['Main model', 'Ana model'], background_model: ['Background model', 'Arka plan modeli'],
   agent_models: ['Models by agent', 'Ajana göre modeller'], telegram_models: ['Telegram models', 'Telegram modelleri'],
   worker_models: ['Models by worker', 'Çalışana göre modeller'], workers: ['Worker thinking', 'Çalışan düşünme ayarları'],
-  models: ['Model thinking', 'Model düşünme ayarları'], roles: ['Role thinking', 'Rol düşünme ayarları'],
+  models: ['Model thinking', 'Model düşünme ayarları'], cyber_programs: ['Daybreak by model', 'Modele göre Daybreak'],
+  roles: ['Role thinking', 'Rol düşünme ayarları'],
   agents: ['Agent thinking', 'Ajan düşünme ayarları'], descriptors: ['Model capabilities', 'Model yetenekleri'],
   fallbacks: ['Fallback models (in order)', 'Yedek modeller (sıralı)'], show_thinking: ['Show thinking', 'Düşünmeyi göster'],
   budget_mode: ['Budget mode', 'Tasarruf modu'], daily_calls: ['Daily model call limit', 'Günlük model çağrısı sınırı'],

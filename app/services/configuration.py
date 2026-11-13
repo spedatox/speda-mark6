@@ -38,6 +38,8 @@ class Configuration:
         for group in groups:
             for field in group['fields']:
                 key=field['key']; value=desired[key]
+                if field['type']=='select' and value is not None and value not in field['options']:
+                    field['options'].append(value)
                 changed=value!=self.running[key]
                 field.update(is_set=value is not None and value!='',pending_restart=changed,overridden=key in state['values'])
                 if changed: pending.append(key)
@@ -121,8 +123,12 @@ class Configuration:
 
 class PolicyConfiguration:
     """A configuration view delegates to original versioned policy owners."""
-    def __init__(self,model_policy,coordination_budget,global_budget,iacon_budget):
+    def __init__(self,model_policy,coordination_budget,global_budget,iacon_budget,*,profiles=None,discovery=None):
         self.model=model_policy; self.coordination=coordination_budget; self.global_budget=global_budget; self.iacon=iacon_budget
+        if profiles is None:
+            from app.profiles.registry import ProfileRegistry
+            profiles = ProfileRegistry()
+        self.profiles, self.discovery = profiles, discovery
 
     async def snapshot(self,owner):
         from app.schemas.llm import PolicyDocument
@@ -133,12 +139,14 @@ class PolicyConfiguration:
         version,coordination=await self.coordination.policy(owner)
         global_state=await self.global_budget.status(owner)
         iacon_version,iacon=await self.iacon.policy(owner)
-        return {'policies':[
+        from app.services.policy_controls import decorate_policies
+        policies = [
             {'id':'models','label':'Model routing and native thinking','revision':revision,'value':model.model_dump(),'schema':PolicyDocument.model_json_schema()},
             {'id':'coordination','label':'Rooms, workers and run budgets','revision':version,'value':coordination.model_dump(),'schema':SpendingPolicy.model_json_schema()},
             {'id':'global','label':'Global spending and speech prices','revision':global_state['version'],'value':global_state['policy'],'schema':GlobalPolicy.model_json_schema()},
             {'id':'iacon','label':'Iacon review and maintenance','revision':iacon_version,'value':iacon.model_dump(),'schema':MaintenancePolicy.model_json_schema()},
-        ]}
+        ]
+        return {'policies': await decorate_policies(policies, self.model, model, self.profiles, self.discovery)}
 
     async def save(self,owner,identity,revision,value):
         from app.schemas.llm import PolicyDocument

@@ -59,7 +59,7 @@ export default function ConfigPolicies({ config }: { config: AppConfig }) {
         {conflict && <p role="alert">{tr ? 'Bu ayarlar başka bir yerde değişti. Son kayıtlı değerleri kullanmak için değişiklikleri geri alın.' : 'These settings changed elsewhere. Discard your edits to use the latest saved values.'}</p>}
         <fieldset disabled={busy !== null || loading} style={{ border: 0, padding: '16px 0 0', margin: 0, minWidth: 0 }}>
           {Object.entries(schema.properties ?? {}).map(([key, field]) => <PolicyField key={key} schema={field} root={schema} value={value[key]}
-            path={`${policy.id}.${key}`} label={policyLabel(key, tr)} tr={tr} disabled={busy !== null || loading}
+            path={`${policy.id}.${key}`} label={policyLabel(key, tr)} tr={tr} disabled={busy !== null || loading} document={value}
             onChange={next => { setSaved(''); setError(''); setDrafts(d => ({ ...d, [policy.id]: { revision: d[policy.id]?.revision ?? policy.revision, value: { ...(d[policy.id]?.value ?? policy.value as Record<string, PolicyValue>), [key]: next } } })) }} />)}
         </fieldset>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

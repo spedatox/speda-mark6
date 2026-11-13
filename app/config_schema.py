@@ -56,5 +56,11 @@ def catalog():
         if key=='log_level': field.update(type='select',options=['DEBUG','INFO','WARNING','ERROR','CRITICAL'])
         if key=='agent_language': field.update(type='select',options=['','en','tr'],help='Reply language: blank follows the conversation; en is English; tr is Turkish. Applies on restart.')
         if key=='project_cell_backend': field.update(type='select',options=['docker'])
+        if key=='owner_timezone':
+            from zoneinfo import available_timezones
+            field.update(type='select',options=sorted(available_timezones()))
+        if key in {'llm_main_model','llm_background_model'}:
+            from app.profiles.speda import SPEDAProfile
+            field.update(type='select',options=['',*(s.ref for s in SPEDAProfile.model_specs)])
         groups[group_for(key)]['fields'].append(field)
     return [g for g in groups.values() if g['fields']]
