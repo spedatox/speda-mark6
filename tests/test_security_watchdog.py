@@ -103,7 +103,12 @@ async def test_outbox_replay_orion_assessment_and_owner_warning(tmp_path, memory
     task = asyncio.create_task(protocol.run(analyse, deliveries))
     try:
         async with asyncio.timeout(3):
-            while JournalView(protocol.journal).detail(identity)["delivery_state"] != "sent":
+            while True:
+                with protocol.journal.connect() as db:
+                    saved = db.execute('SELECT status,analysis FROM incidents WHERE id=?', (identity,)).fetchone()
+                expected_calls = 2 if provider_available else 1
+                if saved['status'] == 'sent' and saved['analysis'] is not None and telegram.await_count == expected_calls:
+                    break
                 await asyncio.sleep(0.01)
     finally:
         task.cancel()
@@ -111,9 +116,14 @@ async def test_outbox_replay_orion_assessment_and_owner_warning(tmp_path, memory
     assert not file.exists()
     assert model.await_args.kwargs["agent_id"] == "orion"
     assert model.await_args.kwargs["tools"] == []
-    agent, method, payload = telegram.await_args.args
+    agent, method, payload = telegram.await_args_list[0].args
     assert (agent, method, payload["chat_id"]) == ("speda", "sendMessage", 99)
     assert "Possible HTTP flood" in payload["text"] and identity in payload["text"]
+    assert sum(call.args[1] == 'sendMessage' for call in telegram.await_args_list) == 1
+    if provider_available:
+        edit = telegram.await_args_list[1].args
+        assert edit[1] == 'editMessageText' and edit[2]['message_id'] == 5
+        assert 'Orion assessment.' in edit[2]['text']
     detail = JournalView(protocol.journal).detail(identity)
     assert detail["delivery_state"] == "sent" and detail["severity"] == "critical"
     assert detail["assessment"] == ("Orion assessment." if provider_available else None)
