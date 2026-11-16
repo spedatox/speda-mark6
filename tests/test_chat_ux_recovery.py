@@ -98,16 +98,30 @@ async def test_exact_memory_evidence_survives_peer_and_return_turns(memory):
 async def test_native_person_dossier_outranks_empty_entity_and_shared_surname(memory):
     empty = json.dumps({'record_id':'a'*32,'version':1,'kind':'entity','title':'Mira Stone',
         'payload':{'entity_type':'person','description':''}})
-    await memory.seed(empty, title='Mira Stone', aliases=('Mira',), key='iacon:'+'a'*32)
-    await memory.seed("**Who:** Mira is the owner's sister.\n\nHer dated record includes a later change in the owner's stance.",
+    entity_source, _ = await memory.seed(empty, title='Mira Stone', aliases=('Mira',), key='iacon:'+'a'*32)
+    dossier_source, _ = await memory.seed("**Who:** Mira is the owner's sister.\n\nHer dated record includes a later change in the owner's stance.",
         title='/memories/social/personal/mira-stone.md', aliases=('Mira Stone','Mira'), key='record:dossier')
+    from app.models.memory_serving import MemoryChange
+    async with memory.sessions() as db, db.begin():
+        for source_id in (entity_source, dossier_source):
+            source = await db.get(MemoryChange, source_id)
+            source.provenance = {'entity_id':'a'*32}
     for name in ['Osman', 'Semra', 'Erol']:
         await memory.seed(name + ' has separate family events.', title=name+' Stone', aliases=(name,))
+    # A related person's snapshot can match lexical search by mentioning Mira.
+    # Sharing her surname must not turn it into a full-name identity match.
+    await memory.seed(json.dumps({'record_id':'b'*32,'version':1,'kind':'entity',
+        'payload':{'entity_type':'person','description':"Mira's relative"}}),
+        title='Other Stone', aliases=('Other',), key='iacon:'+'b'*32)
     packet = json.loads(packet_json(await MemoryRuntime(memory.store).prepare(memory.context('Update Mira Stone records'))))
     assert "owner's sister" in packet['evidence'][0]['text']
     assert packet['catalogue_records'][0]['record_id'] == 'a'*32
     assert packet['catalogue_records'][0]['version'] == 1
     assert not any('separate family events' in item['text'] for item in packet['evidence'])
+    assert len(packet['catalogue_records']) == 1
+    assert not packet['ambiguities']
+    surname = json.loads(packet_json(await MemoryRuntime(memory.store).prepare(memory.context('Who is Stone?'))))
+    assert surname['ambiguities']
 
 
 async def test_missing_completion_socket_recovers_from_saved_receipt_without_redispatch(memory, monkeypatch):

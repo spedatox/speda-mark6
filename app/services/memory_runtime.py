@@ -153,15 +153,17 @@ class MemoryRuntime:
         candidates = []
         matched_aliases = {}
         future_spans = []
+        name_specificity = max((len(set(terms).intersection(unit["title_words"]))
+                                for unit in result["units"] if unit["kind"] == "person"), default=0)
         for unit in result["units"]:
             if deadline.remaining() <= 0:
                 raise TimeoutError
             exact = [a for a in unit["aliases"] if
                      re.search(r"(?<!\w)" + re.escape(fold(a)) + r"(?!\w)", folded_query)]
-            if unit["kind"] == "person" and any(
-                t in unit["title_words"] for t in terms):
+            name_matches = set(terms).intersection(unit["title_words"])
+            if unit["kind"] == "person" and name_matches and len(name_matches) == name_specificity:
                 exact.append(unit["title"])
-                for term in set(terms).intersection(unit["title_words"]):
+                for term in name_matches:
                     matched_aliases.setdefault(term, set()).add(unit["identity"])
             for alias in exact:
                 matched_aliases.setdefault(fold(alias), set()).add(unit["identity"])
