@@ -15,6 +15,11 @@ class RoomParityTest {
         assertEquals("Checking the saved server receipt.", rows.last().status)
         assertTrue(showTurnProgress(rows.last().copy(isStreaming = false)))
         assertEquals(rows, foldRoomMessages(rows, progress, "", 1))
+        val waiting = start.copy(sequence = 3, kind = "step_waiting", payload = buildJsonObject { put("status", "Watchdog: 208.7 Mbps. The next check is running.") })
+        val pending = foldRoomMessages(rows, waiting, "", 1).last()
+        assertFalse(pending.isStreaming)
+        assertTrue(pending.status.orEmpty().contains("208.7 Mbps"))
+        assertTrue(showTurnProgress(pending))
     }
     private val json = Json { ignoreUnknownKeys = true }
     private fun trace(): List<RoomEvent> = json.decodeFromString(javaClass.classLoader!!.getResource("fixtures/room_v1.json")!!.readText())

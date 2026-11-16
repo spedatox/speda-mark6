@@ -31,6 +31,11 @@ commands again or polling a model. A pending command gets one explanatory delay
 notice after thirty seconds. A completed result held by policy or spending limits
 is explicitly surfaced instead of silently remaining pending.
 
+Critical watchdog findings are projected from completed System Ops results
+immediately, before another model turn. A later pending command retains the
+finding and its owner-local observation time alongside its running status.
+Private consultations do not publish these observations into the public room.
+
 Desktop and Android retain and render progress even after streaming pauses or
 when an agent has already written prose. Meaningful statuses take precedence over
 generic tool labels. Event replay does not duplicate their text.

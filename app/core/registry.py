@@ -283,6 +283,16 @@ class CapabilityRegistry:
         server = self._mcp_tool_map.get(name)
         return bool(server and self._mcp_clients[server].read_only(self._mcp_original_names[name]))
 
+    def progress_summary(self, name, args, result, context):
+        skill = self._skills.get(name)
+        hook = getattr(skill, 'progress_summary', None)
+        try:
+            summary = hook(args, result, context) if hook else None
+        except Exception as exc:
+            logger.warning('tool_progress_summary_unavailable', extra={'tool':name, 'error_type':type(exc).__name__})
+            return None
+        return summary[:650] if isinstance(summary, str) and summary.strip() else None
+
     @staticmethod
     def _bounded_mail_automation(context):
         return (context is not None and context.task_role == 'background'

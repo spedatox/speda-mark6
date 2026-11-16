@@ -63,6 +63,25 @@ class SystemOpsSkill(Skill):
                     context.triggered_by == "agent" and context.extra.get("owner_collaboration")
                 )))
 
+    def progress_summary(self, args, result, context):
+        if args.get('action') != 'security_incidents':
+            return None
+        try:
+            data = json.loads(result)
+            if not isinstance(data, dict):
+                return None
+            incident = next((row for row in data.get('incidents', [])
+                if row.get('severity') == 'critical' and row.get('source') == 'security_watchdog'), None)
+            if not incident:
+                return None
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            observed = datetime.fromisoformat(incident['observed_at']).astimezone(ZoneInfo(context.timezone))
+            return (f"Watchdog finding: {incident['summary'][:400]} "
+                f"Observed {observed:%d %b %H:%M} ({context.timezone}). Its cause is not yet established.")
+        except (ValueError, TypeError, KeyError):
+            return None
+
     async def execute(self, args, context):
         if not self.available(context):
             return json.dumps({"status": "denied", "reason": "Available to Orion in owner-started conversations."})

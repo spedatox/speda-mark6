@@ -33,6 +33,10 @@ class Skill(ABC):
         """Optional bounded local read context; never dispatch a side effect."""
         return None
 
+    def progress_summary(self, args, result, context: "AgentContext"):
+        """Optional material observation, derived only from a completed result."""
+        return None
+
     @abstractmethod
     async def execute(self, args: dict, context: "AgentContext") -> str:
         """Execute the skill and return a string result for Claude to reason over."""

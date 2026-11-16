@@ -34,4 +34,8 @@ test('meaningful pending progress is visible and replay safe', () => {
   rows = foldRoomMessages(rows, progress, '', 1)
   assert.equal(rows[0].status, 'Checking the saved server receipt.')
   assert.deepEqual(foldRoomMessages(rows, progress, '', 1), rows)
+  const waiting = {...base, sequence:3, kind:'step_waiting', payload:{status:'Watchdog: 208.7 Mbps. The next check is running.'}} as RoomEvent
+  rows = foldRoomMessages(rows, waiting, '', 1)
+  assert.equal(rows[0].isStreaming, false)
+  assert.match(rows[0].status ?? '', /208.7 Mbps/)
 })

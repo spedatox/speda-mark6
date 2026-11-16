@@ -806,6 +806,15 @@ class Coordinator:
                             if tool['id'] == event.data['id']:
                                 tool['result'] = event.data['result']
                     await self.emit(run_id, event.type.value, step.agent_id, {"data": event.data}, step.id)
+                    if event.type == SSEEventType.TOOL_RESULT and step.mode != 'consult':
+                        tool = next((t for t in context.extra.get('display_tools', []) if t['id'] == event.data['id']), {})
+                        summary = self.orchestrator._registry.progress_summary(
+                            tool.get('name'), tool.get('input', {}), event.data['result'], context)
+                        findings = context.extra.setdefault('material_findings', [])
+                        if summary and summary not in findings and len(findings) < 3:
+                            findings.append(summary)
+                            await self.emit(run_id, 'progress', step.agent_id,
+                                {'text':'\n'.join(findings), 'mode':step.mode}, step.id)
                     if event.type == SSEEventType.TOOL_RESULT and self.projects:
                         tool = next((t for t in context.extra.get('display_tools', []) if t['id'] == event.data['id']), {})
                         if tool.get('name') in {'Task', 'project_delegate'}:

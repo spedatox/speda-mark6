@@ -20,6 +20,39 @@ from tests.test_coordination import setup, reply, send
 from tests.test_operation_waits import start_wait
 
 
+async def test_critical_tool_finding_is_visible_before_a_later_command_suspends(memory, tmp_path, monkeypatch):
+    from app.security_watchdog import Observation
+    from app.services.operation_waits import OperationWaits
+    from app.skills.system_ops import SystemOpsSkill
+    from app.schemas.coordination import RoomInput
+    protocol = DamageControl(tmp_path/'incidents.sqlite3')
+    protocol.journal.add(Observation('ingress_bps',1794823828,208651006,200000000,10).facts(),status='sent',observed_at=1794823828)
+    batch = LLMMessage([
+        Block(type='tool_use',id='watchdog',name='system_ops',input={'action':'security_incidents'}),
+        Block(type='tool_use',id='host',name='system_ops',input={'action':'exec','command':'check host'}),
+    ], 'tool_use')
+    bits = await setup(memory,[batch])
+    await bits.engine._registry.register_skill(SystemOpsSkill(protocol.journal))
+    bits.coordinator.operation_waits = OperationWaits(bits.coordinator)
+    async def pending(*args):
+        return {'status':'started'}
+    monkeypatch.setattr('app.services.host_operations.host_operation',pending)
+    room = await bits.coordinator.create(1,CreateRoom(lead='orion',members=['orion']))
+    try:
+        run = await bits.coordinator.start(1,room['id'],RoomInput(input_id='investigate',message='Check the live incident'))
+        await bits.coordinator.live[run['run_id']]
+        async with memory.sessions() as db:
+            events = list(await db.scalars(select(RoomEvent).where(RoomEvent.run_id==run['run_id']).order_by(RoomEvent.sequence)))
+        finding = next(e for e in events if e.kind=='progress')
+        waiting = next(e for e in events if e.kind=='step_waiting')
+        assert '208,651,006' in finding.payload['text'] and '13:10' in finding.payload['text']
+        assert finding.sequence < waiting.sequence
+        assert '208,651,006' in waiting.payload['status']
+        assert len(bits.client.calls) == 1
+    finally:
+        await bits.coordinator.shutdown()
+
+
 async def test_ultron_gets_saved_courses_before_answering_without_a_model_lookup(memory):
     from app.services.iacon_catalogue import Catalogue
     from app.skills.course_memory import ReadCourseMemorySkill

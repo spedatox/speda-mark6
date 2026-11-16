@@ -32,6 +32,7 @@ class OperationWaits:
             model_call_index=context.model_call_index, loaded_tools=sorted(context.extra.get('loaded_tools', [])),
             produced_files=context.extra.get('produced_files', []), display_tools=context.extra.get('display_tools', []),
             partial_text=context.extra.get('operation_partial_text', ''), model=context.model,
+            material_findings=context.extra.get('material_findings', []),
             policy=context.effective_policy.receipt() if context.effective_policy else None,
             persona=context.persona_snapshot, authority_revision=None)
         async with write_session(self.sessions) as db:
@@ -147,6 +148,7 @@ class OperationWaits:
                 {'operation_id':pending.operation_id, 'tool_receipt_id':pending.receipt_id}, run.id, step.id)
             await self.c.event(db, room, 'step_waiting', context.agent_id,
                 {'operation_id':pending.operation_id, 'mode':step.mode,
+                 'status':'\n'.join([*context.extra.get('material_findings', []), 'The next server check is running.']),
                  'text':context.extra.get('operation_partial_text', '')}, run.id, step.id)
             await self.ready(db, step.id)
         await self.c.notify()
@@ -270,7 +272,8 @@ class OperationWaits:
             context.extra['operation_boundary'] = saved
             context.model_call_index = saved['model_call_index']
             context.extra.update(loaded_tools=set(saved['loaded_tools']), produced_files=saved['produced_files'],
-                display_tools=saved['display_tools'], operation_partial_text=saved['partial_text'])
+                display_tools=saved['display_tools'], operation_partial_text=saved['partial_text'],
+                material_findings=saved.get('material_findings', []))
             if self.c.orchestrator._registry.list_tools(context) != saved['schemas']:
                 raise ProviderError('resume_schema_changed', 'Tool authority or schemas changed; continuation is held')
             boundary.status = 'running'
@@ -359,7 +362,8 @@ class OperationWaits:
                         continue
                     room = await self.c.owned_room(db, binding.user_id, run.room_id, lock=True)
                     await self.c.event(db, room, 'progress', step.agent_id,
-                        {'text': 'The server command is still pending. I’m checking its saved receipt so it can continue without running twice.',
+                        {'text': '\n'.join([*boundary.snapshot.get('material_findings', []),
+                            'The server command is still pending. I’m checking its saved receipt so it can continue without running twice.']),
                          'mode':step.mode}, run.id, step.id)
                     self.reported_waits.add(binding.id)
                 await self.c.notify()
