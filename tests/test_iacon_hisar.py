@@ -121,7 +121,11 @@ async def test_hisar_and_personal_lookup_share_one_batch(memory):
     result = json.loads(await skill.execute({"query": "Calculus", "corpus": "hall_of_records"}, context))
     assert result["results"] and context.memory_budget.lookup_batches == 1
     assert context.memory_budget.used <= context.memory_budget.turn_limit
-    assert "budget exhausted" in await skill.execute({"query": "Calculus"}, context)
+    used = context.memory_budget.used
+    repeated = json.loads(await skill.execute({"query": "Calculus"}, context))
+    assert repeated['status'] == 'budget_exhausted'
+    assert repeated['retained_lookups'][0]['result'] == result
+    assert context.memory_budget.used == used and context.memory_budget.lookup_batches == 1
 
 
 async def test_hisar_corrupt_original_never_publishes(memory):
@@ -225,7 +229,8 @@ async def test_catalog_and_exact_document_reads_use_the_existing_shared_lookup_b
     listing = json.loads(await skill.execute({"query":"", "corpus":"hall_of_records", "operation":"list"}, context))
     assert listing["documents"][0]["id"] == doc
     assert context.memory_budget.lookup_batches == 1
-    assert not skill.offered(context)
+    assert skill.offered(context)
+    assert context.memory_budget.lookup_results[0]['result'] == listing
     exact_context = memory.context()
     read = json.loads(await skill.execute({"query":"", "corpus":"hall_of_records", "operation":"read",
         "document_ids":[doc], "revision_id":revision}, exact_context))
