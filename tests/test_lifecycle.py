@@ -8,6 +8,8 @@ from tests.test_chat_integration import components
 async def test_real_startup_registers_memory_and_shuts_down_cleanly(memory, monkeypatch, caplog):
     from app import database
     from app.main import create_app
+    from app.services.operation_waits import OperationWaits
+    monkeypatch.setattr(OperationWaits, 'host_configured', property(lambda self: False))
     caplog.set_level("INFO")
     monkeypatch.setattr(database, "engine", memory.engine)
     monkeypatch.setattr(database, "AsyncSessionLocal", memory.sessions)
@@ -17,6 +19,7 @@ async def test_real_startup_registers_memory_and_shuts_down_cleanly(memory, monk
         tools = app.state.registry.list_tools()
         assert tools[0]["name"] == "Task"
         assert "memory_lookup" in {t["name"] for t in tools}
+        assert app.state.operation_waits.task is None
 
 
 class Socket:

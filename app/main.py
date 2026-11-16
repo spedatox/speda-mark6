@@ -317,9 +317,11 @@ async def application_lifespan(app: FastAPI, incident_tasks):
         registry._skills['hisar'], configured=bool(settings.hisar_machine_token))
     recovery = asyncio.create_task(chat_turns.recover())
     if settings.orchestration_rooms_enabled:
-        await coordinator.operation_waits.recover()
+        if coordinator.operation_waits.host_configured:
+            await coordinator.operation_waits.recover()
         await coordinator.recover()
-        coordinator.operation_waits.start()
+        if coordinator.operation_waits.host_configured:
+            coordinator.operation_waits.start()
 
     logger.info(
         "startup_complete",

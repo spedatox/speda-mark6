@@ -25,7 +25,9 @@ proof of enrollment in unlisted courses and does not replace Google Calendar.
 
 Deploy the current host broker with both `broker.sock` and `events.sock` exposed
 through the existing private directory mount. The completion stream resumes the
-original saved provider boundary. If the stream is unavailable, the backend
+original saved provider boundary. Host recovery starts only when that directory
+mount is configured; an isolated database rehearsal must not create room progress
+events while checking schema preservation. If the stream is unavailable, the backend
 reconciles saved operation receipts, at most every ten seconds, without running
 commands again or polling a model. A pending command gets one explanatory delay
 notice after thirty seconds. A completed result held by policy or spending limits

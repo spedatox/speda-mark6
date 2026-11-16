@@ -26,6 +26,15 @@ class OperationWaits:
         self.last_reconcile = 0
         self.reported_waits = set()
 
+    @property
+    def host_configured(self):
+        # The directory mount is the configuration boundary. A configured
+        # broker may temporarily lose either socket and still needs recovery;
+        # an isolated schema rehearsal has no host integration at all.
+        from pathlib import Path
+        from app.services.host_operations import SOCKET_PATH
+        return Path(SOCKET_PATH).parent.is_dir()
+
     async def boundary(self, context, messages, iterations, continuations, cursor, prior_results):
         snapshot = dict(messages=messages, iterations=iterations, continuations=continuations,
             cursor=cursor, prior_results=list(prior_results), schemas=self.c.orchestrator._registry.list_tools(context),
