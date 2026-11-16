@@ -70,6 +70,7 @@ export function foldRoomMessages(messages: ChatMessage[], event: RoomEvent, plac
   if (!existing) return messages
   let next = existing
   switch (event.kind) {
+    case 'progress': next = { ...existing, status: String(event.payload.text ?? '') }; break
     case 'step_waiting': next = { ...existing, isStreaming: false, status: 'Command running' }; break
     case 'operation_finished': next = { ...existing, status: `Command ${String(event.payload.status ?? 'finished')}` }; break
     case 'step_resumed': next = { ...existing, isStreaming: true, status: undefined }; break

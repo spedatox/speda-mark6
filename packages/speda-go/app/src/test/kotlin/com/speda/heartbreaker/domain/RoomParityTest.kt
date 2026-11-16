@@ -8,6 +8,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RoomParityTest {
+    @Test fun pending_progress_is_visible_and_replay_safe() {
+        val start = RoomEvent("room", 1, stepId = "step", speaker = "orion", kind = "speaker_started", payload = buildJsonObject {})
+        val progress = start.copy(sequence = 2, kind = "progress", payload = buildJsonObject { put("text", "Checking the saved server receipt.") })
+        val rows = foldRoomMessages(foldRoomMessages(emptyList(), start, "", 1), progress, "", 1)
+        assertEquals("Checking the saved server receipt.", rows.last().status)
+        assertTrue(showTurnProgress(rows.last().copy(isStreaming = false)))
+        assertEquals(rows, foldRoomMessages(rows, progress, "", 1))
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private fun trace(): List<RoomEvent> = json.decodeFromString(javaClass.classLoader!!.getResource("fixtures/room_v1.json")!!.readText())
     private fun begin() = ChatState(activeSessionId = 1, isStreaming = true, messages = persistentListOf(

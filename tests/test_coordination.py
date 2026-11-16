@@ -138,12 +138,13 @@ async def test_parallel_memory_requests_keep_the_first_result_and_finish_the_tur
         run = await send(bits, room, "What do you remember about Mira?")
         assert run["status"] == "succeeded"
         followup = bits.client.calls[1]
-        assert "memory_lookup" not in {tool["name"] for tool in followup["tools"]}
+        assert "memory_lookup" in {tool["name"] for tool in followup["tools"]}
         results = [block for message in followup["messages"] if isinstance(message["content"], list)
                    for block in message["content"] if block["type"] == "tool_result"]
         assert [item["tool_use_id"] for item in results] == ["personal", "history"]
         assert "Izmir" in results[0]["content"]
         assert json.loads(results[1]["content"])["status"] == "budget_exhausted"
+        assert 'Izmir' in results[1]['content']
     finally:
         await bits.coordinator.shutdown()
 

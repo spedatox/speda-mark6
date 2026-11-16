@@ -91,7 +91,7 @@ async def test_native_image_reaches_first_answering_request_without_vision_prefl
     assert len(bits.client.calls) == 1
 
 
-async def test_lookup_tool_removed_after_one_batch_and_protocol_preserved(memory):
+async def test_lookup_remains_available_with_retained_evidence_and_protocol_preserved(memory):
     await memory.seed("Nora cancelled her visit.", title="Nora", aliases=("Nora",))
     tool = SimpleNamespace(type="tool_use", id="lookup-1", name="memory_lookup", input={"query": "Nora"})
     client = Client([("tool_use", [tool]), ("end_turn", [SimpleNamespace(type="text", text="Nora cancelled.")])])
@@ -99,7 +99,7 @@ async def test_lookup_tool_removed_after_one_batch_and_protocol_preserved(memory
     ctx = memory.context("Who is visiting?")
     _ = [event async for event in bits.orchestrator.run(ctx)]
     assert "memory_lookup" in {t["name"] for t in client.calls[0]["tools"]}
-    assert "memory_lookup" not in {t["name"] for t in client.calls[1]["tools"]}
+    assert "memory_lookup" in {t["name"] for t in client.calls[1]["tools"]}
     completed = ctx.extra["completed_messages"]
     assert completed[-2]["content"][0]["tool_use_id"] == "lookup-1"
     assert "Nora" in completed[-2]["content"][0]["content"]

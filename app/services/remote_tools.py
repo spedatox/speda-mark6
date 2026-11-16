@@ -17,6 +17,10 @@ async def request_bytes(method, url, *, maximum=131072, timeout=30, **kwargs):
                         raise ProviderError('remote_response_bound','Remote response exceeded the allowed size; a dispatched effect may require reconciliation.')
                     body.extend(chunk)
                 return response.status_code,bytes(body)
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+        # These failures occur before an HTTP request can be dispatched. They
+        # are safe to retry and must not permanently hold an unsent alert.
+        raise ProviderError('remote_not_dispatched', 'No connection was established; the request was not sent.') from exc
     except (httpx.HTTPError,OSError) as exc:
         raise ProviderError('remote_effect_unknown' if method not in {'GET','HEAD'} else 'remote_unavailable',
             'Remote transport ended without a confirmed outcome. No automatic retry was made.') from exc

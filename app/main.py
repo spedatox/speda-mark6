@@ -179,6 +179,8 @@ async def application_lifespan(app: FastAPI, incident_tasks):
         profiles=profiles)
     protocol = app.state.damage_control
     orchestrator.incidents = protocol
+    from app.services.security_response import SecurityResponder
+    orchestrator.security_response = SecurityResponder()
     if protocol:
         from app.skills.damage_control import ReportIncidentSkill
         await registry.register_skill(ReportIncidentSkill(protocol))

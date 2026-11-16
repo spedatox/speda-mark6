@@ -32,6 +32,8 @@ data class RoomEvent(
 data class RoomPage(val room: RoomInfo, val events: List<RoomEvent>, @SerialName("next_cursor") val nextCursor: Long)
 
 fun canonicalRoomAgent(id: String) = if (id == "nightcrawler") "friday" else id
+fun showTurnProgress(message: ChatMessage) = !message.status.isNullOrEmpty() &&
+    (!message.isStreaming || message.content.isNotEmpty() || message.tools.isNotEmpty())
 fun JsonObject.roomText(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 
 fun updateRoom(current: RoomInfo?, next: RoomInfo): RoomInfo =
@@ -95,6 +97,7 @@ fun foldRoomMessages(messages: List<ChatMessage>, event: RoomEvent, placeholderI
     if (existing == null) return messages
     val data = p["data"] ?: JsonNull
     val next = when (event.kind) {
+        "progress" -> existing.copy(status = p.roomText("text") ?: existing.status)
         "step_waiting" -> existing.copy(isStreaming = false, status = "Command running")
         "operation_finished" -> existing.copy(status = "Command ${p.roomText("status") ?: "finished"}")
         "step_resumed" -> existing.copy(isStreaming = true, status = null)

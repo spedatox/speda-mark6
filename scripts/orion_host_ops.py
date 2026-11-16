@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import selectors
+import shutil
 import signal
 import socket
 import socketserver
@@ -45,7 +46,7 @@ DIAGNOSTICS = {
         "--grep=Accepted password for root ",
     ],
 }
-ACTIONS = HOST_COMMANDS | {"diagnostics", "service_logs", "restart_service"}
+ACTIONS = HOST_COMMANDS | {"diagnostics", "service_logs", "restart_service", "security_response"}
 ID = re.compile(r"[a-f0-9]{32}")
 
 # Run inside the live application container. The API credential stays there.
@@ -237,6 +238,69 @@ def canonical_hash(value):
                                     separators=(",", ":")).encode()).hexdigest()
 
 
+def protection_ports():
+    policy_path = ROOT / 'security-policy.json'
+    metadata = policy_path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022 or metadata.st_size > 4096:
+        raise ValueError('Automatic protection policy must be a root-owned private regular file.')
+    policy = json.loads(policy_path.read_text())
+    if not isinstance(policy, dict):
+        raise ValueError('Invalid bounded unused-port policy.')
+    ports = policy.get('unused_udp_ports', [])
+    if not isinstance(ports, list) or len(ports) > 16 or any(type(p) is not int or not 1 <= p <= 65535 for p in ports):
+        raise ValueError('Invalid bounded unused-port policy.')
+    return sorted(set(ports))
+
+
+def security_response(identity):
+    """Enforce the root-owned list of explicitly unused UDP ports.
+
+    The automatic path accepts no model-selected commands, source-IP bans,
+    SSH changes, service shutdowns or global firewall enablement.
+    """
+    protections = []
+    with (DEPLOY / 'deployment.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return result('busy', reason='Deployment or maintenance is in progress; no rules changed.')
+        if (DEPLOY / 'orion-spark.inhibit').exists():
+            return result('busy', reason='Production maintenance is in progress; no rules changed.')
+        try:
+            ports = protection_ports()
+        except (OSError, ValueError):
+            return result('denied', reason='A valid root-owned automatic protection policy is required.')
+        firewall = run(['/usr/sbin/ufw', 'status', 'verbose'], 5)
+        if firewall['status'] != 'ok' or not re.search(r'^Status: active$', firewall.get('stdout', ''), re.M):
+            return result('failed', reason='Host firewall is not confirmed active. No global firewall changes were made.')
+        for port in ports:
+            sockets = run(['/usr/bin/ss', '-H', '-lun', f'sport = :{port}'], 5)
+            if sockets['status'] != 'ok' or sockets.get('stdout', '').strip():
+                protections.append({'port':port, 'state':'skipped', 'reason':'A listener exists or could not be ruled out.'})
+                continue
+            denied = re.search(rf'^{port}/udp\s+DENY IN\b', firewall.get('stdout', ''), re.M)
+            changed = False
+            if not denied:
+                backup = ROOT / 'security-rollback' / identity
+                backup.mkdir(mode=0o700, parents=True, exist_ok=True)
+                for filename in ('user.rules', 'user6.rules'):
+                    target = backup / filename
+                    if not target.exists():
+                        shutil.copy2('/etc/ufw/' + filename, target)
+                effect = run(['/usr/sbin/ufw', 'insert', '1', 'deny', 'in', 'proto', 'udp',
+                    'to', 'any', 'port', str(port), 'comment', 'speda-auto-unused-udp'], 8)
+                if effect['status'] != 'ok':
+                    protections.append({'port':port, 'state':'unconfirmed', 'backup':str(backup)})
+                    continue
+                changed = True
+                firewall = run(['/usr/sbin/ufw', 'status', 'verbose'], 5)
+                denied = re.search(rf'^{port}/udp\s+DENY IN\b', firewall.get('stdout', ''), re.M)
+            protections.append({'port':port, 'state':'blocked' if denied else 'unconfirmed', 'changed':changed})
+        health = run([DOCKER, 'ps', '--format', '{{.Names}} {{.Status}}'], 5)
+    return result('ok', protections=protections, services=health.get('stdout', '')[:2500],
+        limitation='Host rules cannot prevent upstream link saturation. Provider mitigation must be verified separately.')
+
+
 def save(identity, reply):
     with closing(sqlite3.connect(ROOT / "receipts.sqlite3", timeout=30)) as db, db:
         row = db.execute("SELECT fingerprint FROM operations WHERE id=?", (identity,)).fetchone()
@@ -265,6 +329,8 @@ def supervised_operation(identity):
             reply = restart(identity, request['service'])
         elif action == 'service_logs':
             reply = service_logs(request['service'])
+        elif action == 'security_response':
+            reply = security_response(identity)
         else:
             reply = run(DIAGNOSTICS[request['diagnostic']], 10)
     except Exception:

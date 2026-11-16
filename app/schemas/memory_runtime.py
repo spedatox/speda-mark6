@@ -43,6 +43,9 @@ class MemoryBudget:
     used: int = 0
     elapsed_seconds: float = 0
     seen: set[str] = field(default_factory=set)
+    # Already-paid retrieval evidence follows the whole coordination round,
+    # including a peer's return and a resumed external operation.
+    lookup_results: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -56,6 +59,7 @@ class MemoryPacket:
     unit_revisions: dict[str, int] = field(default_factory=dict)
     omissions: list[str] = field(default_factory=list)
     ambiguities: list[str] = field(default_factory=list)
+    catalogue_records: list[dict] = field(default_factory=list)
     coverage: str = "partial"
     freshness: str = "source_overlay"
     token_upper_bound: int = 0

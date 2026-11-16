@@ -352,6 +352,49 @@ class DamageControl(logging.Handler):
                  "observed_at": datetime.fromtimestamp(row["timestamp"], timezone.utc).isoformat(timespec="seconds"),
                  **json.loads(row["facts"])}
         security = facts.get("component") == "security_watchdog"
+        if security and row['status'] == 'pending':
+            # Dispatch protection/assessment and the factual warning independently.
+            # Model latency or an unavailable provider cannot delay the warning.
+            if not self.journal.transition(identity, 'pending', 'ready'):
+                return
+            assessment = asyncio.create_task(analyse(explain(facts)))
+            fallback = (asyncio.create_task(deliveries.security_fallback(identity, facts))
+                        if hasattr(deliveries, 'security_fallback') else None)
+            try:
+                async with deliveries.sessions() as db:
+                    original_link = await db.get(TelegramLink, (1, 'speda'))
+                    route = (original_link.chat_id, original_link.version) if original_link else None
+                with self.journal.connect() as db:
+                    ready = db.execute('SELECT * FROM incidents WHERE id=?', (identity,)).fetchone()
+                await self.process(ready, analyse, deliveries)
+                if fallback:
+                    await asyncio.gather(fallback, return_exceptions=True)
+                try:
+                    async with asyncio.timeout(45):
+                        analysis = await assessment
+                except Exception as exc:
+                    analysis = f'Model analysis unavailable ({type(exc).__name__}). Review the recorded observations.'
+                with self.journal.connect() as db:
+                    db.execute('UPDATE incidents SET analysis=? WHERE id=?', (analysis, identity))
+                    delivered = db.execute('SELECT status, telegram_message_id FROM incidents WHERE id=?', (identity,)).fetchone()
+                if delivered['status'] == 'sent' and not analysis.startswith('Model analysis unavailable'):
+                    async with deliveries.sessions() as db:
+                        link = await db.get(TelegramLink, (1, 'speda'))
+                    if link and (link.chat_id, link.version) == route:
+                        try:
+                            await deliveries.telegram('speda', 'editMessageText', {'chat_id':link.chat_id,
+                                'message_id':delivered['telegram_message_id'],
+                                'text':f"Mark VI Security Watchdog\n{facts['summary']}\n{analysis[:2200]}\nIncident {identity}"})
+                        except Exception:
+                            logger.warning('security_assessment_edit_unconfirmed', extra={'incident_id':identity})
+            finally:
+                if not assessment.done():
+                    assessment.cancel()
+                await asyncio.gather(assessment, return_exceptions=True)
+                if fallback and not fallback.done():
+                    fallback.cancel()
+                    await asyncio.gather(fallback, return_exceptions=True)
+            return
         if row["status"] == "pending":
             if not self.journal.transition(identity, "pending", "analysing"):
                 return
@@ -398,13 +441,14 @@ class DamageControl(logging.Handler):
             if type(remote_id) is not int:
                 raise ValueError("Telegram did not return a message ID")
         except BaseException as exc:
-            if isinstance(exc, ProviderError) and exc.code == "telegram_throttled":
+            if isinstance(exc, ProviderError) and exc.code in {"telegram_throttled", "remote_not_dispatched"}:
                 self.journal.transition(identity, "sending", "ready", delay=60)
                 return
             self.journal.transition(identity, "sending", "unknown")
             if not isinstance(exc, Exception):
                 raise
-            logger.warning("damage_control_delivery_unknown", extra={"incident_id": identity})
+            logger.warning("damage_control_delivery_unknown", extra={"incident_id": identity,
+                "error_type": type(exc).__name__, "error_code": getattr(exc, "code", None)})
         else:
             self.journal.transition(identity, "sending", "sent", remote_id=remote_id)
 

@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import timezone
 from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import write_session
@@ -22,6 +23,8 @@ class OperationWaits:
         self.c = coordinator
         self.sessions = coordinator.sessions
         self.task = None
+        self.last_reconcile = 0
+        self.reported_waits = set()
 
     async def boundary(self, context, messages, iterations, continuations, cursor, prior_results):
         snapshot = dict(messages=messages, iterations=iterations, continuations=continuations,
@@ -214,6 +217,7 @@ class OperationWaits:
     async def drain(self):
         """Claim ready continuations under the room lock, retaining root authority."""
         launch = []
+        reported = False
         async with write_session(self.sessions) as db:
             rows = list(await db.scalars(select(OperationContinuation).where(OperationContinuation.status.in_(['ready', 'held']))))
             for queue in rows:
@@ -229,6 +233,11 @@ class OperationWaits:
                         or (step.mode != 'consult' and step.agent_id not in room.members)
                         or (not run.policy.get('shared_call_cap_exempt')
                             and run.calls >= run.limits['run']['calls'])):
+                    if queue.status != 'held':
+                        await self.c.event(db, room, 'progress', step.agent_id,
+                            {'text':'The command result is saved, but the original reply cannot resume under its current time, spending or access limits. It will not run again.',
+                             'mode':step.mode}, run.id, step.id)
+                        reported = True
                     queue.status = 'held'
                     continue
                 # A saved boundary only resumes the original pinned provider route.
@@ -244,6 +253,8 @@ class OperationWaits:
                 launch.append(run.id)
         for run_id in launch:
             self.c.launch(run_id)
+        if reported:
+            await self.c.notify()
 
     async def restore(self, context):
         async with write_session(self.sessions) as db:
@@ -300,11 +311,65 @@ class OperationWaits:
                     room.active_run = None
                 await self.ready(db, step.id)
 
+    async def reconcile_waiting(self):
+        """Read saved executor receipts when completion streaming is unavailable.
+
+        This never redispatches a command or polls a model. The original receipt,
+        waiter and provider boundary remain the authority for continuation.
+        """
+        if time.monotonic() - self.last_reconcile < 10:
+            return
+        self.last_reconcile = time.monotonic()
+        from app.core.context import AgentContext
+        from app.services.host_operations import host_operation
+        async with self.sessions() as db:
+            rows = list(await db.scalars(select(OperationBinding).where(
+                OperationBinding.executor == self.executor,
+                OperationBinding.state.in_(['prepared', 'accepted', 'running'])
+            ).order_by(OperationBinding.id).limit(16)))
+        for binding in rows:
+            context = AgentContext(user_id=binding.user_id, session_id=0, request_id=binding.step_id,
+                triggered_by='agent', trigger_payload={}, output_mode='silent', model='', system_prompt='',
+                conversation_history=[], db=None, agent_id='orion')
+            try:
+                async with asyncio.timeout(4):
+                    reply = await host_operation({'action':'operation_status', 'operation_id':binding.operation_id}, context)
+            except (TimeoutError, OSError):
+                reply = {'status':'unavailable'}
+            reply = {k:v for k,v in reply.items() if k not in {'source', 'operation_id'}}
+            if reply.get('status') in {'ok','failed','timeout','cancelled','denied','busy','unknown'}:
+                async with write_session(self.sessions) as db:
+                    current = await db.get(OperationBinding, binding.id, with_for_update=True)
+                    if current.state not in {'prepared','accepted','running'}:
+                        continue
+                    await self.attach(db, current, reply, digest(reply), current.version)
+                    run = await db.get(CoordinationRun, current.run_id)
+                    room = await self.c.owned_room(db, current.user_id, run.room_id, lock=True)
+                    await self.c.event(db, room, 'operation_finished', 'system',
+                        {'operation_id':current.operation_id, 'status':current.state}, run.id, current.step_id)
+                await self.c.notify()
+            elif binding.id not in self.reported_waits:
+                async with write_session(self.sessions) as db:
+                    boundary = await db.get(ToolBoundary, binding.step_id)
+                    step = await db.get(AgentStep, binding.step_id)
+                    run = await db.get(CoordinationRun, binding.run_id)
+                    if (not boundary or boundary.status != 'waiting_operations' or run.cancelled
+                            or step.status != 'waiting_operations'
+                            or time.time() - run.created_at.replace(tzinfo=timezone.utc).timestamp() < 30):
+                        continue
+                    room = await self.c.owned_room(db, binding.user_id, run.room_id, lock=True)
+                    await self.c.event(db, room, 'progress', step.agent_id,
+                        {'text': 'The server command is still pending. I’m checking its saved receipt so it can continue without running twice.',
+                         'mode':step.mode}, run.id, step.id)
+                    self.reported_waits.add(binding.id)
+                await self.c.notify()
+
     async def listen(self):
         from app.services.host_operations import EVENT_SOCKET_PATH
         while True:
             writer = None
             try:
+                await self.reconcile_waiting()
                 await self.drain()
                 async with self.sessions() as db:
                     cursor = await db.get(ExecutorCursor, self.executor)
@@ -313,7 +378,8 @@ class OperationWaits:
                 writer.write(json.dumps({'schema_version':1, 'after':after}).encode()+b'\n')
                 await writer.drain()
                 while True:
-                    line = await reader.readline()
+                    async with asyncio.timeout(5):
+                        line = await reader.readline()
                     if not line:
                         break
                     event = json.loads(line)
@@ -322,7 +388,8 @@ class OperationWaits:
                         writer.write(json.dumps({'ack':sequence}).encode()+b'\n')
                         await writer.drain()
                     await self.drain()
-            except (OSError, ValueError, NotImplementedError, SQLAlchemyError):
+                    await self.reconcile_waiting()
+            except (OSError, TimeoutError, ValueError, NotImplementedError, SQLAlchemyError):
                 logging.getLogger(__name__).debug('operation_event_transport_retry', exc_info=True)
                 await asyncio.sleep(1)
             finally:

@@ -26,3 +26,12 @@ test('reconnecting to a pending command reconstructs its saved status', () => {
   assert.equal(rows[0].isStreaming, false)
   assert.equal(rows[0].content, 'Running the command.')
 })
+
+test('meaningful pending progress is visible and replay safe', () => {
+  const base = {room_id:'room', step_id:'step', speaker:'orion'}
+  let rows = foldRoomMessages([], {...base, sequence:1, kind:'speaker_started', payload:{}} as RoomEvent, '', 1)
+  const progress = {...base, sequence:2, kind:'progress', payload:{text:'Checking the saved server receipt.'}} as RoomEvent
+  rows = foldRoomMessages(rows, progress, '', 1)
+  assert.equal(rows[0].status, 'Checking the saved server receipt.')
+  assert.deepEqual(foldRoomMessages(rows, progress, '', 1), rows)
+})

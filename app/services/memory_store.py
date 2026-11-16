@@ -256,14 +256,25 @@ class MemoryStore:
             if len(requested.intersection({"mother", "father"})) == 1:
                 requested.discard("parent")
             person_ids, name_terms, relation_ids = set(), set(), set()
+            named_candidates = []
             for person_id, title, aliases, family in self.catalog[catalog_key]:
                 words = set(re.findall(r"\w+", fold(title + " " + " ".join(aliases))))
                 matches = words.intersection(terms)
                 if matches:
-                    person_ids.add(person_id)
-                    name_terms.update(matches)
+                    named_candidates.append((person_id, matches))
                 if requested.intersection(family):
                     relation_ids.add(person_id)
+            if named_candidates:
+                # A shared surname must not flood a named person's dossier
+                # retrieval with every family member. Keep the most specific
+                # matches; a surname-only query remains explicitly ambiguous.
+                specificity = max(len(matches) for _, matches in named_candidates)
+                specific = [(pid, matches) for pid, matches in named_candidates if len(matches) == specificity]
+                person_ids.update(pid for pid, _ in specific)
+                frequencies = {term: sum(term in matches for _, matches in named_candidates)
+                               for _, matches in specific for term in matches}
+                rarest = min(frequencies.values())
+                name_terms.update(term for term, count in frequencies.items() if count == rarest)
             if name_terms:
                 # A named person's sister is not automatically the owner's sister.
                 relation_ids.clear()

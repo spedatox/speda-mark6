@@ -91,6 +91,25 @@ class Deliveries:
             await self.add(db,run.user_id,step.agent_id,[run.id,step.id,'unconfigured'],'unconfigured',
                 {'detail':'No linked Telegram bot or configured device transport.'},run.id)
 
+    async def security_fallback(self, identity, facts):
+        """Independent, receipt-backed owner-device alert alongside Telegram."""
+        if not self.config.fcm_credentials_file:
+            return
+        from app.models.user import User
+        queued = []
+        async with write_session(self.sessions) as db:
+            await db.execute(update(User).where(User.id == 1).values(name=User.name))
+            devices = list(await db.scalars(select(Device).where(Device.active.is_(True)).limit(20)))
+            for device in devices:
+                await self.add(db,1,'orion',['security_watchdog',identity,device.id],'fcm',
+                    {'device_id':device.id,'fid':device.fid,'token_hash':digest(device.token),
+                     'title':'Mark VI Security Watchdog','body':facts['summary'][:700],
+                     'priority':'high' if facts.get('severity') == 'CRITICAL' else 'normal'})
+                queued.append(await db.scalar(select(Delivery.id).where(Delivery.user_id==1,
+                    Delivery.dedupe_key==digest(['security_watchdog',identity,device.id]))))
+        for delivery_id in queued:
+            await self.send(1,delivery_id)
+
     async def manual(self,context,*,text=None,filename=None,caption=''):
         from app.models.user import User
         owner=context.user_id
@@ -229,7 +248,7 @@ class Deliveries:
             else:
                 from app.services.fcm import send_data_message
                 ok,detail=await send_data_message(fid=fid,token=token,
-                    data={'type':'notification','title':payload['title'],'body':payload['body'],'delivery_id':identity},priority='normal')
+                    data={'type':'notification','title':payload['title'],'body':payload['body'],'delivery_id':identity},priority=payload.get('priority','normal'))
                 status='accepted' if ok else 'rejected' if detail=='unregistered' else 'unknown'
                 remote_id=None
         except BaseException as exc:

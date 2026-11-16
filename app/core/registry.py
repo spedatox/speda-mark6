@@ -237,12 +237,16 @@ class CapabilityRegistry:
             context = SimpleNamespace(agent_id=agent_id or "speda", task_role="interactive",
                 allowed_tools=allowlist, effective_policy=None, extra={"active_servers": active_servers})
         terms = set(re.findall(r"\w+", query.casefold()))
+        direct_name = query.strip().casefold() if re.fullmatch(r'[a-z][a-z0-9]*_[a-z0-9_]+', query.strip().casefold()) else None
         ranked = []
         for definition in self.list_tools(context, include_deferred=True):
             name = definition["name"]
             skill = self._skills.get(name)
             original = self._mcp_original_names.get(name, name)
             identities = {name.casefold(), original.casefold()}
+            identities.update(re.findall(r'\b[a-z0-9]+_[a-z0-9_]+\b', getattr(skill, 'search_keywords', '').casefold()))
+            if direct_name and direct_name not in identities:
+                continue
             exact = len(terms & identities)
             name_words = set(re.findall(r"[a-z0-9]+", f"{name} {original}".casefold()))
             name_matches = len(terms & name_words)
@@ -251,6 +255,26 @@ class CapabilityRegistry:
             if score:
                 ranked.append(((-exact, -name_matches, -score, name), definition))
         return [definition for _, definition in sorted(ranked, key=lambda item: item[0])[:5]]
+
+    async def context_data(self, context):
+        """Read only local context hooks within the caller's current tool grants."""
+        import asyncio
+        import json
+        from sqlalchemy.exc import SQLAlchemyError
+        result = {}
+        authorized = {tool['name'] for tool in self.list_tools(context, include_deferred=True)}
+        for name, skill in self._skills.items():
+            hook = getattr(skill, 'context_data', None)
+            if name not in authorized or not skill.read_only or skill.requires_network or hook is None:
+                continue
+            try:
+                async with asyncio.timeout(1):
+                    data = await hook(context)
+                if data is not None and len(json.dumps(data, ensure_ascii=False).encode()) <= 6000:
+                    result[name] = data
+            except (TimeoutError, OSError, SQLAlchemyError, ValueError):
+                result[name] = {'status':'unavailable', 'reason':'Local domain context could not be loaded in time.'}
+        return result
 
     def call_is_read_only(self, name, args):
         skill = self._skills.get(name)

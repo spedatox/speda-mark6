@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Children, isValidElement, Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { TurnProgress } from './TurnProgress'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -646,7 +647,7 @@ function WorkingStatus({ tools, status }: { tools: { id: string; name: string }[
     status === 'Thinking' ||
     status === 'Düşünüyor' ||
     status.includes('token')
-  const real = lastTool ? statusLabel(lastTool, t) : (!isGenericOrStall ? status : null)
+  const real = !isGenericOrStall ? status : lastTool ? statusLabel(lastTool, t) : null
   const label = real ? `${real}…` : waiting
 
   return (
@@ -1530,6 +1531,9 @@ export default function Message({ message, showAttribution = true, onDelete, onR
             <WorkingStatus tools={message.tools} status={message.status} />
           )
         ) : null}
+
+        <TurnProgress status={message.status} streaming={message.isStreaming}
+          hasContent={!!message.content || message.tools.length > 0} />
 
         {/* What this turn delegated. Deliberately OUTSIDE the prose block: a
             subagent's report is not the answer, and rendering it inline is what

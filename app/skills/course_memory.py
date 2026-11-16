@@ -2,6 +2,7 @@
 
 import json
 import re
+from dataclasses import replace
 
 from sqlalchemy import select
 
@@ -47,6 +48,15 @@ class ReadCourseMemorySkill(Skill):
 
     def __init__(self, catalogue):
         self.catalogue = catalogue
+
+    async def context_data(self, context):
+        # Enrollment context is an automatic local read, not a test of whether
+        # the answering model remembers to ask for the owner's saved courses.
+        if context.agent_id != 'ultron' or context.task_role == 'worker':
+            return None
+        async with self.catalogue.sessions() as db:
+            listing = json.loads(await self.execute({}, replace(context, db=db)))
+        return {**listing, 'scope':'Saved course records by academic term; absence is not proof of non-enrollment.'}
 
     async def execute(self, args, context):
         code = "".join(args.get("course_code", "").upper().split())

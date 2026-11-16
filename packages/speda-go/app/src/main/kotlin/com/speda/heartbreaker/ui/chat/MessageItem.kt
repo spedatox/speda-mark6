@@ -74,6 +74,7 @@ import com.speda.heartbreaker.domain.Role
 import com.speda.heartbreaker.domain.Segment
 import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.buildSegments
+import com.speda.heartbreaker.domain.showTurnProgress
 import com.speda.heartbreaker.i18n.LocalStrings
 import com.speda.heartbreaker.ui.HbText
 import com.speda.heartbreaker.ui.HbGlassButton
@@ -349,6 +350,11 @@ private fun AssistantRow(
                 }
             }
 
+            if (showTurnProgress(message)) {
+                BasicText(message.status.orEmpty(), style = TextStyle(fontSize = 14.sp, color = palette.textDim),
+                    modifier = Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite })
+            }
+
             // What a coding peer delegated this turn — see SubagentPanel's doc.
             val subagents = message.subagents
             if (!subagents.isNullOrEmpty()) {
@@ -563,7 +569,7 @@ private fun WorkingStatus(lastToolName: String?, status: String?) {
         status == "Thinking" ||
         status == "Düşünüyor" ||
         status.contains("token")
-    val real = if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else if (!isGenericOrStall) status else null
+    val real = if (!isGenericOrStall) status else if (lastToolName != null) ToolStatus.statusLabel(lastToolName, t) else null
     val label = if (real != null) "$real…" else waiting
 
     // The sweep: a bright band riding a muted base, clipped to the glyphs.

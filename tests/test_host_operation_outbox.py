@@ -9,7 +9,7 @@ from types import SimpleNamespace
 def broker(tmp_path, monkeypatch):
     # Receipt/worker tests are portable; actual systemd/socket integration needs Linux.
     if sys.platform == 'win32':
-        monkeypatch.setitem(sys.modules, 'fcntl', SimpleNamespace())
+        monkeypatch.setitem(sys.modules, 'fcntl', SimpleNamespace(flock=lambda *args: None, LOCK_EX=1, LOCK_NB=2))
         import socketserver
         monkeypatch.setattr(socketserver, 'UnixStreamServer', socketserver.TCPServer, raising=False)
     spec = importlib.util.spec_from_file_location('host_broker_test', Path(__file__).parents[1] / 'scripts/orion_host_ops.py')
@@ -26,6 +26,52 @@ def admitted(module, identity='a'*32):
         db.execute('INSERT INTO operations VALUES (?, ?, ?)', (identity, module.canonical_hash(request), json.dumps({'status':'started'})))
         db.execute('INSERT INTO operation_workers VALUES (?, ?, 0)', (identity, json.dumps(request)))
     return identity
+
+
+def test_automatic_protection_backs_up_blocks_and_verifies_only_unused_udp(tmp_path, monkeypatch):
+    module = broker(tmp_path, monkeypatch)
+    module.DEPLOY = tmp_path
+    module.protection_ports = lambda: [47584]
+    calls, backups = [], []
+    def run(argv, timeout):
+        calls.append(argv)
+        output = ''
+        if argv[0].endswith('ufw') and 'status' in argv:
+            output = 'Status: active\nDefault: deny (incoming)\n'
+            if any('insert' in call for call in calls):
+                output += '47584/udp                  DENY IN     Anywhere\n'
+        return {'status':'ok','stdout':output}
+    module.run = run
+    monkeypatch.setattr(module.shutil, 'copy2', lambda source, target: backups.append((source, target)))
+    response = module.security_response('b'*32)
+    assert response['protections'] == [{'port':47584,'state':'blocked','changed':True}]
+    assert len(backups) == 2
+    mutations = [call for call in calls if 'insert' in call]
+    assert len(mutations) == 1 and mutations[0][mutations[0].index('port')+1] == '47584'
+    assert 'udp' in mutations[0] and not any('restart' in call for call in calls)
+
+
+def test_automatic_protection_leaves_listeners_and_inactive_firewall_unchanged(tmp_path, monkeypatch):
+    module = broker(tmp_path, monkeypatch)
+    module.DEPLOY = tmp_path
+    module.protection_ports = lambda: [47584]
+    calls = []
+    def run(argv, timeout):
+        calls.append(argv)
+        return {'status':'ok','stdout':'Status: active\n' if argv[0].endswith('ufw') else 'listener'}
+    module.run = run
+    response = module.security_response('c'*32)
+    assert response['protections'][0]['state'] == 'skipped'
+    assert not any('insert' in call for call in calls)
+    module.run = lambda *args: {'status':'ok','stdout':'Status: inactive\n'}
+    assert module.security_response('d'*32)['status'] == 'failed'
+
+
+def test_automatic_protection_requires_explicit_host_policy(tmp_path, monkeypatch):
+    module = broker(tmp_path, monkeypatch)
+    module.DEPLOY = tmp_path
+    module.run = lambda *args: (_ for _ in ()).throw(AssertionError('No implicit host policy'))
+    assert module.security_response('e'*32)['status'] == 'denied'
 
 
 def test_worker_persists_terminal_receipt_and_outbox_without_broker_thread(tmp_path, monkeypatch):

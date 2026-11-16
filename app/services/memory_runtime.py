@@ -99,6 +99,7 @@ class MemoryRuntime:
         packet.blocks.clear()
         packet.evidence_handles.clear()
         packet.unit_revisions.clear()
+        packet.catalogue_records.clear()
 
     def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=()):
         today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
@@ -165,6 +166,9 @@ class MemoryRuntime:
             for alias in exact:
                 matched_aliases.setdefault(fold(alias), set()).add(unit["identity"])
             score = (100 if unit["kind"] == "core" else 0) + (200 if exact else 0)
+            dossier = unit["kind"] == "person" and any(data_is_identity(s["text"]) for s in unit["sections"])
+            if dossier and exact:
+                score += 220
             family_match = unit["key"] in result.get("relation_keys", ())
             if names_only and result.get("relation_keys") and unit["kind"] in {"person", "situation"} and not family_match and not exact:
                 continue
@@ -187,6 +191,23 @@ class MemoryRuntime:
                 if names_only and family_match and not data_is_identity(section["text"]):
                     continue
                 identity_bonus = 50 if unit["kind"] == "person" and data_is_identity(section["text"]) else 0
+                try:
+                    entity = json.loads(section["text"])
+                except (ValueError, TypeError):
+                    entity = None
+                if (isinstance(entity, dict) and entity.get("kind") == "entity"
+                        and isinstance(entity.get('payload'), dict) and not entity['payload'].get("description")):
+                    # Preserve the ID/version as evidence, but do not let an
+                    # empty identity index crowd out the person's native dossier.
+                    identity_bonus -= 250
+                if (exact and checked.attribution == 'canonical_record' and isinstance(entity, dict)
+                        and unit['key'] == 'iacon:' + str(entity.get('record_id'))
+                        and type(entity.get('version')) is int and len(packet.catalogue_records) < 3):
+                    metadata = {'record_id':entity['record_id'], 'version':entity['version'],
+                        'title':unit['title'], 'kind':entity.get('kind'),
+                        'source':f"source:{checked.source_id}:{checked.start}:{checked.end}"}
+                    if metadata not in packet.catalogue_records:
+                        packet.catalogue_records.append(metadata)
                 if family_match and data_is_identity(section["text"]):
                     identity_bonus += 150
                 if unit["kind"] == "person" and re.search(r"\b(stance|boundar\w*|reconciliation|sibling bond|relationship status)\b", body):
@@ -315,6 +336,8 @@ class MemoryRuntime:
                 packet.unit_revisions.pop("iacon:" + state["record_id"], None)
             budget.seen.discard(removed)
             packet.omissions.append("Serialized packet budget reached")
+        while packet.catalogue_records and token_upper_bound(packet_json(packet)) + 64 > ceiling:
+            packet.catalogue_records.pop()
         packet.token_upper_bound = token_upper_bound(packet_json(packet)) + 64
         budget.used += min(packet.token_upper_bound, max(0, budget.turn_limit - budget.used))
 
@@ -328,6 +351,7 @@ def packet_json(packet: MemoryPacket) -> str:
         "freshness": packet.freshness, "source_boundary": packet.source_boundary,
         "current_states": [block["current_state"] for block in blocks if "current_state" in block],
         "evidence": [block for block in blocks if "current_state" not in block],
+        "catalogue_records": packet.catalogue_records,
         "omissions_count": len(packet.omissions), "limitations": [x[:160] for x in limitations],
         "ambiguities": packet.ambiguities[:4],
         "notice": "Bounded source evidence; absence is not proof of absence."},

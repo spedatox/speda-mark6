@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "test:workers": "node scripts/test_worker_clients.mjs",
+    "test:conversation": "node scripts/test_conversation_clients.mjs",
     "striker:dev": "npm run dev --workspace=packages/striker",
     "striker:build": "npm run build --workspace=packages/striker",
     "striker:typecheck": "npm run typecheck --workspace=packages/striker",

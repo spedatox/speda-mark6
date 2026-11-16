@@ -13,7 +13,8 @@ class MemoryLookupSkill(Skill):
         "For an answer from a Hall of Records document, search with its topic or title and supply on_date "
         "for a specific day such as today. Use list for catalogue questions and read when you already have a document ID. "
         "Use personal memory for a specific person, past event, or exact source detail missing from the supplied context. "
-        "Only one lookup is allowed per turn, including when requesting tools in parallel. If used, answer from available evidence and state any gaps. "
+        "One fresh lookup is allowed per coordination round; its evidence is shared with colleagues and return turns. "
+        "A repeated lookup returns the retained evidence without performing another search. "
         "Returns attributed evidence, ambiguity and incomplete-coverage status within one shared turn budget."
     )
     input_schema = {"type": "object", "properties": {
@@ -40,9 +41,26 @@ class MemoryLookupSkill(Skill):
         self.catalogue = catalogue
 
     def offered(self, context):
-        return context.memory_budget.lookup_batches < 1
+        return True
 
     async def execute(self, args, context):
+        retained = context.memory_budget.lookup_results
+        if context.memory_budget.lookup_batches >= 1:
+            return json.dumps({"status": "budget_exhausted",
+                "evidence": [],
+                "reason": "The shared lookup has already run. Use its exact evidence below; the tool is configured.",
+                "retained_lookups": retained}, ensure_ascii=False)
+        result = await self._execute(args, context)
+        try:
+            evidence = json.loads(result)
+        except (ValueError, TypeError):
+            return result
+        if evidence.get("evidence") or evidence.get("results") or evidence.get("record_id") or evidence.get("documents") or evidence.get('catalogue_records'):
+            retained.append({"query": args.get("query", ""), "corpus": args.get("corpus", "personal"),
+                "result": evidence})
+        return result
+
+    async def _execute(self, args, context):
         query = args.get("query", "")
         ids = args.get("source_ids", [])
         if not isinstance(query, str) or len(query) > 2000 or not isinstance(ids, list) or len(ids) > 8 or any(type(i) is not int for i in ids):

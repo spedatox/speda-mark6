@@ -29,6 +29,10 @@ class Skill(ABC):
         """Control discovery only. Execution must handle a spent allowance itself."""
         return True
 
+    async def context_data(self, context: "AgentContext"):
+        """Optional bounded local read context; never dispatch a side effect."""
+        return None
+
     @abstractmethod
     async def execute(self, args: dict, context: "AgentContext") -> str:
         """Execute the skill and return a string result for Claude to reason over."""
