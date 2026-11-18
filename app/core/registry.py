@@ -394,7 +394,7 @@ class CapabilityRegistry:
     async def execute_outcome(self, call, context):
         """Typed runtime boundary; legacy executor strings remain ordinary results."""
         from app.schemas.tool_outcome import CompletedToolResult, PendingOperation
-        result = await self.execute_recorded(call, context, typed=True)
+        result = await self.execute_recorded(call, context)
         return result if isinstance(result, (CompletedToolResult, PendingOperation)) else self._tool_result(call, result)
 
     def _tool_result(self, call, result):
@@ -421,7 +421,7 @@ class CapabilityRegistry:
                 return CompletedToolResult(result, ToolObservation("accepted", reference=match[1]))
         return CompletedToolResult(result)
 
-    async def execute_recorded(self, call, context, *, typed=False):
+    async def execute_recorded(self, call, context):
         """Validate authorization/schema, admit durably, then execute at most once.
 
         A started receipt surviving an interruption has an unknown outcome and
@@ -430,7 +430,7 @@ class CapabilityRegistry:
         import hashlib
         import json
         from app.schemas.llm import ProviderError
-        from app.schemas.tool_outcome import ToolObservation, CompletedToolResult, PendingOperation
+        from app.schemas.tool_outcome import CompletedToolResult, PendingOperation
         self.validate_call(call, context)
         if context.coordination is not None:
             await context.coordination.ensure_active(context)
@@ -463,10 +463,7 @@ class CapabilityRegistry:
                     raise ProviderError("call_conflict", "Tool identity was reused with different arguments")
                 if receipt.status == "completed":
                     context.extra.setdefault('produced_files', []).extend(receipt.result.get('files', []))
-                    if not typed:
-                        return receipt.result["text"]
-                    observed = receipt.result.get("observation")
-                    return CompletedToolResult(receipt.result["text"], ToolObservation(**observed) if observed else None)
+                    return receipt.result["text"]
                 raise ProviderError("tool_outcome_unknown", "An earlier tool execution has an unknown outcome; inspection is required")
             db.add(ToolExecutionReceipt(user_id=context.user_id, request_id=receipt_step,
                 call_id=receipt_call_id, name=call.name, arguments_hash=digest, status="started",
@@ -498,7 +495,7 @@ class CapabilityRegistry:
                 receipt.result = {**receipt.result, "observation": asdict(outcome.observation)}
             if context.coordination:
                 await context.coordination.persist_memory(db, context)
-        return outcome if typed else outcome.text
+        return outcome.text
 
     async def execute(self, tool_name: str, args: dict, context: "AgentContext") -> str:
         """Route a tool call to the correct tier handler."""
