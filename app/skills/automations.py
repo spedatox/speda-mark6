@@ -18,7 +18,7 @@ class AutomationsSkill(Skill):
         'action':{'type':'string','enum':['list','create','update','toggle','delete','test','runs','reconcile','sync']},
         'automation_id':{'type':'integer','minimum':1},'expected_version':{'type':'integer','minimum':1},
         'request_id':{'type':'string','maxLength':64},'agent_id':{'type':'string'},'active':{'type':'boolean'},
-        'spec':{'type':'object','description':'name, instruction, template (briefing/task/reminder/proactive_ask/hook_keyword/hook_address/hook_mail), schedule {frequency, at, date/days/dom}; or kind with cron/url/feed_url/domain. Never workflow JSON.'}},
+        'spec':{'type':'object','description':'name, instruction, template (briefing/task/reminder/proactive_ask/hook_keyword/hook_address/hook_mail), schedule {frequency, at, date/days/dom}; or kind with cron/url/feed_url/domain. For a read-only mail watch, use attention_only=true when the owner requests consequential alerts only. Optional attention_quiet is [start, end] in local hours, default [22, 9]. To snooze an attention watch, set attention_snoozed_until to a timestamp with an offset. Supply a native specification.'}},
         'required':['action'],'additionalProperties':False}
 
     async def execute(self,args,context):

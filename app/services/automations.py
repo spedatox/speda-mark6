@@ -68,7 +68,8 @@ class Automations:
         spec=copy.deepcopy(raw)
         allowed={'cron','day_flags','domain','every_minutes','expires_at','feed_url','instruction','intent',
             'interval_minutes','kind','label','language','look_for','max_asks','name','options','recipient',
-            'reminder_id','schedule','template','url','voice','webhook_path','duration_days','mail_provider','mail_calendar_create'}
+            'reminder_id','schedule','template','url','voice','webhook_path','duration_days','mail_provider','mail_calendar_create',
+            'attention_only','attention_quiet','attention_snoozed_until','attention_shadow'}
         if set(spec)-allowed: raise CoordinationError('automation_fields','Unsupported automation fields: '+', '.join(sorted(set(spec)-allowed)),422)
         if len(json.dumps(spec,ensure_ascii=False).encode())>16000: raise CoordinationError('automation_size','Automation specification exceeds 16 KiB',422)
         spec['name']=str(spec.get('name') or '').strip()[:160]
@@ -115,6 +116,24 @@ class Automations:
             criteria(spec)
             if spec.get('mail_provider','google') not in {'google','microsoft'}:
                 raise CoordinationError('mail_provider','Select google or microsoft',422)
+        if 'attention_only' in spec and (type(spec['attention_only']) is not bool or spec['kind'] != 'mail_watch'
+                or (spec['attention_only'] and spec.get('mail_calendar_create'))):
+            raise CoordinationError('automation_attention', 'Attention-only mode requires a read-only mail watch', 422)
+        if 'attention_shadow' in spec and (type(spec['attention_shadow']) is not bool or not spec.get('attention_only')):
+            raise CoordinationError('automation_attention', 'Shadow mode requires an attention-only mail watch', 422)
+        if 'attention_quiet' in spec:
+            hours = spec['attention_quiet']
+            if (not spec.get('attention_only') or not isinstance(hours, list) or len(hours) != 2
+                    or any(type(hour) is not int or not 0 <= hour <= 23 for hour in hours)):
+                raise CoordinationError('automation_attention', 'Specify two local hours from 0 through 23', 422)
+        if 'attention_snoozed_until' in spec:
+            try:
+                until = datetime.fromisoformat(spec['attention_snoozed_until'])
+            except (TypeError, ValueError):
+                until = None
+            if not spec.get('attention_only') or not until or until.tzinfo is None:
+                raise CoordinationError('automation_attention', 'Snooze requires an ISO timestamp with a timezone offset', 422)
+            spec['attention_snoozed_until'] = until.isoformat()
         for key in ('interval_minutes','every_minutes','max_asks'):
             if key in spec and (type(spec[key]) is not int or not 1<=spec[key]<=10080): raise CoordinationError('automation_interval','Use a positive bounded integer interval/count',422)
         interval=spec.get('interval_minutes',360)
@@ -457,6 +476,9 @@ class Automations:
             'voice':bool(spec.get('voice',False)),'language':spec.get('language')}
         if 'mail_calendar_create' in spec:
             payload['mail_calendar_create']=spec['mail_calendar_create'] and not definition_test
+        if spec.get('attention_only') and not definition_test:
+            payload.update(attention_only=True, mail_calendar_create=False,
+                           attention_shadow=spec.get('attention_shadow', False))
         return TriggerRequest(payload=payload,output_mode=mode,idempotency_key=body.idempotency_key)
 
     async def test(self,owner,identity):

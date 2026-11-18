@@ -66,6 +66,13 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all only installs model indexes when creating the table.
+        # Existing stores need the same owner/session lookup paths.
+        from app.models.message import Message
+        from app.models.session import Session
+        for table in (Message.__table__, Session.__table__):
+            for index in table.indexes:
+                await conn.run_sync(index.create, checkfirst=True)
         if engine.dialect.name == "sqlite":
             from app.services.memory_store import init_indexes
             await init_indexes(conn)

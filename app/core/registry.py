@@ -263,18 +263,47 @@ class CapabilityRegistry:
         from sqlalchemy.exc import SQLAlchemyError
         result = {}
         authorized = {tool['name'] for tool in self.list_tools(context, include_deferred=True)}
+        deadline = asyncio.get_running_loop().time() + .20
+        remaining = 4096
         for name, skill in self._skills.items():
             hook = getattr(skill, 'context_data', None)
             if name not in authorized or not skill.read_only or skill.requires_network or hook is None:
                 continue
+            if asyncio.get_running_loop().time() >= deadline:
+                break
             try:
-                async with asyncio.timeout(1):
+                async with asyncio.timeout_at(deadline):
                     data = await hook(context)
-                if data is not None and len(json.dumps(data, ensure_ascii=False).encode()) <= 6000:
+                size = len(json.dumps({name: data}, ensure_ascii=False).encode())
+                if data is not None and size <= remaining:
                     result[name] = data
+                    remaining -= size
             except (TimeoutError, OSError, SQLAlchemyError, ValueError):
                 result[name] = {'status':'unavailable', 'reason':'Local domain context could not be loaded in time.'}
         return result
+
+    def preload_reads(self, context, cues):
+        """Offer a small set of relevant, already-authorized read schemas."""
+        from app.services.memory_query import query_terms
+        terms = set(query_terms(cues))
+        if not terms:
+            return
+        visible = {tool['name'] for tool in self.list_tools(context)}
+        ranked = []
+        for tool in self.list_tools(context, include_deferred=True):
+            name = tool['name']
+            if name in visible or not self.call_is_read_only(name, {}):
+                continue
+            skill = self._skills.get(name)
+            identity = self._mcp_original_names.get(name, name)
+            keywords = getattr(skill, 'search_keywords', '').replace('_', ' ')
+            names = set(query_terms(identity.replace('_', ' ') + ' ' + keywords))
+            description = set(query_terms(tool['description']))
+            overlap = len(terms & names)
+            score = 3 * overlap + len(terms & description)
+            if overlap or score >= 2:
+                ranked.append((-score, name))
+        context.extra.setdefault('loaded_tools', set()).update(name for _, name in sorted(ranked)[:3])
 
     def call_is_read_only(self, name, args):
         skill = self._skills.get(name)
@@ -365,10 +394,34 @@ class CapabilityRegistry:
     async def execute_outcome(self, call, context):
         """Typed runtime boundary; legacy executor strings remain ordinary results."""
         from app.schemas.tool_outcome import CompletedToolResult, PendingOperation
-        result = await self.execute_recorded(call, context)
-        return result if isinstance(result, (CompletedToolResult, PendingOperation)) else CompletedToolResult(result)
+        result = await self.execute_recorded(call, context, typed=True)
+        return result if isinstance(result, (CompletedToolResult, PendingOperation)) else self._tool_result(call, result)
 
-    async def execute_recorded(self, call, context):
+    def _tool_result(self, call, result):
+        import json
+        import re
+        from app.schemas.tool_outcome import CompletedToolResult, ToolObservation
+        if call.name in {"memory_lookup", "search_history", "collaborate"}:
+            try:
+                payload = json.loads(result)
+            except (TypeError, ValueError):
+                payload = None
+            if isinstance(payload, dict):
+                status = payload.get("status")
+                if call.name == "collaborate" and status in {"queued", "denied"}:
+                    return CompletedToolResult(result, ToolObservation(status, payload.get("code"), payload.get("queued_step")))
+                retained = status == "budget_exhausted" and bool(payload.get("retained_lookups"))
+                if call.name != "collaborate" and not retained and status in {"unavailable", "deadline", "budget_exhausted"}:
+                    return CompletedToolResult(result, ToolObservation("unavailable", status))
+        if self._mail_calendar_tool(call.name) and isinstance(result, str):
+            # This format is constructed by the native Calendar adapter after
+            # a successful POST. Event titles themselves can contain arbitrary text.
+            match = re.match(r"(?s)^Event '.*' created \[([a-zA-Z0-9_@.-]+)\]\.", result)
+            if match:
+                return CompletedToolResult(result, ToolObservation("accepted", reference=match[1]))
+        return CompletedToolResult(result)
+
+    async def execute_recorded(self, call, context, *, typed=False):
         """Validate authorization/schema, admit durably, then execute at most once.
 
         A started receipt surviving an interruption has an unknown outcome and
@@ -377,6 +430,7 @@ class CapabilityRegistry:
         import hashlib
         import json
         from app.schemas.llm import ProviderError
+        from app.schemas.tool_outcome import ToolObservation, CompletedToolResult, PendingOperation
         self.validate_call(call, context)
         if context.coordination is not None:
             await context.coordination.ensure_active(context)
@@ -385,23 +439,38 @@ class CapabilityRegistry:
             return await self.execute(call.name, call.input, context)
         from sqlalchemy import select
         from sqlalchemy.exc import IntegrityError
+        from app.models.coordination import AgentStep
         from app.models.model_policy import ToolExecutionReceipt
         from app.database import write_session
-        digest = hashlib.sha256(json.dumps(call.input, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        calendar_create = self._mail_calendar_tool(call.name) and bool(context.run_id)
+        arguments = ({"calendar_id": "primary", **call.input} if calendar_create else call.input)
+        digest = hashlib.sha256(json.dumps(arguments, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        receipt_call_id = f"calendar-create:{digest}" if calendar_create else call.id
+        receipt_step = context.request_id
         async with write_session(self._receipt_sessions) as db:
+            if calendar_create:
+                # A returned peer can replan with a new provider call ID. The
+                # operation retains the owner-run identity for reconciliation.
+                root = await db.scalar(select(AgentStep.id).where(
+                    AgentStep.run_id == context.run_id, AgentStep.operation_id == "owner"))
+                receipt_step = root or receipt_step
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == context.user_id,
-                ToolExecutionReceipt.request_id == context.request_id,
-                ToolExecutionReceipt.call_id == call.id))).scalar_one_or_none()
+                ToolExecutionReceipt.request_id == receipt_step,
+                ToolExecutionReceipt.call_id == receipt_call_id))).scalar_one_or_none()
             if receipt:
                 if receipt.arguments_hash != digest or receipt.name != call.name:
                     raise ProviderError("call_conflict", "Tool identity was reused with different arguments")
                 if receipt.status == "completed":
                     context.extra.setdefault('produced_files', []).extend(receipt.result.get('files', []))
-                    return receipt.result["text"]
+                    if not typed:
+                        return receipt.result["text"]
+                    observed = receipt.result.get("observation")
+                    return CompletedToolResult(receipt.result["text"], ToolObservation(**observed) if observed else None)
                 raise ProviderError("tool_outcome_unknown", "An earlier tool execution has an unknown outcome; inspection is required")
-            db.add(ToolExecutionReceipt(user_id=context.user_id, request_id=context.request_id,
-                call_id=call.id, name=call.name, arguments_hash=digest, status="started"))
+            db.add(ToolExecutionReceipt(user_id=context.user_id, request_id=receipt_step,
+                call_id=receipt_call_id, name=call.name, arguments_hash=digest, status="started",
+                result={"provider_call_id": call.id} if calendar_create else None))
             try:
                 await db.flush()
             except IntegrityError as exc:
@@ -413,21 +482,23 @@ class CapabilityRegistry:
                 result = await self.execute(call.name, call.input, context)
         else:
             result = await self.execute(call.name, call.input, context)
-        from app.schemas.tool_outcome import PendingOperation, CompletedToolResult
         if isinstance(result, PendingOperation):
             return result
-        if isinstance(result, CompletedToolResult):
-            result = result.text
+        outcome = result if isinstance(result, CompletedToolResult) else self._tool_result(call, result)
+        from dataclasses import asdict
         async with write_session(self._receipt_sessions) as db:
             receipt = (await db.execute(select(ToolExecutionReceipt).where(
                 ToolExecutionReceipt.user_id == context.user_id,
-                ToolExecutionReceipt.request_id == context.request_id,
-                ToolExecutionReceipt.call_id == call.id))).scalar_one()
-            receipt.status, receipt.result = "completed", {"text": result,
+                ToolExecutionReceipt.request_id == receipt_step,
+                ToolExecutionReceipt.call_id == receipt_call_id))).scalar_one()
+            receipt.status, receipt.result = "completed", {"text": outcome.text,
+                **({"provider_call_id": call.id} if calendar_create else {}),
                 'files': context.extra.get('produced_files', [])[files_before:]}
+            if outcome.observation:
+                receipt.result = {**receipt.result, "observation": asdict(outcome.observation)}
             if context.coordination:
                 await context.coordination.persist_memory(db, context)
-        return result
+        return outcome if typed else outcome.text
 
     async def execute(self, tool_name: str, args: dict, context: "AgentContext") -> str:
         """Route a tool call to the correct tier handler."""

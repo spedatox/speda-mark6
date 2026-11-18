@@ -23,6 +23,7 @@ class MemoryLookupSkill(Skill):
         "after": {"type":"string", "maxLength":10, "description":"Inclusive owner-local YYYY-MM-DD archive date."},
         "before": {"type":"string", "maxLength":10, "description":"Inclusive owner-local YYYY-MM-DD archive date."},
         "before_message_id": {"type":"integer", "minimum":1},
+        "archive_strategy": {"enum":["literal","episode"], "description":"Use episode for a thematic retrospective and literal for exact wording or pagination."},
         "limit": {"type":"integer", "minimum":1, "maximum":8},
         "operation": {"type":"string", "enum":["search","list","read"], "description":"Hall of Records search returns evidence. List returns catalogue metadata only. Read requires one known document ID. Each operation uses the single lookup batch."},
         "on_date": {"type":"string", "pattern":r"^\d{4}-\d{2}-\d{2}$",
@@ -82,16 +83,42 @@ class MemoryLookupSkill(Skill):
         if budget.lookup_batches>=1: return '{"status":"budget_exhausted"}'
         budget.lookup_batches+=1
         started=monotonic()
-        deadline=Deadline.after(min(2.5,max(0,5-budget.elapsed_seconds)))
-        try:
+        remaining = min(2.5, max(0, 5 - budget.elapsed_seconds))
+        options = dict(after=args.get('after'), before=args.get('before'),
+                       limit=args.get('limit', 6), cursor=args.get('before_message_id'))
+        can_try_recent = bool(query.strip() and context.run_id and not any(
+            options[key] is not None for key in ('after', 'before', 'cursor')))
+
+        async def read(seconds, *, recent=False):
+            deadline = Deadline.after(seconds)
             async with asyncio.timeout(deadline.remaining()):
                 async with self.runtime.store.reader(deadline) as db:
-                    result=await search_archive(db,context,query,after=args.get('after'),before=args.get('before'),
-                        limit=args.get('limit',6),cursor=args.get('before_message_id'))
+                    return await search_archive(db, context, query, recent=recent,
+                                                episode=args.get('archive_strategy') == 'episode' and not options['cursor'],
+                                                **options)
+
+        try:
+            reserve = remaining / 5 if can_try_recent else 0
+            try:
+                result = await read(remaining - reserve)
+            except (TimeoutError, OSError) as exc:
+                result = {'status':'unavailable', 'reason': 'Archive retrieval exceeded its deadline'
+                          if isinstance(exc, TimeoutError) else 'Archive unavailable'}
+            if can_try_recent and (result.get('status') == 'unavailable' or not result.get('results')):
+                time_left = remaining - (monotonic() - started)
+                if time_left > 0:
+                    try:
+                        alternate = await read(time_left, recent=True)
+                    except (TimeoutError, OSError):
+                        alternate = {}
+                    if alternate.get('results'):
+                        result = {**alternate, 'reason': 'Full archive coverage unavailable. Recent evidence only.'}
             ceiling=min(budget.lookup_limit,budget.turn_limit-budget.used)
             while len(json.dumps(result,ensure_ascii=False).encode())>ceiling and result.get('results'):
                 omitted=result['results'].pop()
-                result.update(status='partial',has_more=True,next_before_message_id=omitted['message_id']+1)
+                result.update(status='partial',has_more=True)
+                if result.get('coverage') not in {'recent_bounded', 'ranked_bounded'}:
+                    result['next_before_message_id'] = omitted['message_id'] + 1
             encoded=json.dumps(result,ensure_ascii=False)
             if len(encoded.encode())>ceiling: return '{"status":"budget_exhausted"}'
             budget.used+=len(encoded.encode())

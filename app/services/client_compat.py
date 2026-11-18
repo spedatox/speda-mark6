@@ -265,6 +265,9 @@ class ClientCompatibility:
         async with self.sessions() as db:
             owner_step = await db.scalar(select(AgentStep.id).where(AgentStep.run_id == run.id, AgentStep.operation_id == 'owner'))
             room = await self.coordinator.owned_room(db, owner, mapping.room_id)
+            resumed_after = await db.scalar(select(RoomEvent.sequence).where(RoomEvent.room_id == room.id,
+                RoomEvent.run_id == run.id, RoomEvent.kind == "resume_requested")
+                .order_by(RoomEvent.sequence.desc()).limit(1))
         yield encode("start", {"agent_id": mapping.agent_id, "room_id": mapping.room_id, 'step_id': owner_step,
             **({'room': self.coordinator.room_view(room), 'run_id': run.id} if structured else {})})
         cursor = 0
@@ -300,8 +303,16 @@ class ClientCompatibility:
                         projected=self.coordinator.workers.envelope(event,snapshot)
                         if projected:yield encode('subagent',projected)
                 elif kind == "run_stopped":
-                    yield encode("error", {"message": payload.get("reason", payload["status"]),
-                        "code": payload.get("error_code", payload["status"])})
+                    if resumed_after and event["sequence"] < resumed_after:
+                        continue
+                    code = payload.get("error_code")
+                    uncertain = not code or code in {"provider_outcome_unknown", "tool_outcome_unknown",
+                                                     "tool_execution_unknown", "call_in_progress"}
+                    if structured and payload["status"] == "reconciling" and uncertain:
+                        yield encode("room_event", event)
+                    else:
+                        yield encode("error", {"message": payload.get("reason", payload["status"]),
+                            "code": payload.get("error_code", payload["status"])})
                     yield encode("done", {"status": payload["status"]})
                     return
                 elif kind == "round_finished":

@@ -8,6 +8,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RoomParityTest {
+    @Test fun reconciliation_is_visible_once_and_is_not_a_saved_message() {
+        val event = RoomEvent("room", 4, runId = "run", kind = "run_stopped", payload = buildJsonObject {
+            put("status", "reconciling")
+            put("reason", "Outcome held for verification.")
+        })
+        val messages = foldRoomMessages(emptyList(), event, "placeholder", 1)
+        assertEquals("coord:hold:run", messages.single().id)
+        assertEquals("Outcome held for verification.", messages.single().errorNote)
+        assertEquals(0, historyMessageCount(messages))
+        assertEquals(messages, foldRoomMessages(messages, event, "placeholder", 1))
+    }
     @Test fun pending_progress_is_visible_and_replay_safe() {
         val start = RoomEvent("room", 1, stepId = "step", speaker = "orion", kind = "speaker_started", payload = buildJsonObject {})
         val progress = start.copy(sequence = 2, kind = "progress", payload = buildJsonObject { put("text", "Checking the saved server receipt.") })

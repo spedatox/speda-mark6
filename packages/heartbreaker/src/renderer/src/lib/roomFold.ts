@@ -29,6 +29,15 @@ export function updateRoom(current: RoomInfo | null, next: RoomInfo): RoomInfo {
 
 /** Fold the server's public speaking slot. Replays restart a step, never concatenate twice. */
 export function foldRoomMessages(messages: ChatMessage[], event: RoomEvent, placeholderId: string, sessionId?: number): ChatMessage[] {
+  if (event.kind === 'run_stopped' && event.run_id && event.payload.status === 'reconciling') {
+    const id = `coord:hold:${event.run_id}`
+    if (messages.some(message => message.id === id && (message.roomSequence ?? 0) >= event.sequence)) return messages
+    return orderedRoomRows([...messages.filter(message => message.id !== id && message.id !== placeholderId), {
+      id, role: 'assistant', content: '', tools: [], isStreaming: false, isError: true,
+      errorNote: String(event.payload.reason ?? 'The outcome is being verified.'),
+      roomSequence: event.sequence, roomOrder: event.sequence, createdAt: event.created_at, sessionId,
+    }])
+  }
   if (event.kind === 'membership') {
     const notice = membershipNotice(event)
     return messages.some(message => message.id === notice.id) ? messages : orderedRoomRows([...messages, notice])

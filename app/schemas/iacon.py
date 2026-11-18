@@ -120,6 +120,7 @@ class Command(Strict):
 
 class MaintenancePolicy(Strict):
     paused: bool = False
+    model: str | None = Field(default=None, min_length=1, max_length=200)
     daily_calls: int = Field(default=0, ge=0, le=10000)
     daily_tokens: int = Field(default=0, ge=0)
     daily_microdollars: int = Field(default=0, ge=0)

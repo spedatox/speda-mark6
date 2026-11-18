@@ -41,7 +41,41 @@ class MemoryRuntime:
         self._ready = False
 
     async def prepare(self, context) -> MemoryPacket:
-        return await self._read(context, turn_query(context), automatic=True)
+        query = turn_query(context)
+        if not (context.run_id and context.triggered_by == "user"
+                and "memory_lookup" in (context.allowed_tools or ()) and query_terms(query)):
+            return await self._read(context, query, automatic=True)
+        started = monotonic()
+        budget = context.memory_budget
+        already_elapsed = budget.elapsed_seconds
+        packet, recent = await asyncio.gather(
+            self._read(context, query, automatic=True),
+            self._recent(context, query, min(.15, self.prepare_timeout, 5 - already_elapsed)),
+        )
+        byte_ceiling = min(2200, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
+        while recent and token_upper_bound(json.dumps(recent, ensure_ascii=False)) > byte_ceiling:
+            recent.pop()
+        if recent:
+            packet.recent_conversation = recent
+            packet.recent_reference_count = len(recent)
+            budget.used += token_upper_bound(json.dumps(recent, ensure_ascii=False))
+        elapsed = monotonic() - started
+        budget.elapsed_seconds = already_elapsed + elapsed
+        packet.elapsed_ms = elapsed * 1000
+        logger.info("foreground_context", extra={"request_id": context.request_id, **packet.diagnostics()})
+        return packet
+
+    async def _recent(self, context, query, seconds):
+        from app.services.history_lookup import search_archive
+        deadline = Deadline.after(seconds)
+        try:
+            async with asyncio.timeout(deadline.remaining()):
+                async with self.store.reader(deadline) as db:
+                    return (await search_archive(db, context, query, limit=4, recent=True)).get("results", [])
+        except Exception as exc:
+            logger.info("recent_context_unavailable", extra={"request_id": context.request_id,
+                "error_type": type(exc).__name__})
+            return []
 
     async def lookup(self, context, query: str, *, source_ids=(), as_of=None) -> MemoryPacket:
         if context.memory_budget.lookup_batches >= 1:
@@ -57,6 +91,7 @@ class MemoryRuntime:
         seconds = (self.prepare_timeout if self._ready else max(self.prepare_timeout, 0.5)) if automatic else self.lookup_timeout
         seconds = min(seconds, max(0, 5 - context.memory_budget.elapsed_seconds))
         deadline = Deadline.after(seconds)
+        stage = "store_read"
         try:
             async with asyncio.timeout(deadline.remaining()):
                 result = await self.store.read(context, query_terms(query), source_ids=source_ids,
@@ -64,8 +99,10 @@ class MemoryRuntime:
             self._ready = True
             packet.publication_epoch = result["epoch"]
             packet.source_boundary = result["boundary"]
+            stage = "selection"
             self._select(context, packet, result, query, automatic=automatic,
                          as_of=as_of, deadline=deadline, requested_sources=set(source_ids))
+            stage = "epoch_check"
             async with asyncio.timeout(deadline.remaining()):
                 final_epoch = await self.store.epoch(context, deadline=deadline)
             if final_epoch != packet.publication_epoch:
@@ -89,7 +126,7 @@ class MemoryRuntime:
         packet.elapsed_ms = (monotonic() - started) * 1000
         context.memory_budget.elapsed_seconds += packet.elapsed_ms / 1000
         # Reserve covers metadata/header even on failures and empty results.
-        logger.info("memory_read", extra={"request_id": context.request_id, **packet.diagnostics()})
+        logger.info("memory_read", extra={"request_id": context.request_id, "stage": stage, **packet.diagnostics()})
         return packet
 
     @staticmethod

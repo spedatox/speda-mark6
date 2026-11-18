@@ -152,8 +152,8 @@ class Orion:
                     status, error = "done", None
                 except BudgetDenied as exc:
                     # Budget denial is resumable without calls; uncertain dispatch is held.
-                    status = "held" if "reconciliation" in str(exc) else "pending"
-                    result, error = None, str(exc)
+                    status = "held" if exc.code == "reconciling" else "pending"
+                    result, error = {"code": exc.code}, str(exc)
                 except (ValueError, KeyError) as exc:
                     status, result, error = "quarantined", None, str(exc)[:256]
                 except Exception as exc:
@@ -179,6 +179,31 @@ class Orion:
                 if status == "pending":
                     break
         return {"processed": len(outcomes), "outcomes": outcomes}
+
+    async def maintenance_health(self, owner):
+        version, settings = await self.budget.policy(owner)
+        view = {"maintenance_revision": version, "status": "ready"}
+        try:
+            route = await self.model_policy.resolve(model=settings.model, user_id=owner,
+                                                    agent_id="orion", role="background")
+            view.update(model=route.spec.ref, model_policy_revision=route.revision)
+            self.budget.rate(settings, route.spec.ref)
+            client = self.budget.client
+            if hasattr(client, "configured") and not client.configured(route.spec.ref):
+                raise BudgetDenied("Maintenance provider is not configured", code="provider_unconfigured")
+            if not settings.daily_calls or not settings.daily_tokens or not settings.daily_microdollars:
+                raise BudgetDenied("Daily maintenance allowance is zero", code="daily_limit")
+        except BudgetDenied as exc:
+            view.update(status=exc.code, reason=str(exc))
+        except ValueError:
+            view.update(status="invalid_model_policy", reason="The maintenance route could not be resolved")
+        async with self.sessions() as db:
+            from sqlalchemy import func
+            waiting, oldest = (await db.execute(select(func.count(), func.min(IaconWork.available_at)).where(
+                IaconWork.user_id == owner, IaconWork.kind == "interpret", IaconWork.status == "pending"))).one()
+            last = await db.scalar(select(func.max(IaconWork.updated_at)).where(
+                IaconWork.user_id == owner, IaconWork.kind == "interpret", IaconWork.status == "done"))
+        return {**view, "waiting_interpretation": waiting, "oldest_pending_at": oldest, "last_interpreted_at": last}
 
     async def _run(self, context, job):
         if job.kind == "refresh":
@@ -256,7 +281,9 @@ class Orion:
                 excerpts.append({"id": s.id, "role": s.source_role, "text": s.content[max(0, e.start-500):e.end+500],
                                  "state_binding": binding})
             data = {"command": command.model_dump(mode="json"), "existing": original, "evidence": excerpts}
-        policy = await self.model_policy.resolve(user_id=context.user_id, agent_id="orion", role="background")
+        _, maintenance = await self.budget.policy(context.user_id)
+        policy = await self.model_policy.resolve(model=maintenance.model, user_id=context.user_id,
+                                                 agent_id="orion", role="background")
         response = await self.budget.call(context, job.id, policy=policy,
             system=self.prompts(job.kind), messages=[{"role": "user", "content": json.dumps(data, ensure_ascii=False)}],
             max_tokens=4096)

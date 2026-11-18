@@ -19,6 +19,12 @@ def history(rows, events, steps):
     sequenced, partials = {}, {}
     delivered = {event.step_id for event in events if event.kind in {'message', 'consult_result'}}
     started = {event.step_id: event.sequence for event in events if event.kind == 'speaker_started'}
+    stopped = {}
+    for event in events:
+        if event.kind == 'run_stopped' and event.payload.get('status') == 'reconciling':
+            stopped[event.run_id] = event
+        elif event.kind in {'round_finished', 'resume_requested'}:
+            stopped.pop(event.run_id, None)
     for event in events:
         if event.step_id in private:
             continue
@@ -58,4 +64,9 @@ def history(rows, events, steps):
         if statuses.get(step_id) not in {'running', 'queued'}:
             row['isError'] = True
             row.setdefault('errorNote', 'This contribution stopped before final delivery. Partial output is retained.')
+    for stop in stopped.values():
+        sequenced[f'hold:{stop.sequence}'] = {'id': f'coord:hold:{stop.run_id}',
+            'role': 'assistant', 'content': '', 'tools': [], 'isStreaming': False, 'isError': True,
+            'errorNote': stop.payload.get('reason') or 'The outcome is being verified.',
+            'roomSequence': stop.sequence, 'roomOrder': stop.sequence, 'createdAt': stop.created_at.isoformat() + 'Z'}
     return unbound + sorted([*sequenced.values(), *partials.values()], key=lambda row: row.get('roomOrder', row['roomSequence']))

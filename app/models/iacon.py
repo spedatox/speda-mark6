@@ -84,6 +84,13 @@ class IaconControl(Base):
     policy: Mapped[dict] = mapped_column(JSON)
 
 
+class IaconMaintenanceRoute(Base):
+    __tablename__ = "iacon_maintenance_routes"
+    user_id: Mapped[int] = mapped_column(ForeignKey("iacon_controls.user_id"), primary_key=True)
+    policy_revision: Mapped[int] = mapped_column()
+    model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
 class IaconAllowance(Base):
     __tablename__ = "iacon_allowances"
     __table_args__ = (UniqueConstraint("user_id", "day"),)

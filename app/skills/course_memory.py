@@ -56,6 +56,15 @@ class ReadCourseMemorySkill(Skill):
             return None
         async with self.catalogue.sessions() as db:
             listing = json.loads(await self.execute({}, replace(context, db=db)))
+            names = {}
+            for slot in await list_slots(db):
+                code = ''.join(slot.code.upper().split())
+                if slot.name.strip():
+                    names.setdefault(code, set()).add(slot.name.strip())
+        for record in listing.get('records', []):
+            code = record['path'].rsplit('/', 1)[-1].removesuffix('.md')
+            if code in names:
+                record['timetable_names'] = sorted(names[code])[:3]
         return {**listing, 'scope':'Saved course records by academic term; absence is not proof of non-enrollment.'}
 
     async def execute(self, args, context):

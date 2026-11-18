@@ -197,6 +197,16 @@ class Deliveries:
             if row.status!='pending': return self.view(row)
             if row.channel=='unconfigured': row.status='unconfigured'; return self.view(row)
             payload=dict(row.payload)
+            if row.run_id:
+                from app.models.coordination import CoordinationRun
+                from app.services.watch_attention import delivery_block, is_attention_watch
+                origin_run = await db.get(CoordinationRun, row.run_id)
+                trigger = (origin_run.policy.get('trigger_payload') or {}) if origin_run else {}
+                if origin_run and is_attention_watch(trigger):
+                    reason = await delivery_block(db, owner, trigger, origin_run.created_at)
+                    if origin_run.cancelled or reason:
+                        row.status, row.detail = 'cancelled', reason or 'run_cancelled'
+                        return self.view(row)
             if payload.get('reminder_cycle_id'):
                 from app.models.reminder import ReminderCycle
                 cycle=await db.get(ReminderCycle,payload['reminder_cycle_id'])

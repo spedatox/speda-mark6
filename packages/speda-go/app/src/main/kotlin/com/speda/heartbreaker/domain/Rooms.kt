@@ -57,6 +57,13 @@ private fun orderedRoomRows(messages: List<ChatMessage>): List<ChatMessage> {
 /** Public room-v1 frames only. Per-step sequence fences keep replay from erasing newer history. */
 fun foldRoomMessages(messages: List<ChatMessage>, event: RoomEvent, placeholderId: String, sessionId: Int): List<ChatMessage> {
     val p = event.payload
+    if (event.kind == "run_stopped" && event.runId != null && p.roomText("status") == "reconciling") {
+        val id = "coord:hold:${event.runId}"
+        if (messages.any { it.id == id && (it.roomSequence ?: 0) >= event.sequence }) return messages
+        return orderedRoomRows(messages.filter { it.id != id && it.id != placeholderId } + ChatMessage(
+            id, Role.Assistant, "", isError = true, errorNote = p.roomText("reason") ?: "The outcome is being verified.",
+            roomSequence = event.sequence, roomOrder = event.sequence, roomEventSequence = event.sequence, sessionId = sessionId))
+    }
     if (event.kind == "membership") {
         val id = "room:${event.roomId}:${event.sequence}"
         if (messages.any { it.id == id }) return messages

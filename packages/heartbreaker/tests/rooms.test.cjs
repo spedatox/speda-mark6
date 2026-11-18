@@ -26,6 +26,16 @@ const room = { id: 'room', title: 'Study', lead: 'speda', members: ['speda', 'ul
 const frame = (sequence, kind, step, speaker, payload = {}) => ({ schema_version: 1, room_id: 'room', sequence, run_id: 'run', step_id: step, speaker, kind, payload, created_at: '2026-10-28T09:00:00Z' })
 const apply = (state, event) => reduce(state, { type: 'ROOM_EVENT', payload: { event, sessionId: 1 } })
 
+test('reconciliation is visible once and does not count as a saved message', () => {
+  const { foldRoomMessages } = load('lib/roomFold.ts')
+  const event = frame(4, 'run_stopped', null, 'system', { status: 'reconciling', reason: 'Outcome held for verification.' })
+  const messages = foldRoomMessages([], event, 'placeholder', 1)
+  assert.equal(messages[0].id, 'coord:hold:run')
+  assert.equal(messages[0].errorNote, 'Outcome held for verification.')
+  assert.equal(historyMessageCount(messages), 0)
+  assert.equal(foldRoomMessages(messages, event, 'placeholder', 1), messages)
+})
+
 test('Android and Heartbreaker show the same peer exchange without an owner relay', () => {
   const trace = JSON.parse(fs.readFileSync(path.join(__dirname, '../../speda-go/app/src/test/resources/fixtures/room_v1.json'), 'utf8'))
   const state = trace.reduce(apply, begin([{ id: 'local-user', role: 'user', content: 'Plan the week', tools: [], isStreaming: false, isError: false }]))

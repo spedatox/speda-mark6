@@ -73,6 +73,7 @@ async def write(request: Request, body: Command):
 @router.get("/maintenance")
 async def maintenance_status(request: Request):
     result = await request.app.state.iacon_budget.status(1)
+    result["health"] = await request.app.state.orion.maintenance_health(1)
     async with request.app.state.iacon.sessions() as db:
         jobs = (await db.execute(select(IaconWork).where(IaconWork.user_id == 1,
             IaconWork.status != "done").order_by(IaconWork.updated_at.desc()).limit(100))).scalars()
@@ -91,6 +92,8 @@ async def policy(request: Request, body: PolicyUpdate):
         return await request.app.state.iacon_budget.save(1, body.expected_version, body.policy)
     except Conflict as exc:
         raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/drain")

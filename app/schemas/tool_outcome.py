@@ -1,10 +1,19 @@
 """Trusted executor outcomes. Tool text cannot request a runtime transition."""
 from dataclasses import dataclass
+from typing import Literal
+
+
+@dataclass(frozen=True)
+class ToolObservation:
+    status: Literal["accepted", "verified", "queued", "denied", "unavailable"]
+    code: str | None = None
+    reference: str | None = None
 
 
 @dataclass(frozen=True)
 class CompletedToolResult:
     text: str
+    observation: ToolObservation | None = None
 
 
 @dataclass(frozen=True)

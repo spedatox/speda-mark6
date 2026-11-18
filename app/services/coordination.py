@@ -735,6 +735,19 @@ class Coordinator:
         from app.models.coordination import SupervisorBoundary
         async with self.sessions() as db:
             boundary = await db.get(SupervisorBoundary, step.id)
+            if context.triggered_by == "user" and not context.system_prompt:
+                earlier = (await db.execute(select(CoordinationRun.id, CoordinationRun.status,
+                    RoomEvent.sequence).join(RoomEvent, (RoomEvent.room_id == room.id)
+                    & (RoomEvent.run_id == CoordinationRun.id) & (RoomEvent.kind == "user_message"))
+                    .where(CoordinationRun.user_id == user.id, CoordinationRun.room_id == room.id,
+                        CoordinationRun.created_at < run.created_at,
+                        CoordinationRun.status.in_(["waiting_tasks", "waiting_operations", "reconciling"]))
+                    .order_by(RoomEvent.sequence.desc()).limit(3))).all()
+                if earlier:
+                    context.extra["unfinished_room_work"] = [
+                        {"run": identity, "state": status, "owner_message_sequence": sequence}
+                        for identity, status, sequence in earlier
+                    ]
         if boundary:
             context.conversation_history = boundary.messages
             context.model_call_index = boundary.model_call_index
@@ -756,7 +769,7 @@ class Coordinator:
                 budget = asdict(shared)
                 budget["seen"] = sorted(shared.seen)
                 await db.execute(update(CoordinationRun).where(CoordinationRun.id == run.id)
-                    .values(memory=asdict(context.memory_packet), memory_budget=budget))
+                    .values(memory={**asdict(context.memory_packet), "recent_conversation": []}, memory_budget=budget))
         if getattr(self, "operation_waits", None):
             await self.operation_waits.restore(context)
         return context
@@ -780,6 +793,8 @@ class Coordinator:
         await self.notify()
 
     async def _speak(self, run_id, step, context):
+        from app.services.watch_attention import is_attention_watch
+        attention = context.triggered_by == "n8n" and is_attention_watch(context.trigger_payload)
         chunks = [context.extra.get("operation_partial_text", "")]
         pending, flushed, error = "", time.monotonic(), None
         try:
@@ -792,6 +807,8 @@ class Coordinator:
                 if event.type == SSEEventType.CHUNK:
                     chunks.append(event.data)
                     context.extra["operation_partial_text"] = "".join(chunks)
+                    if attention:
+                        continue
                     pending += event.data
                     if len(pending) >= 512 or time.monotonic() - flushed > .25:
                         await self.emit(run_id, "delta", step.agent_id, {"text": pending}, step.id)
@@ -828,7 +845,7 @@ class Coordinator:
             if isinstance(error, dict):
                 raise ProviderError(error["code"], error["message"])
             raise ProviderError("step_failed", str(error))
-        return "".join(chunks)
+        return context.extra.get("attention_proposal", "") if attention else "".join(chunks)
 
     async def _heartbeat(self, run_id):
         renewed = 0
@@ -931,7 +948,15 @@ class Coordinator:
                     if (active.cancelled or active.executor != self.identity or active.lease_until <= time.time()
                             or run_expired(active)):
                         raise CoordinationError("inactive_run", "Run stopped before final delivery")
+                    from app.services.watch_attention import disposition, is_attention_watch
+                    if step.operation_id == "owner" and context.triggered_by == "n8n" and is_attention_watch(trigger):
+                        text, decision = await disposition(db, active, text)
+                        await self.event(db, room, "attention_disposition", "system",
+                                         {"disposition": decision}, run_id, step.id)
                     current.result, current.status = text, "succeeded"
+                    if not text and step.operation_id == "owner" and is_attention_watch(trigger):
+                        await self.persist_memory(db, context)
+                        continue
                     # Keep attributed assistant originals; never file an agent's
                     # contribution as a user assertion in Iacon.
                     delivered = Message(session_id=room.session_id, role="assistant", content=[
@@ -973,7 +998,8 @@ class Coordinator:
                 run.status = "waiting_tasks" if jobs or children else "reconciling" if uncertain else "partial" if stopped else "succeeded"
                 if room.active_run == run.id:
                     room.active_run = None
-                await self.event(db, room, "round_finished", "system", {"status": run.status}, run.id)
+                outcome = await self.goal_outcome(db, run)
+                await self.event(db, room, "round_finished", "system", {"status": run.status, "outcome": outcome}, run.id)
             await self.notify()
             if self.titles and run.policy.get("origin") == "user" and run.status in {"succeeded", "waiting_tasks"}:
                 task = asyncio.create_task(self.titles.generate(run.user_id, room.session_id, room.lead))
@@ -1027,7 +1053,10 @@ class Coordinator:
                     room = await self.owned_room(db, run.user_id, run.room_id, lock=True)
                     if room.active_run == run.id:
                         room.active_run = None
-                    failure = {"status": run.status, "reason": reason}
+                    notice_reason = ("The work stopped before I could confirm the outcome. "
+                                     "Any uncertain action is held for verification."
+                                     if run.status == "reconciling" and not isinstance(exc, ProviderError) else reason)
+                    failure = {"status": run.status, "reason": notice_reason, "outcome": await self.goal_outcome(db, run)}
                     if isinstance(exc, ProviderError):
                         failure["error_code"] = exc.code
                     await self.event(db, room, "run_stopped", "system", failure, run.id)
@@ -1035,7 +1064,8 @@ class Coordinator:
                     mail_watch = trigger.get('type') == 'mail_watch'
                     if (self.deliveries and run.policy.get('output_mode') == 'push' and not run.cancelled
                             and not isinstance(exc, asyncio.CancelledError)
-                            and (mail_watch or trigger.get('channel') == 'telegram')):
+                            and ((mail_watch and trigger.get('attention_only') is not True)
+                                 or trigger.get('channel') == 'telegram')):
                         root = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id,
                             AgentStep.operation_id == 'owner', AgentStep.status != 'succeeded'))
                         if root is not None:
@@ -1064,6 +1094,32 @@ class Coordinator:
             if ended:
                 await self.advance_room(ended.user_id, ended.room_id)
 
+    @staticmethod
+    async def goal_outcome(db, run):
+        from app.models.model_policy import ToolExecutionReceipt
+        receipts = (await db.execute(select(ToolExecutionReceipt.name, ToolExecutionReceipt.result)
+            .join(AgentStep, AgentStep.id == ToolExecutionReceipt.request_id)
+            .where(AgentStep.run_id == run.id, AgentStep.mode != 'consult',
+                   ToolExecutionReceipt.user_id == run.user_id, ToolExecutionReceipt.status == 'completed')
+            .order_by(ToolExecutionReceipt.id))).all()
+        observed = {}
+        effects = {}
+        for tool, result in receipts:
+            evidence = (result or {}).get("observation")
+            if evidence:
+                observed[tool] = evidence
+                if evidence["status"] in {"accepted", "verified"} and evidence.get("reference"):
+                    effects[(tool, evidence["reference"])] = {"tool": tool, **evidence}
+            else:
+                observed.pop(tool, None)
+        gaps = [{"tool": name, "reason": evidence.get("code") or evidence["status"]}
+                for name, evidence in observed.items() if evidence["status"] in {"denied", "unavailable"}]
+        state = {"waiting_operations": "waiting", "waiting_tasks": "waiting", "reconciling": "reconciling",
+                 "queued": "active", "running": "active"}.get(run.status, run.status)
+        if state == "succeeded":
+            state = "partial" if gaps else "responded"
+        return {"state": state, "effects": list(effects.values()), "gaps": gaps}
+
     async def inspect_run(self, owner, run_id):
         async with self.sessions() as db:
             run = await db.get(CoordinationRun, run_id)
@@ -1075,10 +1131,15 @@ class Coordinator:
             from app.models.operation_wait import OperationBinding, OperationContinuation
             continuations = list(await db.scalars(select(OperationContinuation).where(OperationContinuation.step_id.in_([s.id for s in steps]))))
             operations = list(await db.scalars(select(OperationBinding).where(OperationBinding.run_id == run_id)))
+            attention = await db.scalar(select(RoomEvent.payload).where(RoomEvent.room_id == run.room_id,
+                RoomEvent.run_id == run.id, RoomEvent.kind == "attention_disposition")
+                .order_by(RoomEvent.sequence.desc()).limit(1))
             return {"continuations": [{"step_id": q.step_id, "generation": q.generation, "status": q.status} for q in continuations],
                 "operations": [{"operation_id": o.operation_id, "state": o.state,
                 "deadline": o.deadline, "receipt_id": o.receipt_id} for o in operations],
                 "id": run.id, "room_id": run.room_id, "status": run.status, "cancelled": run.cancelled,
+                "outcome": await self.goal_outcome(db, run),
+                **({"attention": attention} if attention else {}),
                 "deadline": run.deadline, "reserved": {"calls": run.calls, "tokens": run.tokens,
                 "microdollars": run.microdollars}, "contributions": run.contributions,
                 "steps": [{"id": s.id, "agent_id": s.agent_id, "status": s.status, "result": s.result} for s in steps],
