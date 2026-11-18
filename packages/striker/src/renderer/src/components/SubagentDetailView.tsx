@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -46,6 +47,7 @@ function MarkdownSegment({ text }: { text: string }) {
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
       components={{
+        img: MarkdownImage, a: MarkdownImageLink,
         code({ className, children, ...props }: any) {
           const match = /language-(\w+)/.exec(className || '')
           const lang = match ? match[1] : ''

@@ -27,6 +27,7 @@ import AircraftBlock from './AircraftBlock'
 import BusBlock from './BusBlock'
 import ErrorBoundary from './ErrorBoundary'
 import { BoardChatBlock } from './VoicePanelBody'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 import HousePartyWarning from './HousePartyWarning'
 import { useT } from '../lib/i18n'
@@ -42,7 +43,7 @@ const RENDERABLE_LANGS = new Set(['html', 'htm', 'widget', 'svg'])
 // its reveal at the opening of one of these while it is still unclosed — half a
 // JSON object is not a chart. Every OTHER fence streams; see safeTarget.
 const HOLD_WHILE_OPEN = new Set([
-  'chart', 'calendar', 'table', 'timeline', 'map', 'aircraft', 'bus', 'artifact', ...RENDERABLE_LANGS,
+  'chart', 'calendar', 'table', 'timeline', 'map', 'aircraft', 'bus', 'artifact', 'image', ...RENDERABLE_LANGS,
 ])
 
 // House Party authorization is a real SSE event (`house_party_auth`) now, not a
@@ -843,6 +844,7 @@ const REHYPE_PLUGINS: any = [[rehypeKatex, { throwOnError: false, errorColor: '#
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mdComponents: any = {
+  img: MarkdownImage, a: MarkdownImageLink,
   h1({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h1">{children}</StarkHeading> },
   h2({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h2">{children}</StarkHeading> },
   h3({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h3">{children}</StarkHeading> },
@@ -899,7 +901,7 @@ const mdComponents: any = {
       if (BOARD_KINDS.has(lang as PanelKind)) {
         return (
           <ErrorBoundary label={lang.toUpperCase()}>
-            <BoardChatBlock kind={lang as PanelKind} source={code} />
+            <BoardChatBlock kind={lang as PanelKind} source={code} title={title} />
           </ErrorBoundary>
         )
       }

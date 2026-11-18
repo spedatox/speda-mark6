@@ -359,6 +359,7 @@ const tr: Dict = {
     unsupported: 'Bu sağlayıcı, sunucunun erişebileceği bir düşünme ayarı sunmuyor.',
     label: 'Düşünme',
   },
+  researchImage: { image: 'Görsel', loading: 'Görsel yükleniyor…', unavailable: 'Görsel kullanılamıyor', openSource: 'Kaynağı aç' },
   message: {
     toolStatus: {
       read_skill: 'Yetenekler gözden geçiriliyor',

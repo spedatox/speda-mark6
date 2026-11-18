@@ -22,6 +22,7 @@ import MapBlock from './MapBlock'
 import ErrorBoundary from './ErrorBoundary'
 import { Spinner } from './VoiceActivity'
 import { BoardChatBlock } from './VoicePanelBody'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import { BOARD_KINDS, type PanelKind } from '../lib/voicePanels'
 
 const RENDERABLE_LANGS = new Set(['html', 'svg'])
@@ -619,6 +620,7 @@ const REHYPE_PLUGINS: any = [[rehypeKatex, { throwOnError: false, errorColor: '#
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mdComponents: any = {
+  img: MarkdownImage, a: MarkdownImageLink,
   h1({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h1">{children}</StarkHeading> },
   h2({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h2">{children}</StarkHeading> },
   h3({ children }: { children?: React.ReactNode }) { return <StarkHeading tag="h3">{children}</StarkHeading> },
@@ -714,7 +716,11 @@ function prepareMath(text: string): string {
 function sanitizePartialMarkdown(text: string): string {
   // Close unclosed triple-backtick code fences
   const fences = (text.match(/```/g) ?? []).length
-  if (fences % 2 !== 0) text += '\n```'
+  if (fences % 2 !== 0) {
+    const open = text.lastIndexOf('```')
+    if (/^```[ \t]*image(?:[ \t|]|\r?\n|$)/i.test(text.slice(open))) return text.slice(0, open)
+    text += '\n```'
+  }
   // Close unclosed single inline-backtick (exclude what's inside fences)
   const stripped = text.replace(/```[\s\S]*?```/g, '')
   const ticks = (stripped.match(/(?<!`)`(?!`)/g) ?? []).length

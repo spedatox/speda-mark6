@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useContext, useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { TextSegment } from './Message'
 import { TableBlock, TimelineBlock } from './StructuredBlock'
-import { loadBoardImage } from '../lib/voice'
-import { ChatContext } from '../store/chat'
+import { ImagePreview, ResearchPicture } from './ResearchImage'
 import { FRAMED, type PanelKind, type VoicePanel } from '../lib/voicePanels'
 import { useRenderSurface } from '../lib/renderSurface'
 
@@ -47,67 +46,6 @@ function fields(src: string): { meta: Record<string, string>; rest: string } {
 /** Non-empty lines, trimmed — the shape most of these formats reduce to. */
 const rows = (src: string): string[] =>
   src.split('\n').map(l => l.trim()).filter(Boolean)
-
-/** Is this a URL we would put in an <img>? Anything else in an image slot is a
- *  description the model wrote instead of a link, and belongs as a caption. */
-const isUrl = (s: string): boolean => /^(https?:\/\/|data:image\/|file:\/\/)/i.test(s.trim())
-
-/**
- * A picture on the board.
- *
- * The URL is NOT handed to the tag. It goes through Igor's proxy and comes back
- * as a blob (lib/voice.ts loadBoardImage): the renderer's CSP forbids remote
- * images outright, and loading one straight from its origin would tell that
- * origin the owner is looking — which, on a board about a person, is the whole
- * thing the board is for.
- *
- * Anything that fails renders NOTHING. A dead link, a host that refuses, a URL
- * the model invented rather than found — all of them leave a window with its
- * fields and no photo, which is the intended degradation. A broken-image icon
- * on a dossier is worse than a dossier without a picture.
- */
-function Shot({ src, alt, height }: { src: string; alt: string; height?: number | string }) {
-  // Read the context directly rather than through useChatContext, which THROWS
-  // when there is no provider. A missing config must cost this window its photo,
-  // not tear down the whole board — one unrenderable picture is not a reason to
-  // lose the dossier it was attached to.
-  const config = useContext(ChatContext)?.state.config ?? null
-  const [blob, setBlob] = useState<string | null>(null)
-
-  useEffect(() => {
-    setBlob(null)
-    if (!config || !isUrl(src)) return
-    const ctrl = new AbortController()
-    let url: string | null = null
-    let live = true
-    loadBoardImage(config, src, ctrl.signal).then(u => {
-      url = u
-      // Revoke immediately if the window went away mid-flight — otherwise the
-      // object URL leaks its bytes for the life of the session.
-      if (!live) { if (u) URL.revokeObjectURL(u); return }
-      setBlob(u)
-    })
-    return () => {
-      live = false
-      ctrl.abort()
-      if (url) URL.revokeObjectURL(url)
-    }
-  }, [config, src])
-
-  if (!blob) return null
-  return (
-    <img
-      src={blob}
-      alt={alt}
-      style={{
-        width: '100%', height: height ?? 'auto', maxHeight: '100%',
-        objectFit: 'cover', display: 'block',
-        border: '1px solid var(--hb-line)', borderRadius: 4,
-        background: 'var(--hb-petrol)',
-      }}
-    />
-  )
-}
 
 const LABEL_STYLE: React.CSSProperties = {
   fontFamily: "'Rajdhani', sans-serif", fontSize: '0.72rem', fontWeight: 700,
@@ -158,27 +96,6 @@ function Stat({ src }: { src: string }) {
   )
 }
 
-/* ── image ─────────────────────────────────────────────────────────────────
- * A URL on line 1, an optional caption after it. The plain "put this on the
- * screen" window — a photo of a person, a scan, a diagram the agent found
- * rather than drew. */
-function Picture({ src }: { src: string }) {
-  const [url = '', ...caption] = rows(src)
-  const text = caption.join(' ')
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <Shot src={url} alt={text || 'image'} height="100%" />
-      </div>
-      {text && (
-        <div style={{ fontSize: '0.72rem', color: 'var(--hb-text-dim)', lineHeight: 1.45 }}>
-          {text}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ── article ───────────────────────────────────────────────────────────────
  * The newspaper cutting: `title/source/date/url/image`, then the excerpt that
  * mattered. This is the window the whole redesign was argued from — asked to
@@ -191,7 +108,7 @@ function Article({ src }: { src: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', height: '100%' }}>
       {meta.image && <div style={{ flexShrink: 0, maxHeight: '45%' }}>
-        <Shot src={meta.image} alt={title} height={110} />
+        <ImagePreview fit="cover" src={meta.image} alt={title} height={110} />
       </div>}
       <div style={{ ...LABEL_STYLE, display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {meta.source && <span style={{ color: 'var(--hb-cyan)' }}>{meta.source}</span>}
@@ -240,7 +157,7 @@ function Card({ src }: { src: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', height: '100%' }}>
-      {photo && <div style={{ flexShrink: 0 }}><Shot src={photo} alt={name} height={120} /></div>}
+      {photo && <div style={{ flexShrink: 0 }}><ImagePreview fit="cover" src={photo} alt={name} height={120} /></div>}
       {name && (
         <div style={{
           fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: '1rem',
@@ -312,7 +229,7 @@ function Quote({ src }: { src: string }) {
 }
 
 const RENDERER: Partial<Record<PanelKind, (p: { src: string }) => JSX.Element>> = {
-  stat: Stat, image: Picture, article: Article, card: Card,
+  stat: Stat, article: Article, card: Card,
   timeline: Timeline, table: ({ src }) => <TableBlock source={src} />, quote: Quote,
 }
 
@@ -328,14 +245,15 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
   const Custom = RENDERER[panel.kind]
 
   const content = useMemo(
-    () => (Custom
-      ? <Custom src={panel.source} />
+    () => (panel.kind === 'image'
+      ? <ResearchPicture src={panel.source} flow={flow} title={panel.title} />
+      : Custom ? <Custom src={panel.source} />
       : (
         <div className="prose" style={{ overflowWrap: 'break-word', minWidth: 0 }}>
           <TextSegment text={panel.source} />
         </div>
       )),
-    [Custom, panel.source],
+    [Custom, panel.kind, panel.source, panel.title, flow],
   )
 
   return (
@@ -359,17 +277,9 @@ export default function VoicePanelBody({ panel, flow }: { panel: VoicePanel; flo
   )
 }
 
-/**
- * A staged window as it appears in the CHAT transcript rather than on the board.
- *
- * The presentation kinds exist for voice mode, but nothing stops an agent
- * writing one in an ordinary reply — and before this they fell through to the
- * code-block renderer, so a dossier arrived as raw text with colons in it. The
- * chat markdown pipeline only hands us `language-card`, dropping the title after
- * the bar, so these carry the generic label instead of an authored one.
- */
-export function BoardChatBlock({ kind, source }: { kind: PanelKind; source: string }) {
-  const panel: VoicePanel = { id: `chat-${kind}`, kind, title: '', source }
+/** Render a staged panel in the chat transcript. */
+export function BoardChatBlock({ kind, source, title = '' }: { kind: PanelKind; source: string; title?: string }) {
+  const panel: VoicePanel = { id: `chat-${kind}`, kind, title, source }
   return (
     <div style={{ margin: '0.6rem 0', maxWidth: 560 }}>
       <VoicePanelBody panel={panel} flow />

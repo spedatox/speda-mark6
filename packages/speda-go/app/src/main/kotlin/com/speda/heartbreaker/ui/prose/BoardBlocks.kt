@@ -34,6 +34,7 @@ import com.speda.heartbreaker.domain.BoardKind
 import com.speda.heartbreaker.domain.StatDir
 import com.speda.heartbreaker.domain.boardFields
 import com.speda.heartbreaker.domain.boardRows
+import com.speda.heartbreaker.domain.parseImageFence
 import com.speda.heartbreaker.domain.quoteBody
 import com.speda.heartbreaker.domain.statDirection
 import com.speda.heartbreaker.domain.timelineRows
@@ -58,7 +59,7 @@ fun BoardBlock(kind: BoardKind, title: String, body: String, modifier: Modifier 
         Box(Modifier.padding(horizontal = 12.dp)) {
             when (kind) {
                 BoardKind.STAT -> StatWindow(body)
-                BoardKind.IMAGE -> ImageWindow(body)
+                BoardKind.IMAGE -> ResearchImage(parseImageFence(body), showCaption = true)
                 BoardKind.ARTICLE -> ArticleWindow(body)
                 BoardKind.CARD -> CardWindow(body)
                 BoardKind.TIMELINE -> TimelineWindow(body)
@@ -84,7 +85,7 @@ private fun FieldLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 private fun Shot(url: String, height: Int, modifier: Modifier = Modifier) {
     val palette = LocalHbPalette.current
-    val image = rememberBoardImage(url) ?: return
+    val image = rememberBoardImage(url).bitmap ?: return
     Image(
         bitmap = image,
         contentDescription = null,
@@ -131,25 +132,6 @@ private fun StatWindow(body: String) {
             )
         }
         if (caption.isNotBlank()) FieldLabel(caption)
-    }
-}
-
-/* ── image ─────────────────────────────────────────────────────────────────
- * A URL on line 1, an optional caption after it. */
-@Composable
-private fun ImageWindow(body: String) {
-    val palette = LocalHbPalette.current
-    val rows = boardRows(body)
-    val url = rows.firstOrNull().orEmpty()
-    val caption = rows.drop(1).joinToString(" ")
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Shot(url, height = 200)
-        if (caption.isNotBlank()) {
-            BasicText(
-                AnnotatedString(caption),
-                style = HbType.read.copy(fontSize = 12.sp, color = palette.textDim),
-            )
-        }
     }
 }
 

@@ -15,6 +15,7 @@ object MarkdownPrep {
     private val DISPLAY_MATH = Regex("\\\\\\[([\\s\\S]+?)\\\\\\]")
     private val INLINE_MATH = Regex("\\\\\\(([\\s\\S]+?)\\\\\\)")
     private val FENCE = Regex("```")
+    private val IMAGE_FENCE = Regex("^```[ \\t]*image(?:[ \\t|]|\\r?\\n|$)", RegexOption.IGNORE_CASE)
     private val FENCED_BLOCK = Regex("```[\\s\\S]*?```")
     private val LONE_TICK = Regex("(?<!`)`(?!`)")
 
@@ -61,7 +62,11 @@ object MarkdownPrep {
     fun sanitizePartialMarkdown(input: String): String {
         var text = input
         val fences = FENCE.findAll(text).count()
-        if (fences % 2 != 0) text += "\n```"
+        if (fences % 2 != 0) {
+            val open = text.lastIndexOf("```")
+            if (IMAGE_FENCE.containsMatchIn(text.substring(open))) return text.substring(0, open)
+            text += "\n```"
+        }
         val stripped = FENCED_BLOCK.replace(text, "")
         val ticks = LONE_TICK.findAll(stripped).count()
         if (ticks % 2 != 0) text += "`"

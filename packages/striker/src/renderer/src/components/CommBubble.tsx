@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
 import { agentDisplayName, agentColor, fmtCommTime } from '../lib/agents'
@@ -66,7 +67,7 @@ export function Avatar({ id, size = 26 }: { id: string; size?: number }) {
 export function CommMarkdown({ text, size }: { text: string; size: string }) {
   return (
     <div className="prose hb-comm-md" style={{ fontSize: size, lineHeight: 1.5 }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ReactMarkdown components={{ img: MarkdownImage, a: MarkdownImageLink }} remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   )
 }

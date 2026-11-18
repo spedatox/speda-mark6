@@ -53,3 +53,12 @@ test('native labs keep their fence and short timelines use less board space', ()
   assert.match(panels[0].source, /^```artifact/)
   assert.equal(pack(panels, 1200, 500, 1200, 500)[1].h, 184)
 })
+
+test('an image panel waits for the complete URL, caption, and provenance', () => {
+  const open = '```image | Telescope assembly\nhttps://archive.example/telescope.jpg'
+  assert.equal(splitPanels(open).length, 0)
+  const [panel] = splitPanels(open + '\nTechnicians assemble the telescope.\nSource: https://archive.example/record\n```')
+  assert.equal(panel.kind, 'image')
+  assert.match(panel.title, /TELESCOPE ASSEMBLY/)
+  assert.match(panel.source, /Source: https:\/\/archive\.example\/record/)
+})

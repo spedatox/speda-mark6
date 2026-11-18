@@ -707,6 +707,10 @@ val Tr = AppStrings(
         failed = { n -> "$n başarısız" },
     ),
     proseKind = AppStrings.ProseKind(
+        image = "Görsel",
+        imageLoading = "Görsel yükleniyor…",
+        imageUnavailable = "Görsel kullanılamıyor",
+        openImageSource = "Kaynağı aç",
         materializing = "OLUŞTURULUYOR",
         parseError = "AYRIŞTIRMA HATASI",
         aircraft = "UÇAK",

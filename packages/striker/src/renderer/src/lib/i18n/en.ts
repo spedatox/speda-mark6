@@ -365,6 +365,7 @@ const en = {
     unsupported: 'This provider exposes no thinking control the server can reach.',
     label: 'Thinking',
   },
+  researchImage: { image: 'Image', loading: 'Loading image…', unavailable: 'Image unavailable', openSource: 'Open source' },
   message: {
     toolStatus: {
       read_skill: 'Reviewing capabilities',

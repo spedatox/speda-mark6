@@ -792,6 +792,10 @@ data class AppStrings(
      *  the "still streaming" and "couldn't parse" placeholders, and each card's own
      *  short kind label used inside them. */
     data class ProseKind(
+        val image: String,
+        val imageLoading: String,
+        val imageUnavailable: String,
+        val openImageSource: String,
         val materializing: String,
         val parseError: String,
         val aircraft: String,

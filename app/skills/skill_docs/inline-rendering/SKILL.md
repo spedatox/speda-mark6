@@ -1,6 +1,6 @@
 ---
 name: inline-rendering
-description: Renders native tables, timelines, responsive calendars, charts, SVG diagrams, and interactive HTML calculators as live previews directly inside chat and the canvas board. The owner loves visualizations — use proactively in moderation whenever presenting data series, schedules, architectures, workflows, or comparisons. In Canvas Mode, authoring visual windows is mandatory.
+description: Renders source images, native tables, timelines, calendars, charts, SVG diagrams, and interactive HTML calculators in chat and on Canvas. Use visuals proactively when they clarify research, data, schedules, architectures, workflows, or comparisons.
 ---
 
 # Inline Rendering
@@ -19,6 +19,23 @@ the active turn's panel/output budget; never pad a simple answer with decoration
 For Ultron's substantive tutoring, normally use 6–10 purposeful panels combining
 a mental model, derivation, worked example, interactive exploration when useful,
 misconception contrast and a check question. A focused follow-up can use 1–3.
+
+## Research images
+
+Show relevant photographs, scans, and other source images alongside the finding
+they support. An `image` fence works in chat and gives the image its own Canvas
+panel. Use the direct public image URL, a meaningful caption, and the publisher
+or archive page for attribution and access if the preview fails.
+
+```image | Telescope assembly
+https://archive.example/media/telescope.jpg
+Technicians assemble the telescope in the factory.
+Source: https://archive.example/collection/telescope
+```
+
+Use URLs obtained from research tools. Mark a candidate match or an illustration
+as such. If an image needs sign-in or there is no usable public image URL, link
+to the source page in prose. Standard Markdown images also display inline.
 
 ## Rule 0 — Data charts (line/area/bar/pie) → use a ```chart``` block, never SVG or HTML
 

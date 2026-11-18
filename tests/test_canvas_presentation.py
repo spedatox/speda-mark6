@@ -56,6 +56,7 @@ async def test_orchestrator_applies_server_cap_and_does_not_brief_workers_or_uns
     ctx = context(agent_id='ultron')
     ctx.extra['client_surface'] = validate({'platform': 'desktop', 'canvas': True, 'canvas_max_panels': 24})
     assert 'at most 12 authored panels' in bits.engine.build_system_prompt(ctx)
+    assert 'Research images in chat and Canvas' in bits.engine.build_system_prompt(ctx)
     assert 'Native Mark VI artifacts' not in bits.engine.build_system_prompt(ctx)
     ctx.extra['client_surface']['native_artifacts'] = True
     assert 'Native Mark VI artifacts' in bits.engine.build_system_prompt(ctx)
@@ -63,10 +64,12 @@ async def test_orchestrator_applies_server_cap_and_does_not_brief_workers_or_uns
     assert 'at most 4 authored panels' in bits.engine.build_system_prompt(ctx)
     ctx.task_role = 'worker'
     assert 'CANVAS MODE IS ACTIVE' not in bits.engine.build_system_prompt(ctx)
+    assert 'Research images in chat and Canvas' not in bits.engine.build_system_prompt(ctx)
     assert 'Native Mark VI artifacts' not in bits.engine.build_system_prompt(ctx)
     ctx.task_role = 'interactive'
     ctx.extra['client_surface']['platform'] = 'android'
     assert 'CANVAS MODE IS ACTIVE' not in bits.engine.build_system_prompt(ctx)
+    assert 'Research images in chat and Canvas' in bits.engine.build_system_prompt(ctx)
     assert 'Native Mark VI artifacts' in bits.engine.build_system_prompt(ctx)
     ctx.extra['client_surface']['platform'] = 'desktop'
     monkeypatch.setattr(settings, 'voice_canvas_enabled', False)

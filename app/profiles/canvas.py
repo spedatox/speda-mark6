@@ -3,6 +3,23 @@ import hashlib
 from pathlib import Path
 
 
+RESEARCH_IMAGES = """
+## Research images in chat and Canvas
+Proactively include relevant photographs, scans, screenshots or other source
+images when they help the owner see the evidence or understand a finding. When
+a visual is central to the question, look for a usable one without waiting to be
+asked. A public `browse_page` result can supply candidates under Images. Use the
+actual public image URL returned by a tool, with a descriptive caption and a
+link to the page where it was published. Use an `image | Descriptive title` fence
+with the direct image URL on line one, caption on the next line, and
+`Source: https://publisher.example/page` on the last line. Close the fence on
+its own line. This displays in chat and makes a dedicated panel on Canvas.
+Use a separate source link if the image requires a sign-in or a public preview
+is unavailable. Explain uncertainty when an image is a candidate match or an
+illustration. Use a few images that each add evidence or context.
+"""
+
+
 CANVAS_GUIDANCE = r"""
 ## Active canvas presentation
 CANVAS MODE IS ACTIVE for this turn. The owner wants maximum useful visualization.
@@ -20,6 +37,8 @@ Never claim that a visual was tested, an event fetched, or a tool action complet
 without evidence. Presentation does not grant tool permissions or spending.
 
 Use these exact renderer formats (each fence starts and ends on its own line):
+- `image | Descriptive title`: public image URL, caption, and `Source:` link in
+  the research image format above. Use for photos, scans, and source images.
 - `svg | Descriptive title`: transparent SVG with a viewBox, readable labels,
   generous spacing and no label collisions. Use for conceptual models,
   mechanisms, geometry, flows, annotated diagrams and causal relationships.
@@ -149,14 +168,15 @@ Example geometry and hierarchy. Adapt the content and layout to the question:
 """ + Path(__file__).with_name('markvi-diagram.svg').read_text(encoding='utf-8') + "```\n"
 
 CANVAS_REVISION = hashlib.sha256(
-    (CANVAS_GUIDANCE + ULTRON_TUTORING + NATIVE_ARTIFACTS + MARK_VI_SVG + MARK_VI_SVG_EXAMPLE).encode()
+    (RESEARCH_IMAGES + CANVAS_GUIDANCE + ULTRON_TUTORING + NATIVE_ARTIFACTS + MARK_VI_SVG + MARK_VI_SVG_EXAMPLE).encode()
 ).hexdigest()
 
 
 def canvas_guidance(variables, *, tutoring=False):
+    research = RESEARCH_IMAGES if variables.get('research_images') or variables.get('canvas') else ''
     native = NATIVE_ARTIFACTS + MARK_VI_SVG if variables.get('native_artifacts') else ''
     if not variables.get('canvas'):
-        return native
+        return research + native
     limit = max(1, min(32, int(variables.get('canvas_max_panels', 24))))
-    return (CANVAS_GUIDANCE + f'\nStage at most {limit} authored panels in this turn.\n'
+    return (research + CANVAS_GUIDANCE + f'\nStage at most {limit} authored panels in this turn.\n'
             + (ULTRON_TUTORING if tutoring else '') + native + (MARK_VI_SVG_EXAMPLE if native else ''))

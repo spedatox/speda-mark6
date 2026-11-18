@@ -23,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import com.speda.heartbreaker.domain.boardKindOf
 import com.speda.heartbreaker.domain.boardTitle
+import com.speda.heartbreaker.domain.markdownImage
 import com.speda.heartbreaker.domain.parseFenceInfo
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -179,6 +180,21 @@ private fun Block(node: Node, palette: HbPalette) {
 @Composable
 private fun ParagraphBlock(node: Paragraph, palette: HbPalette, inList: Boolean = false) {
     val spans = LocalMathSpans.current
+    val images = remember(node) {
+        generateSequence(node.firstChild) { it.next }.mapNotNull { child ->
+            markdownImage(child)?.let { child to it }
+        }.toList()
+    }
+    if (images.isNotEmpty()) {
+        var start = node.firstChild
+        for ((child, image) in images) {
+            ParagraphRun(start, child, palette, spans, inList)
+            ResearchImage(image)
+            start = child.next
+        }
+        ParagraphRun(start, null, palette, spans, inList)
+        return
+    }
     val html = remember(node, spans) { if (carriesMath(node)) HTML.render(node) else null }
 
     when {
@@ -196,20 +212,29 @@ private fun ParagraphBlock(node: Paragraph, palette: HbPalette, inList: Boolean 
     }
 }
 
-/** Does any literal under [node] still hold a [MathExtract] placeholder? */
-private fun carriesMath(node: Node): Boolean {
-    var child = node.firstChild
-    while (child != null) {
-        val literal = when (child) {
-            is MdText -> child.literal
-            is Code -> child.literal
-            else -> null
-        }
-        if (literal != null && MathExtract.hasPlaceholder(literal)) return true
-        if (literal == null && carriesMath(child)) return true
-        child = child.next
+@Composable
+private fun ParagraphRun(first: Node?, end: Node?, palette: HbPalette, spans: List<MathSpan>, inList: Boolean) {
+    val html = remember(first, end, spans) {
+        val nodes = generateSequence(first) { it.next }.takeWhile { it != end }.toList()
+        if (nodes.any(::carriesMath)) nodes.joinToString("", "<p>", "</p>") { HTML.render(it) } else null
     }
-    return false
+    if (html != null) {
+        MathProse(html, spans)
+        return
+    }
+    val text = buildAnnotatedString { appendInlineRun(first, end, palette, spans) }
+    if (text.isNotBlank()) BasicText(
+        text = text,
+        style = ProseBase.merge(TextStyle(color = palette.text)),
+        modifier = if (inList) Modifier else Modifier.padding(vertical = 8.dp),
+    )
+}
+
+/** Does any literal under [node] still hold a [MathExtract] placeholder? */
+private fun carriesMath(node: Node): Boolean = when (node) {
+    is MdText -> MathExtract.hasPlaceholder(node.literal)
+    is Code -> MathExtract.hasPlaceholder(node.literal)
+    else -> generateSequence(node.firstChild) { it.next }.any(::carriesMath)
 }
 
 /* ── Fence dispatch ──────────────────────────────────────────────────────── */
@@ -722,9 +747,12 @@ private fun inlines(parent: Node, palette: HbPalette): AnnotatedString {
     return buildAnnotatedString { appendInlines(parent, palette, spans) }
 }
 
-private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalette, math: List<MathSpan>) {
-    var child = parent.firstChild
-    while (child != null) {
+private fun AnnotatedString.Builder.appendInlines(parent: Node, palette: HbPalette, math: List<MathSpan>) =
+    appendInlineRun(parent.firstChild, null, palette, math)
+
+private fun AnnotatedString.Builder.appendInlineRun(first: Node?, end: Node?, palette: HbPalette, math: List<MathSpan>) {
+    var child = first
+    while (child != null && child != end) {
         when (val n = child) {
             // Placeholders reaching a renderer with no math support — a heading, a
             // table cell — turn back into the TeX the user wrote. Never a stray

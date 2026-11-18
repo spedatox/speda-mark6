@@ -392,6 +392,7 @@ const en = {
     fitWidth: 'Fit to width',
   },
 
+  researchImage: { image: 'Image', loading: 'Loading image…', unavailable: 'Image unavailable', openSource: 'Open source' },
   message: {
     toolStatus: {
       read_skill: 'Reviewing capabilities',

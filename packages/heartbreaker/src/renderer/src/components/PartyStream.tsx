@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import remarkGfm from 'remark-gfm'
 import { useChatContext } from '../store/chat'
 import { fetchAgentComms } from '../lib/api'
@@ -75,7 +76,7 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
       : (
         <AgentSay key={m.id} id={commanderId} commander>
           <div className="prose hb-comm-md" style={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
-            <ReactMarkdown remarkPlugins={MD_PLUGINS}>{m.content}</ReactMarkdown>
+            <ReactMarkdown components={{ img: MarkdownImage, a: MarkdownImageLink }} remarkPlugins={MD_PLUGINS}>{m.content}</ReactMarkdown>
           </div>
         </AgentSay>
       )
@@ -130,7 +131,7 @@ export default function PartyStream({ config, commanderId = 'speda' }: {
                   <span style={{ color: '#e88a7c' }}>{e.status}: {e.result}</span>
                 ) : (
                   <div className="prose hb-comm-md" style={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
-                    <ReactMarkdown remarkPlugins={MD_PLUGINS}>{e.result}</ReactMarkdown>
+                    <ReactMarkdown components={{ img: MarkdownImage, a: MarkdownImageLink }} remarkPlugins={MD_PLUGINS}>{e.result}</ReactMarkdown>
                   </div>
                 )}
               </AgentSay>

@@ -211,6 +211,7 @@ export function splitPanels(text: string): VoicePanel[] {
       const body: string[] = []
       i++
       while (i < lines.length && !/^[ \t]*```/.test(lines[i])) body.push(lines[i++])
+      if (i === lines.length && lang === 'image') break
       if (i < lines.length) i++                      // the closing fence
       const kind = FENCE_KIND[lang] ?? 'code'
       // How a body is handed on depends on who renders it.

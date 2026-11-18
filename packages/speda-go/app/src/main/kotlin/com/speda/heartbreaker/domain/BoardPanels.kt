@@ -115,11 +115,6 @@ fun boardFields(src: String): BoardFields {
     return BoardFields(meta, lines.drop(i).joinToString("\n").trim())
 }
 
-/** Is this something we would hand to an image loader? Anything else in an
- *  image slot is a description the model wrote instead of a link. */
-fun isImageUrl(s: String): Boolean =
-    Regex("""^(https?://|data:image/)""", RegexOption.IGNORE_CASE).containsMatchIn(s.trim())
-
 /** Which way a stat's change line points. Read from the SIGN rather than from a
  *  field the model has to remember to set — and anything ambiguous stays
  *  neutral rather than guessing, because a briefing that colours a neutral
@@ -195,7 +190,7 @@ fun splitBoardPanels(text: String): List<StagedWindow> {
         // half is not a partial render, it is a syntax error.
         if (i >= lines.size) {
             val kind = boardKindOf(parseFenceInfo(info).lang)
-            if (kind != null || parseFenceInfo(info).lang == "table") {
+            if ((kind != null && kind != BoardKind.IMAGE) || parseFenceInfo(info).lang == "table") {
                 out.add(StagedWindow(info, body.joinToString("\n")))
             }
             break

@@ -386,6 +386,7 @@ const tr: Dict = {
     fitWidth: 'Genişliğe sığdır',
   },
 
+  researchImage: { image: 'Görsel', loading: 'Görsel yükleniyor…', unavailable: 'Görsel kullanılamıyor', openSource: 'Kaynağı aç' },
   message: {
     toolStatus: {
       read_skill: 'Yetenekler gözden geçiriliyor',

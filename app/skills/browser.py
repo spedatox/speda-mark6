@@ -62,6 +62,7 @@ class BrowsePageSkill(Skill):
         "scrape fetch read site portal login logged in blocked 403 empty page spa "
         "tavily exa search failed insufficient couldn't access cannot read paywall "
         "cookie wall challenge captcha page bot blocked truncated stub pdf document "
+        "image photo photograph picture scan source thumbnail görsel fotoğraf "
         "web sayfa aç tarayıcı giriş erişemedim okuyamadım engellendi"
     )
     read_only = True          # Rule 9 — a render is a read; parallel is safe
@@ -92,9 +93,9 @@ class BrowsePageSkill(Skill):
         "it is read too and appears under an 'embedded frame' heading. Returns the page "
         "title, URL, text (truncated), a list of links you can pass straight back as the "
         "next URL, and — under an 'Images' heading — the real addresses of the pictures on "
-        "the page, the page's own lead image first. Those are the addresses to use when you "
-        "put a photo on a presentation window: they came off the page, so they resolve. "
-        "Never write an image address you have not seen in a result like this one."
+        "the page, the page's own lead image first. For a relevant public photo, use its "
+        "image address in an image panel and link the containing page as the source. "
+        "A URL taken from a signed-in page may require the browser's session to display."
     )
     input_schema = {
         "type": "object",

@@ -1,7 +1,7 @@
 """Explicit registrations for migrated domain capabilities; no engine bootstrap."""
 from importlib import import_module
 
-DOMAIN_ROUTERS = ("mail", "reminders", "voice", "telegram", "automations", "academic", "navigation", "aircraft", "files", "health_data", "browser", "web_watch", "news", "hisar")
+DOMAIN_ROUTERS = ("mail", "reminders", "voice", "telegram", "automations", "academic", "navigation", "aircraft", "files", "health_data", "browser", "web_watch", "news", "hisar", "media")
 DOMAIN_SKILLS = {
     "telegram": ("SendTelegramMessageSkill", "SendTelegramFileSkill"),
     "atomix_reports": ("GenerateDailyTrainingProgramSkill",),

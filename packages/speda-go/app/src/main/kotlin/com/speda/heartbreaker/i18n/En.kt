@@ -707,6 +707,10 @@ val En = AppStrings(
         failed = { n -> "$n failed" },
     ),
     proseKind = AppStrings.ProseKind(
+        image = "Image",
+        imageLoading = "Loading image…",
+        imageUnavailable = "Image unavailable",
+        openImageSource = "Open source",
         materializing = "MATERIALIZING",
         parseError = "PARSE ERROR",
         aircraft = "AIRCRAFT",

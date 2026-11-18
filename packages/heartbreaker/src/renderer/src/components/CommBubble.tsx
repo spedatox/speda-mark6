@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { MarkdownImage, MarkdownImageLink } from './ResearchImage'
 import remarkGfm from 'remark-gfm'
 import type { AgentCommEntry } from '../lib/api'
 import { attachLegionStream } from '../lib/api'
@@ -129,7 +130,7 @@ export function AvatarStack({ ids, size = 28, max = 5 }: {
 export function CommMarkdown({ text, size }: { text: string; size: string }) {
   return (
     <div className="prose hb-comm-md" style={{ fontSize: size, lineHeight: 1.5 }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ReactMarkdown components={{ img: MarkdownImage, a: MarkdownImageLink }} remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   )
 }
