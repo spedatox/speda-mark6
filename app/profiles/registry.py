@@ -57,7 +57,7 @@ class ProfileRegistry:
             "optimus": frozenset({"autobot", "reviewer"}), "scourge": frozenset({"decepticon", "reviewer"})}
         for aid, name, reference, domain, extra in roster:
             character = (Path(__file__).parent / "characters" / f"{aid}.md").read_text(encoding="utf-8")
-            tools = frozenset({"memory_lookup", "search_history", "collaborate", "record_decision", "project_status", "project_read"} | extra)
+            tools = frozenset({"memory_lookup", "search_history", "resolve_followup", "collaborate", "record_decision", "project_status", "project_read"} | extra)
             if 'Task' in extra:
                 tools = tools | {'legion_inspect','legion_control','legion_status'}
             if 'project_delegate' in extra:

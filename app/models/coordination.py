@@ -74,6 +74,13 @@ class AgentStep(Base):
     result: Mapped[str | None] = mapped_column(Text)
 
 
+class StepEpisodeReferences(Base):
+    """Visible archive spans pinned privately for a single owner step."""
+    __tablename__ = "coord_step_episode_refs"
+    step_id: Mapped[str] = mapped_column(ForeignKey("coord_steps.id", ondelete="CASCADE"), primary_key=True)
+    spans: Mapped[list] = mapped_column(JSON)
+
+
 class CoordinationControl(Base):
     __tablename__ = "coord_control"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)

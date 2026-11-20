@@ -42,17 +42,29 @@ class MemoryRuntime:
 
     async def prepare(self, context) -> MemoryPacket:
         query = turn_query(context)
-        if not (context.run_id and context.triggered_by == "user"
-                and "memory_lookup" in (context.allowed_tools or ()) and query_terms(query)):
+        owner_chat = context.triggered_by == "user"
+        personal_job = (context.triggered_by == "n8n" and context.trigger_payload.get("automation_key")
+                        and (context.trigger_payload.get("include_attention_digest")
+                             or context.trigger_payload.get("attention_only")))
+        if not (context.run_id and (owner_chat or personal_job)
+                and "memory_lookup" in (context.allowed_tools or ())):
             return await self._read(context, query, automatic=True)
         started = monotonic()
         budget = context.memory_budget
         already_elapsed = budget.elapsed_seconds
         packet, recent = await asyncio.gather(
-            self._read(context, query, automatic=True),
+            self._read(context, query, automatic=True, reserved_bytes=min(2200, budget.automatic_limit // 3)),
             self._recent(context, query, min(.15, self.prepare_timeout, 5 - already_elapsed)),
         )
-        byte_ceiling = min(2200, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
+        byte_ceiling = min(2800, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
+        # Preserve both speakers when long replies would crowd the owner turn out.
+        for length in (600, 320, 160):
+            if token_upper_bound(json.dumps(recent, ensure_ascii=False)) <= byte_ceiling:
+                break
+            for item in recent:
+                if len(item["text"]) > length:
+                    item["text"] = item["text"][:length]
+                    item["partial_message"] = True
         while recent and token_upper_bound(json.dumps(recent, ensure_ascii=False)) > byte_ceiling:
             recent.pop()
         if recent:
@@ -65,17 +77,32 @@ class MemoryRuntime:
         logger.info("foreground_context", extra={"request_id": context.request_id, **packet.diagnostics()})
         return packet
 
-    async def _recent(self, context, query, seconds):
+    async def _recent(self, context, query, seconds, *, reference_ids=()):
         from app.services.history_lookup import search_archive
         deadline = Deadline.after(seconds)
         try:
             async with asyncio.timeout(deadline.remaining()):
                 async with self.store.reader(deadline) as db:
-                    return (await search_archive(db, context, query, limit=4, recent=True)).get("results", [])
+                    result = await search_archive(db, context, query, limit=4, recent=True, continuity=True,
+                                                  reference_ids=reference_ids)
+                    if result.get("results") or reference_ids or not query_terms(query):
+                        return result.get("results", [])
+                    # Reuse the archive's indexed source hits to reach an older relevant session.
+                    # Hydration still enforces the same agent, project, visibility and input fence.
+                    sessions = await self.store.matching_sessions(db, context.user_id, query_terms(query))
+                    if not sessions:
+                        return []
+                    return (await search_archive(db, context, query, limit=4, recent=True, continuity=True,
+                                                 session_ids=sessions)).get("results", [])
         except Exception as exc:
             logger.info("recent_context_unavailable", extra={"request_id": context.request_id,
                 "error_type": type(exc).__name__})
             return []
+
+    async def restore_recent(self, context, ids):
+        if context.triggered_by not in {"user", "n8n"} or not ids or "memory_lookup" not in (context.allowed_tools or ()):
+            return []
+        return await self._recent(context, turn_query(context), min(.15, self.prepare_timeout), reference_ids=ids)
 
     async def lookup(self, context, query: str, *, source_ids=(), as_of=None) -> MemoryPacket:
         if context.memory_budget.lookup_batches >= 1:
@@ -85,7 +112,7 @@ class MemoryRuntime:
         context.memory_budget.lookup_batches += 1
         return await self._read(context, turn_query(context, query), automatic=False, source_ids=source_ids, as_of=as_of)
 
-    async def _read(self, context, query, *, automatic, source_ids=(), as_of=None):
+    async def _read(self, context, query, *, automatic, source_ids=(), as_of=None, reserved_bytes=0):
         started = monotonic()
         packet = MemoryPacket(request_id=context.request_id, user_id=context.user_id)
         seconds = (self.prepare_timeout if self._ready else max(self.prepare_timeout, 0.5)) if automatic else self.lookup_timeout
@@ -101,7 +128,7 @@ class MemoryRuntime:
             packet.source_boundary = result["boundary"]
             stage = "selection"
             self._select(context, packet, result, query, automatic=automatic,
-                         as_of=as_of, deadline=deadline, requested_sources=set(source_ids))
+                         as_of=as_of, deadline=deadline, requested_sources=set(source_ids), reserved_bytes=reserved_bytes)
             stage = "epoch_check"
             async with asyncio.timeout(deadline.remaining()):
                 final_epoch = await self.store.epoch(context, deadline=deadline)
@@ -138,7 +165,7 @@ class MemoryRuntime:
         packet.unit_revisions.clear()
         packet.catalogue_records.clear()
 
-    def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=()):
+    def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=(), reserved_bytes=0):
         today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
         terms = query_terms(query)
         family_query = bool(relations(query))
@@ -147,7 +174,7 @@ class MemoryRuntime:
         personal_fact = not terms and bool(re.search(r"\b(fact|facts|about me|hakkimda)\b", fold(query)))
         folded_query = " " + fold(query) + " "
         budget = context.memory_budget
-        ceiling = min(budget.automatic_limit if automatic else budget.lookup_limit,
+        ceiling = min(budget.automatic_limit - reserved_bytes if automatic else budget.lookup_limit,
                       budget.turn_limit - budget.used)
         available = max(0, ceiling - 512)
         selected = 0

@@ -748,6 +748,13 @@ class Coordinator:
                         {"run": identity, "state": status, "owner_message_sequence": sequence}
                         for identity, status, sequence in earlier
                     ]
+        if (context.triggered_by == "user" and not context.project_id and len(room.members) == 1
+                and "resolve_followup" in context.allowed_tools):
+            from app.services.watch_attention import active_items
+            async with self.sessions() as db:
+                questions = await active_items(db, user.id, step.agent_id, "ask", run.created_at)
+            # A model may resolve only questions visible when this input was admitted.
+            context.extra["open_attention_questions"] = [{"id": q.key, "question": q.text} for q in questions]
         if boundary:
             context.conversation_history = boundary.messages
             context.model_call_index = boundary.model_call_index
@@ -761,11 +768,23 @@ class Coordinator:
         theme = profile.get('document_theme', {})
         context.extra.update(doc_accent=theme.get('accent', '#5b6472'), doc_author=profile['name'],
                              doc_pdf_layout=theme.get('pdf_layout', 'executive'))
+        from app.models.coordination import StepEpisodeReferences
         if run.memory is not None:
             context.memory_packet = MemoryPacket(**run.memory)
+            if context.triggered_by in {"user", "n8n"} and self.orchestrator._memory_runtime:
+                async with self.sessions() as db:
+                    refs = await db.get(StepEpisodeReferences, step.id)
+                if refs:
+                    context.memory_packet.recent_conversation = await self.orchestrator._memory_runtime.restore_recent(
+                        context, refs.spans)
         elif self.orchestrator._memory_runtime:
             context.memory_packet = await self.orchestrator._memory_runtime.prepare(context)
             async with write_session(self.sessions) as db:
+                if context.memory_packet.recent_conversation:
+                    db.add(StepEpisodeReferences(step_id=step.id, spans=[
+                        [item["message_id"], item["offset_in_plain_text"], len(item["text"])]
+                        for item in context.memory_packet.recent_conversation
+                    ]))
                 budget = asdict(shared)
                 budget["seen"] = sorted(shared.seen)
                 await db.execute(update(CoordinationRun).where(CoordinationRun.id == run.id)
@@ -953,6 +972,13 @@ class Coordinator:
                         text, decision = await disposition(db, active, text)
                         await self.event(db, room, "attention_disposition", "system",
                                          {"disposition": decision}, run_id, step.id)
+                    if (step.operation_id == "owner" and context.triggered_by == "n8n" and text.strip()
+                            and trigger.get("include_attention_digest") and context.output_mode == "push"):
+                        from app.services.watch_attention import active_items
+                        deferred = await active_items(db, run.user_id, step.agent_id, "digest", run.created_at, lock=True)
+                        for item in deferred:
+                            item.state = "included"
+                            text += "\n\n" + item.text
                     current.result, current.status = text, "succeeded"
                     if not text and step.operation_id == "owner" and is_attention_watch(trigger):
                         await self.persist_memory(db, context)

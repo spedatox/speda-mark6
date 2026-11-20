@@ -404,6 +404,10 @@ class MemoryStore:
                                  for s in [*deps.values(), *source_rows.values()]},
                     "sources": sources, "candidate_limit_reached": len(hits) >= limit}
 
+    async def matching_sessions(self, db, owner, terms):
+        hits = await self._search(db, MemoryChange, "sources", owner, terms, 12)
+        return list(dict.fromkeys(hit.session_id for hit in hits if hit.message_id and hit.session_id))[:4]
+
     async def _search(self, db, model, target, user_id, terms, limit, recent=False):
         query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms[:20])
         if db.bind.dialect.name == "sqlite":

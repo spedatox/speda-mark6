@@ -25,7 +25,8 @@ def conversation_content(context):
         if context.room_id:
             owner = re.match(r"^\[Owner message, room event \d+\]\n", text)
             if owner:
-                text = re.split(r'\nQuoted (?:attachment sources|Telegram reply) \(', text[owner.end():], maxsplit=1)[0]
+                text = re.split(r'\n(?:Quoted (?:attachment sources|Telegram reply) \(|\{"reply_reference":)',
+                                text[owner.end():], maxsplit=1)[0]
             else:
                 try:
                     envelope = json.loads(text)

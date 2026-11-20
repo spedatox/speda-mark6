@@ -80,7 +80,7 @@ class AutomationAdmissions:
             result['deliveries']=entries
             states={r['status'] for r in entries}
             result['delivery_status']='unknown' if states & {'unknown','sending'} else 'accepted' if states=={'accepted'} else 'pending' if states & {'pending'} else 'unconfigured' if states=={'unconfigured'} else 'partial' if entries else 'pending_transport'
-        if result.get('attention', {}).get('disposition') not in {None, 'notify'}:
+        if result.get('attention', {}).get('disposition') not in {None, 'notify', 'ask'}:
             result['delivery_status'] = 'suppressed'
         return result
 

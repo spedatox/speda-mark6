@@ -45,14 +45,14 @@ def _like_pattern(term):
 
 
 async def search_archive(db, context, query, *, after=None, before=None, limit=6, cursor=None,
-                         recent=False, episode=False):
+                         recent=False, episode=False, continuity=False, reference_ids=(), session_ids=()):
     ranked = recent or episode
     if ranked:
         from app.services.memory_query import query_terms
         terms = query_terms(query)[:12]
     else:
         terms = list(dict.fromkeys(fold(query).split()))[:8]
-    if not terms and not after and not before:
+    if not terms and not after and not before and not continuity:
         return {'status':'needs_query','detail':'Supply a literal keyword or an owner-local date range.'}
     tz=ZoneInfo(context.timezone)
     aid=context.agent_id
@@ -64,6 +64,30 @@ async def search_archive(db, context, query, *, after=None, before=None, limit=6
     stmt=stmt.where(Session.user_id==context.user_id,Session.agent_id.in_(aids),Message.role.in_(['user','assistant']),
         (ClientSession.hidden.is_(None)) | (ClientSession.hidden.is_(False)),
         Message.id.not_in(select(HiddenMessage.message_id)))
+    overnight = False
+    if continuity:
+        local_now = (datetime.fromisoformat(context.prompt_datetime).astimezone(tz)
+                     if context.prompt_datetime else datetime.now(tz))
+        import re
+        overnight = bool(re.search(r"\b(last night|yesterday evening|dun gece|dun aksam)\b", fold(query)))
+        # Compare naive UTC instants to the canonical message timestamp column.
+        earliest = local_now - timedelta(hours=36)
+        if overnight:
+            evening = local_now.date() - timedelta(days=1)
+            earliest = datetime.combine(evening, time(18), tzinfo=tz)
+            morning = datetime.combine(local_now.date(), time(6), tzinfo=tz)
+            stmt = stmt.where(Message.created_at < morning.astimezone(timezone.utc).replace(tzinfo=None))
+        stmt = stmt.outerjoin(Room, Room.session_id == Session.id).where(
+            Room.project_id == context.project_id, Session.id != context.session_id,
+            Session.triggered_by == 'user',
+        )
+        # Keep topic matches across time. Only unanchored continuity is time bounded.
+        if overnight:
+            stmt = stmt.where(Message.created_at >= earliest.astimezone(timezone.utc).replace(tzinfo=None))
+            # The explicit time range already anchors recall. Boilerplate words in the
+            # reference must not promote an unrelated evening exchange.
+            terms = [term for term in terms if term not in
+                     {"last", "night", "yesterday", "evening", "conversation", "talk", "dun", "gece", "aksam"}]
     if context.run_id:
         event=await db.scalar(select(RoomEvent).where(RoomEvent.run_id==context.run_id,
             RoomEvent.room_id==context.room_id,RoomEvent.kind.in_(['user_message','automation_input'])).order_by(RoomEvent.sequence).limit(1))
@@ -73,6 +97,10 @@ async def search_archive(db, context, query, *, after=None, before=None, limit=6
         source=await db.get(MemoryChange,context.memory_source_id)
         if source and source.user_id==context.user_id and source.message_id:
             stmt=stmt.where(Message.id<source.message_id)
+    if session_ids:
+        stmt = stmt.where(Session.id.in_(session_ids))
+    if reference_ids:
+        stmt = stmt.where(Message.id.in_([span[0] for span in reference_ids[:4]]))
     if cursor is not None: stmt=stmt.where(Message.id<cursor)
     for value,lower in ((after,True),(before,False)):
         if not value: continue
@@ -144,11 +172,16 @@ async def search_archive(db, context, query, *, after=None, before=None, limit=6
         if terms and not hits and not recent:
             continue
         start=max(0,min(hits)-150) if hits else 0
-        excerpt=text[start:start+900]
+        length = 900
+        if reference_ids:
+            _, start, length = next(span for span in reference_ids if span[0] == message.id)
+        excerpt=text[start:start+length]
         speaker = next((b.get('agent_id') for b in blocks if b.get('type') == '_speaker'), None)
         automated = origins.get(message.id) == 'automation_input' or any(
             b.get('type') == '_speda_meta' and isinstance(b.get('trigger'), dict)
             and b['trigger'].get('source') == 'n8n' for b in blocks)
+        if continuity and speaker and speaker not in aids:
+            continue
         if automated:
             attribution = 'automated_input_not_owner_assertion'
             if recent:
@@ -170,6 +203,35 @@ async def search_archive(db, context, query, *, after=None, before=None, limit=6
             break
     more = consumed != candidates[-1][0].id
     if ranked:
+        if reference_ids:
+            visible = {item["message_id"]: item for item in results}
+            return {"results": [visible[mid] for mid, _, _ in reference_ids if mid in visible]}
+        if continuity:
+            episodes = {}
+            for item in results:
+                episodes.setdefault(item["session_id"], []).append(item)
+            from app.services.memory_query import conversation_content
+            dialogue = conversation_content(context)
+            short_opening = (context.triggered_by == "user" and len(query.split()) <= 4
+                             and sum(role == "user" for role, _ in dialogue) <= 1)
+            candidates = []
+            for turns in episodes.values():
+                anchor = max(turns, key=lambda item: (ranks[item["message_id"]], item["message_id"]))
+                score = ranks[anchor["message_id"]]
+                stamp = datetime.fromisoformat(turns[0]["recorded_at"]).replace(tzinfo=timezone.utc)
+                if not score and not overnight and not (short_opening and stamp >= earliest and not session_ids):
+                    continue
+                # Preserve nearby speaker attribution and the reply or correction around a hit.
+                index = turns.index(anchor)
+                start = max(0, index - 1)
+                candidates.append((score, anchor["message_id"], turns[start:start + limit]))
+            candidates.sort(key=lambda item: item[:2], reverse=True)
+            selected = list(candidates[0][2]) if candidates else []
+            if len(candidates) > 1 and not candidates[0][0] and not overnight:
+                # Give an ambiguous reaction two plausible threads instead of asserting one.
+                selected = selected[:2] + candidates[1][2][:2]
+            selected = selected[:limit]
+            return {"status": "partial", "coverage": "recent_episodes", "results": selected}
         if recent and terms:
             related = {}
             for left, right in zip(results, results[1:]):

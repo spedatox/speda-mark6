@@ -209,7 +209,15 @@ class CapabilityRegistry:
             if context is not None:
                 from app.mcp.client import fingerprint
                 context.extra.setdefault('mcp_schemas', {}).setdefault(name, fingerprint(definition))
-            tools.append({"name": name, "description": definition['description'], "input_schema": definition['input_schema']})
+            schema = definition["input_schema"]
+            if self._interactive_calendar_create(name, context):
+                schema = {**schema, "required": [*schema.get("required", ()), "timing_evidence"],
+                    "properties": {**schema.get("properties", {}), "timing_evidence": {
+                        "type": "string", "minLength": 2, "maxLength": 400,
+                        "description": "Quote the owner's timing or explicit delegation to choose a time, "
+                            "or quote the confirmed timing from a relevant read result. If the event or its "
+                            "timing is a guess, resolve it before creating the entry."}}}
+            tools.append({"name": name, "description": definition['description'], "input_schema": schema})
 
         if not (context and context.task_role == "worker"):
             for adapter in self._adapters.values():
@@ -340,6 +348,24 @@ class CapabilityRegistry:
             return None
         return instant if instant.tzinfo else None
 
+    def _interactive_calendar_create(self, name, context):
+        return bool(context and getattr(context, "run_id", None) and context.triggered_by == "user"
+                    and self._mail_calendar_tool(name))
+
+    def _check_calendar_evidence(self, args, context):
+        from app.schemas.llm import ProviderError
+        from app.services.memory_query import conversation_content
+        quote = " ".join(str(args.get("timing_evidence", "")).casefold().split())
+        evidence = [text for role, text in conversation_content(context) if role == "user"]
+        if context.memory_packet:
+            evidence.extend(item["text"] for item in context.memory_packet.recent_conversation
+                            if item["attribution"] == "owner_statement")
+        evidence.extend(str(tool["result"]) for tool in context.extra.get("display_tools", ())
+                        if tool.get("result") and self.call_is_read_only(tool["name"], tool.get("input", {})))
+        if len(quote) < 2 or not any(quote in " ".join(text.casefold().split()) for text in evidence):
+            raise ProviderError("invalid_arguments", "Calendar timing lacks supporting evidence. "
+                "Use an authorized read or ask for the missing detail before creating the entry.")
+
     def _check_mail_calendar_args(self, args, context):
         from datetime import datetime, timezone
         from app.schemas.llm import ProviderError
@@ -383,6 +409,8 @@ class CapabilityRegistry:
                 problem = f"failed the {issue.validator} constraint"
             raise ProviderError("invalid_arguments",
                 f"Tool arguments do not match the registered schema at {issue.json_path[:160]} ({problem[:200]})")
+        if self._interactive_calendar_create(call.name, context):
+            self._check_calendar_evidence(call.input, context)
         if self._bounded_mail_automation(context) and self._mail_calendar_tool(call.name):
             self._check_mail_calendar_args(call.input, context)
 
@@ -444,6 +472,8 @@ class CapabilityRegistry:
         from app.database import write_session
         calendar_create = self._mail_calendar_tool(call.name) and bool(context.run_id)
         arguments = ({"calendar_id": "primary", **call.input} if calendar_create else call.input)
+        if self._interactive_calendar_create(call.name, context):
+            arguments.pop("timing_evidence", None)
         digest = hashlib.sha256(json.dumps(arguments, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         receipt_call_id = f"calendar-create:{digest}" if calendar_create else call.id
         receipt_step = context.request_id
@@ -516,6 +546,9 @@ class CapabilityRegistry:
             if tool_name in self._mcp_tool_map:
                 server_name = self._mcp_tool_map[tool_name]
                 original_name = self._mcp_original_names[tool_name]
+                if self._interactive_calendar_create(tool_name, context):
+                    self._check_calendar_evidence(args, context)
+                    args = {key: value for key, value in args.items() if key != "timing_evidence"}
                 if self._bounded_mail_automation(context) and self._mail_calendar_tool(tool_name):
                     self._check_mail_calendar_args(args, context)
                     args = {**args, 'visibility':'private'}

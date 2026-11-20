@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from app.models.automation import Automation
+from app.models.automation import AttentionItem, Automation
+from app.services.coordination_budget import digest, insert_for
 
 
 def is_attention_watch(payload):
@@ -49,8 +50,54 @@ async def disposition(db, run, proposal, *, now=None):
     if candidate.get("disposition") == "silent":
         return "", "silent"
     notice = candidate.get("notice")
-    if candidate.get("disposition") != "notify" or not isinstance(notice, str) or not notice.strip():
+    kind = candidate.get("disposition")
+    if kind not in {"notify", "ask", "digest"} or not isinstance(notice, str) or not notice.strip():
         return "", "invalid_disposition"
-    if run.policy["trigger_payload"].get("attention_shadow") is True:
-        return "", "would_notify"
-    return notice.strip()[:700], "notify"
+    trigger = run.policy["trigger_payload"]
+    data = trigger.get("event_data", {})
+    observed = {m.get("id") for m in data.get("messages", []) if isinstance(m, dict)}
+    sources = candidate.get("source_ids", [])
+    if (not isinstance(sources, list) or len(sources) > 16
+            or any(not isinstance(s, str) or not s or s not in observed for s in sources)):
+        return "", "invalid_sources"
+    if not sources and (kind != "notify" or observed):
+        return "", "missing_sources"
+    if trigger.get("attention_shadow") is True:
+        return "", {"ask": "would_ask", "digest": "would_digest", "notify": "would_notify"}[kind]
+    notice = notice.strip()[:700]
+    if sources:
+        watch = await db.scalar(select(Automation).where(Automation.public_key == trigger["automation_key"],
+                                                          Automation.user_id == run.user_id))
+        key = digest([watch.agent_id, watch.connection_binding, sorted(set(sources))])
+        stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(tzinfo=None)
+        inserted = await db.execute(insert_for(db, AttentionItem).values(
+            user_id=run.user_id, key=key, watch_id=watch.id, revision=watch.content_version,
+            agent_id=watch.agent_id, state=kind, text=notice, expires_at=stamp + timedelta(days=2),
+            created_at=stamp).on_conflict_do_nothing())
+        if not inserted.rowcount:
+            return "", "duplicate"
+    return ("" if kind == "digest" else notice), kind
+
+
+async def active_items(db, owner, agent, state, cutoff, *, lock=False):
+    stmt = (select(AttentionItem).join(Automation, Automation.id == AttentionItem.watch_id)
+            .where(AttentionItem.user_id == owner, AttentionItem.agent_id == agent,
+                   AttentionItem.state == state, AttentionItem.created_at <= cutoff,
+                   AttentionItem.expires_at > datetime.utcnow(), Automation.active.is_(True),
+                   Automation.desired_active.is_(True), Automation.deleted_at.is_(None),
+                   Automation.content_version == AttentionItem.revision)
+            .order_by(AttentionItem.created_at.desc()).limit(4))
+    if lock:
+        stmt = stmt.with_for_update(skip_locked=True)
+    # A saved definition can expire or be snoozed without changing an item.
+    rows = list(await db.scalars(stmt))
+    eligible = []
+    now = datetime.now(timezone.utc)
+    for item in rows:
+        watch = await db.get(Automation, item.watch_id)
+        expiry = watch.spec.get("expires_at")
+        snooze = watch.spec.get("attention_snoozed_until")
+        if (expiry and datetime.fromisoformat(expiry) <= now) or (snooze and datetime.fromisoformat(snooze) > now):
+            continue
+        eligible.append(item)
+    return eligible

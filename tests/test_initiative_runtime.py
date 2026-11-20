@@ -52,6 +52,60 @@ async def test_recent_conversation_survives_full_memory_timeout(memory, monkeypa
         await bits.coordinator.shutdown()
 
 
+@pytest.mark.parametrize("opening", ["phewwww", "😮‍💨"])
+async def test_fresh_reaction_receives_recent_exam_on_first_call(memory, opening):
+    _, identity, _ = await seed(memory, "Going into my accounting exam now.", agent="ultron")
+    await seed(memory, "Private context about tomorrow", owner=2, agent="ultron")
+    bits = await setup(memory, [reply("How did the exam go?")])
+    runtime = MemoryRuntime(memory.store)
+    bits.engine._memory_runtime = runtime
+    await bits.engine._registry.register_skill(MemoryLookupSkill(runtime))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom(lead="ultron"))
+        await send(bits, room, opening)
+        prompt = bits.client.calls[0]["system"]
+        evidence = json.loads(prompt.split("<recent_conversation_evidence>")[1].split("</recent_conversation_evidence>")[0])
+        assert [item["message_id"] for item in evidence] == [identity]
+        assert len(bits.client.calls) == 1
+        from app.models.coordination import StepEpisodeReferences
+        async with memory.sessions() as db:
+            refs = await db.scalar(select(StepEpisodeReferences))
+            assert refs.spans[0][0] == identity
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_resume_rechecks_archive_visibility(memory):
+    from app.models.client_compat import HiddenMessage
+    session, mid, _ = await seed(memory, "Exam this morning", agent="ultron")
+    runtime = MemoryRuntime(memory.store)
+    context = memory.context("phewwww", agent_id="ultron", allowed_tools=frozenset({"memory_lookup"}))
+    refs = [[mid, 0, 4]]
+    assert (await runtime.restore_recent(context, refs))[0]["text"] == "Exam"
+    async with memory.sessions() as db, db.begin():
+        db.add(HiddenMessage(session_id=session, message_id=mid, request_id="hide"))
+    assert await runtime.restore_recent(context, refs) == []
+
+
+async def test_temporal_episode_skips_morning_briefing_and_newer_chat(memory):
+    from app.services.history_lookup import search_archive
+    _, target, _ = await seed(memory, "We agreed to review the draft.", agent="friday",
+                              stamp=datetime(2026, 11, 19, 20))
+    await seed(memory, "Last night was cold.", agent="friday", stamp=datetime(2026, 11, 20, 8))
+    ctx = memory.context(agent_id="friday", prompt_datetime="2026-11-20T12:00:00Z")
+    async with memory.sessions() as db:
+        packet = await search_archive(db, ctx, "remember last night?", recent=True, continuity=True)
+    assert [item["message_id"] for item in packet["results"]] == [target]
+
+
+def test_calendar_source_quote_must_come_from_available_evidence(memory):
+    registry = CapabilityRegistry()
+    context = memory.context("Choose an open afternoon for my study session.")
+    registry._check_calendar_evidence({"timing_evidence": "Choose an open afternoon"}, context)
+    with pytest.raises(ProviderError, match="lacks supporting evidence"):
+        registry._check_calendar_evidence({"timing_evidence": "My return departs at 17:00"}, context)
+
+
 async def test_maintenance_model_is_priced_locally_and_rollback_compatible(memory):
     client = FakeClient()
     budget = await funded(memory, client)
@@ -214,3 +268,35 @@ async def test_attention_watch_suppresses_quiet_hours_and_recheck_of_changed_rev
         watch.content_version += 1
         await db.flush()
         assert await disposition(db, run, proposal, now=now) == ("", "watch_changed")
+
+
+@pytest.mark.parametrize("kind", ["ask", "digest"])
+async def test_attention_items_validate_sources_dedupe_and_resolve(memory, kind):
+    from app.services.watch_attention import active_items
+    from app.skills.resolve_followup import ResolveFollowup
+
+    now = datetime.now(timezone.utc)
+    async with memory.sessions() as db, db.begin():
+        db.add(Automation(public_key="sources", user_id=1, agent_id="speda", request_id="sources",
+                          request_hash="sources", name="Watch", timezone="UTC", active=True,
+                          spec={"kind": "mail_watch", "attention_only": True, "attention_quiet": [0, 0]}))
+        await db.flush()
+        run = SimpleNamespace(user_id=1, created_at=now, policy={"trigger_payload": {
+            "automation_key": "sources", "automation_revision": 1, "event_data": {"messages": [{"id": "mail1"}]}}})
+        candidate = {"disposition": kind, "notice": "What day will you return?", "source_ids": ["unknown"]}
+        assert (await disposition(db, run, json.dumps(candidate), now=now))[1] == "invalid_sources"
+        candidate["source_ids"] = ["mail1"]
+        outcome = await disposition(db, run, json.dumps(candidate), now=now)
+        assert outcome == (candidate["notice"] if kind == "ask" else "", kind)
+        assert (await disposition(db, run, json.dumps(candidate), now=now))[1] == "duplicate"
+        cutoff = now.replace(tzinfo=None)
+        items = await active_items(db, 1, "speda", kind, cutoff)
+        assert len(items) == 1 and not await active_items(db, 1, "friday", kind, cutoff)
+        key = items[0].key
+    if kind == "ask":
+        context = memory.context("Wednesday")
+        context.extra["open_attention_questions"] = [{"id": key}]
+        result = await ResolveFollowup(memory.sessions).execute({"question_id": key, "status": "answered"}, context)
+        assert json.loads(result)["status"] == "answered"
+        async with memory.sessions() as db:
+            assert not await active_items(db, 1, "speda", "ask", cutoff)

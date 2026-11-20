@@ -30,6 +30,19 @@ class Automation(Base):
     deleted_at: Mapped[datetime | None]=mapped_column(default=None)
 
 
+class AttentionItem(Base):
+    __tablename__ = "native_attention_items"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(64), index=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("native_automations.id"))
+    revision: Mapped[int] = mapped_column()
+    state: Mapped[str] = mapped_column(String(24))
+    text: Mapped[str] = mapped_column(String(700))
+    expires_at: Mapped[datetime] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
 class AutomationOperation(Base):
     __tablename__='native_automation_operations'
     __table_args__=(UniqueConstraint('automation_id','version'),)
