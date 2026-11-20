@@ -378,6 +378,37 @@ class MemoryStore:
                 (s.id not in retired_ids or s.id in source_ids) and
                 (s.provenance.get("eligible_for_context", True) or s.id in source_ids) and
                 not (s.source_role == "canonical" and s.id in dep_ids and s.id not in source_ids)}
+            if context.run_id:
+                # Prepared personal knowledge is owner-scoped. Raw chat excerpts retain their
+                # original chat visibility, including when the indexed source lane selects them.
+                from app.models.client_compat import ClientSession, HiddenMessage
+                from app.models.coordination import Room, RoomEvent
+                from app.models.message import Message
+                from app.models.session import Session
+                mids = {source.message_id for source in source_rows.values() if source.message_id}
+                if mids:
+                    aids = {context.agent_id}
+                    if context.coordination:
+                        aids.add(context.coordination.profiles.require(context.agent_id).stable_id)
+                    if context.agent_id == "speda":
+                        aids.add("warroom")
+                    admitted = await db.scalar(select(RoomEvent).where(
+                        RoomEvent.room_id == context.room_id, RoomEvent.run_id == context.run_id,
+                        RoomEvent.kind.in_(["user_message", "automation_input"]))
+                        .order_by(RoomEvent.sequence).limit(1))
+                    visible = set()
+                    if admitted:
+                        visible = set(await db.scalars(select(Message.id).join(Session).outerjoin(
+                            Room, Room.session_id == Session.id).outerjoin(
+                            ClientSession, ClientSession.session_id == Session.id).where(
+                                Message.id.in_(mids), Message.id < admitted.payload["message_id"],
+                                Session.user_id == context.user_id, Session.agent_id.in_(aids),
+                                Room.project_id == context.project_id,
+                                or_(ClientSession.hidden.is_(None), ClientSession.hidden.is_(False)),
+                                Message.id.not_in(select(HiddenMessage.message_id)),
+                                Message.role == "user", Session.triggered_by == "user")))
+                    source_rows = {sid: source for sid, source in source_rows.items()
+                                   if not source.message_id or source.message_id in visible}
             sources = []
             for s in source_rows.values():
                 key = (context.user_id, s.id, s.content_hash)

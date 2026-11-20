@@ -56,6 +56,7 @@ async def test_recent_conversation_survives_full_memory_timeout(memory, monkeypa
 async def test_fresh_reaction_receives_recent_exam_on_first_call(memory, opening):
     _, identity, _ = await seed(memory, "Going into my accounting exam now.", agent="ultron")
     await seed(memory, "Private context about tomorrow", owner=2, agent="ultron")
+    await seed(memory, "Other agent private bridge", agent="friday")
     bits = await setup(memory, [reply("How did the exam go?")])
     runtime = MemoryRuntime(memory.store)
     bits.engine._memory_runtime = runtime
@@ -64,6 +65,7 @@ async def test_fresh_reaction_receives_recent_exam_on_first_call(memory, opening
         room = await bits.coordinator.create(1, CreateRoom(lead="ultron"))
         await send(bits, room, opening)
         prompt = bits.client.calls[0]["system"]
+        assert "Other agent private bridge" not in prompt
         evidence = json.loads(prompt.split("<recent_conversation_evidence>")[1].split("</recent_conversation_evidence>")[0])
         assert [item["message_id"] for item in evidence] == [identity]
         assert len(bits.client.calls) == 1
