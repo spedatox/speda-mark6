@@ -250,8 +250,12 @@ class ProjectWorkspace:
                 end = file_offset + 1000
                 return {'revision': revision, 'files': [row[0] for row in rows[file_offset:end]],
                         'omitted': max(0, len(rows) - end), 'next_file_offset': end if end < len(rows) else None}
-            if path not in {r[0] for r in rows}:
-                raise CoordinationError('project_file_scope', 'Choose a file from this project inventory', 422)
+            known_paths = {r[0] for r in rows}
+            if path not in known_paths:
+                needle = Path(path).name.casefold()
+                matches = [r[0] for r in rows if needle and needle in r[0].casefold()][:6] if needle else []
+                hint = f" (closest matches: {', '.join(matches)})" if matches else ""
+                raise CoordinationError('project_file_scope', f'Choose a file from this project inventory{hint}', 422)
             try:
                 with (root / path).open(encoding='utf-8') as source:
                     page = read_project_lines(source, start_line, max_lines, start_column)

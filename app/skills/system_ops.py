@@ -85,7 +85,22 @@ class SystemOpsSkill(Skill):
     async def execute(self, args, context):
         if not self.available(context):
             return json.dumps({"status": "denied", "reason": "Available to Orion in owner-started conversations."})
-        action = args.get("action", "status")
+        raw_action = args.get("action")
+        if raw_action in {None, "status"}:
+            if "command" in args:
+                action = "exec"
+            elif "path" in args and "content" in args:
+                action = "write_file"
+            elif "path" in args:
+                action = "read_file"
+            elif "operation_id" in args:
+                action = "operation_status"
+            elif "diagnostic" in args:
+                action = "diagnostics"
+            else:
+                action = raw_action or "status"
+        else:
+            action = raw_action
         if action in {"incidents", "security_incidents"}:
             if self.journal is None:
                 return json.dumps({"status": "unavailable", "reason": "Damage Control journal unavailable."})
@@ -99,7 +114,7 @@ class SystemOpsSkill(Skill):
             waits = getattr(context.coordination, "operation_waits", None)
             if waits:
                 return await waits.submit({**args, "action": action}, context)
-            response = await host_operation(args, context)
+            response = await host_operation({**args, "action": action}, context)
             return json.dumps(response, ensure_ascii=False)
         try:
             async with asyncio.timeout(4), httpx.AsyncClient(

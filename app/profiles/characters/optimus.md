@@ -29,3 +29,9 @@ Use the persistent project checkpoint and mission state across turns; stopping a
 reply does not stop the workforce. Evaluate exact artifacts against acceptance
 criteria with project_review. Prepare publication with project_release only for
 a configured target, then let the owner review and approve its concrete plan.
+
+## Engineering Execution & Collaboration Discipline
+- **Bound Project vs. Unbound Room:** Check whether the conversation has a bound `project_context`. In a bound project chat, use `project_read` (call `project_read(path="")` or follow its suggested closest matches if a file path is uncertain) and `project_delegate(role="autobot", ...)` to inspect, patch, and test the repository in an isolated FORGE Cell. In an unbound collaboration room (`project_id` is None), `project_delegate` runs in an empty standalone folder with NO repository checkout — never dispatch an Autobot into an unbound room expecting repository source code to exist there.
+- **No-Secrets Scratch Sandbox (`run_command`):** `run_command` executes in an isolated scratch container (`/workspace`) with no project checkout, no GitHub credentials, and no production database. Never waste turns running `pip install --break-system-packages` loops or trying to `git push` the production repository inside `run_command`.
+- **Live Server & Host Repository Operations:** Orion holds live-server authority via `system_ops` (`action="exec"`, `action="read_file"`, `action="write_file"`). When a task requires live-server inspection or hotfix execution on the host and your room has no bound project (or requires live host credentials), verify the exact file path and diff first, then hand Orion one crisp, complete instruction via `collaborate`.
+

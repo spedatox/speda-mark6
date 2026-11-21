@@ -294,6 +294,15 @@ class CapabilityRegistry:
         """Offer a small set of relevant, already-authorized read schemas."""
         from app.services.memory_query import query_terms
         from app.services.episodic_cortex import concept_vector
+        if getattr(context, "task_role", None) == "worker":
+            authorized = {
+                tool["name"]
+                for tool in self.list_tools(context, include_deferred=True)
+                if self.call_is_read_only(tool["name"], {})
+            }
+            context.extra.setdefault("loaded_tools", set()).update(
+                authorized & {"browse_page", "memory_lookup", "search_history"}
+            )
         concepts = concept_vector(cues or "")
         expansion = []
         if concepts.get("travel_mobility") or concepts.get("home_family_location"):
@@ -302,6 +311,12 @@ class CapabilityRegistry:
             expansion.extend(["calendar", "events", "tasks", "course", "academic", "reminder", "schedule", "history"])
         if concepts.get("personal_emotional_social") or concepts.get("system_memory_infra"):
             expansion.extend(["history", "memory"])
+        lowered_cues = (cues or "").casefold()
+        if any(token in lowered_cues for token in (
+            "araştır", "arastir", "incele", "deprem", "zemin", "fay", "site", "evleri",
+            "research", "investigate", "browse", "web", "website", "url", "http", "rapor", "analiz",
+        )):
+            expansion.extend(["browse", "webpage", "website", "fetch", "article", "history", "memory"])
         terms = set(query_terms(f"{cues or ''} {' '.join(expansion)}"))
         if not terms:
             return
@@ -523,8 +538,22 @@ class CapabilityRegistry:
         files_before = len(context.extra.get('produced_files', []))
         if context.effective_policy:
             import asyncio
-            async with asyncio.timeout(context.effective_policy.remaining()):
-                result = await self.execute(call.name, call.input, context)
+            from time import monotonic
+            timeout_sec = context.effective_policy.remaining()
+            if context.task_role == "worker" and context.extra.get("worker_deadline"):
+                timeout_sec = min(timeout_sec, max(0.05, context.extra["worker_deadline"] - monotonic()))
+            try:
+                async with asyncio.timeout(timeout_sec):
+                    result = await self.execute(call.name, call.input, context)
+            except TimeoutError:
+                if not (context.task_role == "worker" and self.call_is_read_only(call.name, call.input)):
+                    raise
+                context.extra["worker_timed_out"] = True
+                result = json.dumps({
+                    "status": "deadline",
+                    "tool": call.name,
+                    "message": "Read-only tool timed out against the worker time budget; synthesize findings from the evidence already collected.",
+                })
         else:
             result = await self.execute(call.name, call.input, context)
         if isinstance(result, PendingOperation):

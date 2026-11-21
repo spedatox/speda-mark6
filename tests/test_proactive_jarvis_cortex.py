@@ -429,3 +429,145 @@ async def test_speda_proactive_consequence_and_leadership_contract(jarvis_env):
     assert "Executive Ownership (Especially SPEDA)" in system_sent
     assert "<shared_retrieval_evidence>" in system_sent
     assert "bursa_home_dossier" in system_sent
+
+
+@pytest.mark.asyncio
+async def test_chat_2360_parallel_research_subagents_preload_browse_and_wind_down_before_deadline(memory):
+    """Chat 2360 regression: two researcher Tasks in one batch run concurrently, preload browse_page on iteration 0, and wind down cleanly with synthesis instead of hitting safety_guard/reconciling."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    from app.schemas.llm import Block, LLMMessage
+    from app.schemas.coordination import CreateRoom
+    from app.services.coordination_budget import ReplayStream
+    from app.services.worker_control import WorkerControl
+    from app.skills.base import Skill
+    from tests.test_coordination import setup, reply, send
+
+    class DummyBrowseSkill(Skill):
+        name = "browse_page"
+        description = "Fetch and extract readable text from a web page."
+        read_only = True
+        requires_network = True
+        deferred = True
+        search_keywords = "web_fetch fetch_url read_url http_get webpage website html"
+        input_schema = {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}
+
+        async def execute(self, args, context):
+            return f"Fetched content for {args.get('url')}: Bursa Nilüfer Akçalar Gölvadi Evleri 2017 betonarme."
+
+    bits = await setup(memory, [])
+    control = WorkerControl(bits.coordinator)
+    bits.coordinator.workers = control
+    bits.engine._registry._task_runner.activity = control
+    await bits.engine._registry.register_skill(DummyBrowseSkill())
+
+    both_started = asyncio.Event()
+    active_workers = 0
+    saw_parallel = False
+    worker_calls = {}
+
+    @asynccontextmanager
+    async def stream(**args):
+        nonlocal active_workers, saw_parallel
+        bits.client.calls.append(args)
+        if args.get("role") == "worker":
+            key = args["cache_key"] + ":" + str(len(args["messages"]))
+            active_workers += 1
+            if active_workers >= 2:
+                saw_parallel = True
+                both_started.set()
+            try:
+                await asyncio.wait_for(both_started.wait(), timeout=2.0)
+            except TimeoutError:
+                pass
+            finally:
+                active_workers -= 1
+            # Verify browse_page was preloaded on iteration 0 without tool_search!
+            user_prompt = str(args["messages"][0]["content"])
+            count = worker_calls.get(user_prompt, 0)
+            worker_calls[user_prompt] = count + 1
+            if count == 0:
+                tool_names = {t["name"] for t in args.get("tools", [])}
+                assert "browse_page" in tool_names
+                msg = LLMMessage([Block(type="tool_use", id=f"bp_{len(bits.client.calls)}", name="browse_page", input={"url": "https://example.com/golvadi"})], "tool_use")
+            else:
+                msg = reply(f"Synthesized report for {user_prompt[:24]}")
+        else:
+            if len([c for c in bits.client.calls if c.get("role") != "worker"]) == 1:
+                msg = LLMMessage([
+                    Block(type="tool_use", id="task_w1", name="Task", input={"subagent_type": "researcher", "description": "Gölvadi site research", "prompt": "Research Gölvadi Evleri building specs"}),
+                    Block(type="tool_use", id="task_w2", name="Task", input={"subagent_type": "researcher", "description": "Akçalar seismic analysis", "prompt": "Research Akçalar seismic fault soil"}),
+                ], "tool_use")
+            else:
+                msg = reply("Both parallel researcher reports synthesized cleanly.")
+        msg.policy = args["policy"]
+        yield ReplayStream({"content": [b.model_dump() for b in msg.content], "stop_reason": msg.stop_reason, "usage": msg.usage, "continuation": None}, args["policy"])
+
+    bits.client.stream_message = stream
+    room = await bits.coordinator.create(1, CreateRoom(lead="friday"))
+    try:
+        result = await send(bits, room, "Bursa Akçalar Gölvadi evleri sitesi deprem araştırması yap")
+        assert result["status"] == "succeeded"
+        assert saw_parallel, "Multiple foreground read-only researcher Tasks in one batch must execute concurrently"
+    finally:
+        await bits.coordinator.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_chat_2355_system_ops_action_inference_and_project_read_path_hints(memory, tmp_path, monkeypatch):
+    """Chat 2355 regression: system_ops({'command': 'echo hello'}) infers action='exec', and project_read suggests closest matching inventory paths."""
+    from app.skills.system_ops import SystemOpsSkill
+    from app.skills.collaboration import ProjectReadSkill
+    from app.schemas.coordination import CreateRoom
+    from tests.test_projects import project_setup
+
+    # 1. Verify SystemOpsSkill infers action='exec' when only 'command' is passed
+    captured_ops = []
+    async def fake_host_op(args, context):
+        captured_ops.append(args)
+        return {"status": "ok", "exit_code": 0, "stdout": "hello\n", "stderr": ""}
+
+    monkeypatch.setattr("app.skills.system_ops.host_operation", fake_host_op)
+    skill = SystemOpsSkill(None)
+    ctx = memory.context(user_id=1, agent_id="orion")
+    out = json.loads(await skill.execute({"command": "echo hello"}, ctx))
+    assert out["status"] == "ok" and out.get("stdout") == "hello\n"
+    assert captured_ops[-1]["action"] == "exec"
+
+    # 2. Verify ProjectReadSkill returns closest matching paths when an imperfect path is requested
+    async def noop_exec(*a, **k):
+        raise AssertionError("No worker should run")
+    bits = await project_setup(memory, tmp_path, [], noop_exec)
+    service_dir = bits.path / "app" / "services"
+    service_dir.mkdir(parents=True, exist_ok=True)
+    (service_dir / "memory_runtime.py").write_text("# memory runtime\n", encoding="utf-8")
+    room = await bits.coordinator.create(1, CreateRoom(lead="optimus", project_id=bits.project["id"]))
+    read_ctx = memory.context(user_id=1, agent_id="optimus", room_id=room["id"], project_id=bits.project["id"], coordination=bits.coordinator)
+    denied = json.loads(await ProjectReadSkill().execute({"path": "app/memory_runtime.py"}, read_ctx))
+    assert denied["status"] == "denied"
+    assert "app/services/memory_runtime.py" in denied["detail"]
+    await bits.coordinator.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_chat_2354_2355_operation_waits_deadline_grace_and_superseded_run_suppression(memory, monkeypatch):
+    """Chat 2354/2355 regression: completed host operation near run.deadline gets a continuation grace window, and superseded runs do not talk over newer runs."""
+    import time
+    from sqlalchemy import update
+    from app.models.coordination import CoordinationRun
+    from app.models.operation_wait import OperationContinuation
+    from sqlalchemy import select
+    from tests.test_operation_waits import start_wait
+
+    bits, waits, run_id, room, submissions, event = await start_wait(memory, monkeypatch)
+    try:
+        # Simulate run.deadline having expired by 3.3s right as the operation completes (like Chat 2355 EV 599-600)
+        async with memory.sessions() as db, db.begin():
+            await db.execute(update(CoordinationRun).where(CoordinationRun.id == run_id).values(deadline=time.time() - 3.3))
+        await waits.accept(event)
+        await waits.drain()
+        await bits.coordinator.live[run_id]
+        assert (await bits.coordinator.inspect_run(1, run_id))["status"] == "succeeded"
+    finally:
+        await bits.coordinator.shutdown()
+

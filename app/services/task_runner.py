@@ -65,6 +65,12 @@ class TaskRunner:
         if 'active_servers' in parent.extra:
             child.extra['active_servers'] = frozenset(parent.extra['active_servers'])
         child.extra['worker_role'],child.extra['max_tool_iterations'] = spec.worker_id,spec.max_iterations
+        if not background and effective.deadline:
+            from time import monotonic
+            parent_remaining = effective.deadline - monotonic()
+            if parent_remaining > 30.0:
+                reserve = min(45.0, max(15.0, parent_remaining * 0.22))
+                child.extra['worker_deadline'] = monotonic() + min(165.0, parent_remaining - reserve)
         if spec.tool_scope is not None:
             child.extra['worker_tool_scope'] = spec.tool_scope
             child.extra['mcp_grants'] = frozenset()
@@ -93,6 +99,24 @@ class TaskRunner:
                 return 'Worker interrupted; inspect its recorded result and any uncertain outcomes.'
         return await self._run(child,None)
 
+    @staticmethod
+    def _recover_tool_evidence(child) -> str:
+        snippets = []
+        for msg in child.extra.get('completed_messages', ()):
+            if not isinstance(msg, dict) or not isinstance(msg.get('content'), list):
+                continue
+            for block in msg['content']:
+                if not isinstance(block, dict) or block.get('type') != 'tool_result' or block.get('is_error'):
+                    continue
+                content = str(block.get('content') or '').strip()
+                if not content or '"status": "deadline"' in content:
+                    continue
+                snippets.append(content[:2500])
+        if not snippets:
+            return ''
+        joined = '\n---\n'.join(snippets[-8:])
+        return f'Recovered evidence from {len(snippets)} completed read-only tool calls:\n{joined}'[:16000]
+
     async def _run(self, child, activity):
         text = []
         pending = ''
@@ -114,18 +138,44 @@ class TaskRunner:
                     await activity.publish(child,{'phase':event.type.value,**event.data,
                         'tool_call_id':event.data.get('id')})
                 elif event.type == SSEEventType.ERROR:
-                    status='failed'
-                    text.append('Worker incomplete: ' + str(event.data))
+                    recovered = self._recover_tool_evidence(child)
+                    if recovered:
+                        text.append('\n' + recovered)
+                    else:
+                        status='failed'
+                        text.append('Worker incomplete: ' + str(event.data))
             result = ''.join(text)[-32000:]
+            if not result.strip():
+                recovered = self._recover_tool_evidence(child)
+                if recovered:
+                    result = recovered
             if activity:
                 if pending:await activity.publish(child,{'phase':'text','text':pending})
                 finished=await activity.finish(child,status,result)
                 if finished != 'succeeded' and status=='succeeded':
                     result=f'Worker {finished}; partial findings follow:\n'+result
             return result
+        except (TimeoutError, ProviderError) as exc:
+            is_deadline = isinstance(exc, TimeoutError) or getattr(exc, 'code', '') == 'deadline'
+            recovered = self._recover_tool_evidence(child)
+            partial_prose = ''.join(text).strip()
+            if is_deadline and (recovered or partial_prose):
+                combined = (partial_prose + ('\n\n' + recovered if recovered else ''))[-24000:]
+                if activity:
+                    if pending:
+                        await asyncio.shield(activity.publish(child, {'phase': 'text', 'text': pending}))
+                    finished = await asyncio.shield(activity.finish(child, 'succeeded', combined))
+                    if finished != 'succeeded':
+                        combined = f'Worker {finished}; partial findings follow:\n' + combined
+                return combined
+            if activity:
+                reason = ''.join(text)[-24000:] + f'\nWorker stopped ({type(exc).__name__}); inspect saved outcomes.'
+                await asyncio.shield(activity.finish(child, 'failed', reason))
+            raise
         except BaseException as exc:
             if activity:
                 reason = ''.join(text)[-24000:] + ('\nWorker interrupted; partial findings retained.' if isinstance(exc,asyncio.CancelledError)
                     else f'\nWorker stopped ({type(exc).__name__}); inspect saved outcomes.')
                 await asyncio.shield(activity.finish(child,'interrupted' if isinstance(exc,asyncio.CancelledError) else 'failed',reason))
             raise
+

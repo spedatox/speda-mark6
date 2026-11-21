@@ -42,6 +42,8 @@ def digest(value: str) -> str:
 
 
 async def init_indexes(conn) -> None:
+    await conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at)")
+    await conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_messages_session_created ON messages (session_id, created_at)")
     for table, target in (("memory_changes", "sources"), ("memory_serving_units", "units")):
         await conn.exec_driver_sql(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS memory_{target}_fts "

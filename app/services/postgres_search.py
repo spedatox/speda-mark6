@@ -19,6 +19,8 @@ _TRACKED = {
 
 async def install_postgres_search(connection):
     """Changes and their versions commit together. Revisions need no global writer lock."""
+    await connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at)")
+    await connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_messages_session_created ON messages (session_id, created_at)")
     await connection.exec_driver_sql("CREATE SEQUENCE IF NOT EXISTS lexical_version_seq AS bigint")
     await connection.exec_driver_sql("""
         CREATE TABLE IF NOT EXISTS lexical_versions (

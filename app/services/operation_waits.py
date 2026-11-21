@@ -118,6 +118,10 @@ class OperationWaits:
         uncertain = reply['status'] in {'unknown', 'unavailable'}
         if uncertain:
             binding.state = 'reconciling'
+        else:
+            run = await db.get(CoordinationRun, binding.run_id)
+            if run and not run.cancelled and run.deadline > 0 and time.time() <= run.deadline + 180:
+                run.deadline = max(run.deadline, time.time() + 90.0)
         waiters = list(await db.scalars(select(OperationWaiter).where(OperationWaiter.binding_id == binding.id)))
         for waiter in waiters:
             receipt = await db.get(ToolExecutionReceipt, waiter.receipt_id)
@@ -237,6 +241,22 @@ class OperationWaits:
                 room = await self.c.owned_room(db, run.user_id, run.room_id, lock=True)
                 if run.cancelled or step.status in {'cancelled','cancel_requested'}:
                     queue.status = 'suppressed'
+                    continue
+                newer_run = await db.scalar(
+                    select(CoordinationRun.id).where(
+                        CoordinationRun.room_id == room.id,
+                        CoordinationRun.user_id == run.user_id,
+                        CoordinationRun.created_at > run.created_at,
+                        CoordinationRun.id != run.id,
+                        CoordinationRun.status != 'waiting_room',
+                    ).limit(1)
+                )
+                if newer_run is not None:
+                    queue.status = 'suppressed'
+                    if step.status in {'waiting_operations', 'resume_ready'}:
+                        step.status = 'cancelled'
+                    if run.status == 'waiting_operations':
+                        run.status = 'partial'
                     continue
                 revision, _ = await self.c.policy.snapshot(run.user_id)
                 _, spending = await self.c.budget.policy(run.user_id)

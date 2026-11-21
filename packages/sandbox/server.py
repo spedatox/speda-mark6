@@ -31,28 +31,47 @@ MAX_OUTPUT = 100_000  # cap returned bytes so a runaway command can't flood the 
 
 
 def _run(command: str, timeout: int, workdir: str) -> dict:
+    import signal
     os.makedirs(workdir, exist_ok=True)
+    effective_timeout = min(max(timeout, 1), MAX_TIMEOUT)
+    proc = None
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             command,
             shell=True,
             cwd=workdir,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=min(max(timeout, 1), MAX_TIMEOUT),
+            start_new_session=(os.name != "nt"),
         )
+        out, err = proc.communicate(timeout=effective_timeout)
         return {
-            "stdout": proc.stdout[:MAX_OUTPUT],
-            "stderr": proc.stderr[:MAX_OUTPUT],
+            "stdout": (out or "")[:MAX_OUTPUT],
+            "stderr": (err or "")[:MAX_OUTPUT],
             "exit_code": proc.returncode,
             "timed_out": False,
+            "process_tree_stopped": True,
         }
     except subprocess.TimeoutExpired as e:
+        tree_stopped = False
+        if proc is not None:
+            try:
+                if os.name != "nt" and hasattr(os, "killpg"):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                else:
+                    proc.kill()
+                proc.wait(timeout=3)
+                tree_stopped = True
+            except Exception:  # noqa: BLE001
+                tree_stopped = proc.poll() is not None
+        out_text = e.stdout.decode("utf-8", errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
         return {
-            "stdout": (e.stdout or "")[:MAX_OUTPUT] if isinstance(e.stdout, str) else "",
+            "stdout": out_text[:MAX_OUTPUT],
             "stderr": f"Command timed out after {timeout}s.",
             "exit_code": 124,
             "timed_out": True,
+            "process_tree_stopped": tree_stopped,
         }
     except Exception as e:  # noqa: BLE001
         return {"stdout": "", "stderr": f"Execution error: {e}", "exit_code": 1, "timed_out": False}

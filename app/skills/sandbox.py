@@ -31,14 +31,15 @@ class RunCommandSkill(Skill):
         if not settings.sandbox_url: return '{"status":"unconfigured"}'
         if context.coordination: await context.coordination.ensure_active(context)
         if context.db is not None:
-            from sqlalchemy import select,or_
+            from sqlalchemy import select
             from sqlalchemy.ext.asyncio import AsyncSession
             from app.models.model_policy import ToolExecutionReceipt
             async with AsyncSession(bind=context.db.bind) as reader:
                 held=await reader.scalar(select(ToolExecutionReceipt.id).where(
                     ToolExecutionReceipt.user_id==context.user_id,ToolExecutionReceipt.name==self.name,
+                    ToolExecutionReceipt.request_id==context.request_id,
                     ToolExecutionReceipt.status.in_(['started','unknown']),
-                    or_(ToolExecutionReceipt.request_id!=context.request_id,ToolExecutionReceipt.call_id!=context.tool_call_id))
+                    ToolExecutionReceipt.call_id!=context.tool_call_id)
                     .order_by(ToolExecutionReceipt.id).limit(1))
             if held:
                 return json.dumps({"status": "reconciling", "prior_receipt_id": held,
