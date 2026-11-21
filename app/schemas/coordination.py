@@ -85,7 +85,7 @@ class Collaboration(Contract):
     action: Literal["invite", "address", "consult", "handoff", "dismiss"]
     agent_id: str
     message: str = Field(default="", max_length=6000, description=
-        "Your actual question or contribution addressed to this colleague. Address and consult return "
+        "Your actual question or contribution addressed to this colleague. Invite, address and consult return "
         "their answer to you automatically. Preserve who is asking whom; do not turn a peer question "
         "into a request for the owner to manage the exchange.")
     reply_to: int | None = Field(default=None, ge=1)

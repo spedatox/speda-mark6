@@ -201,6 +201,13 @@ class AgentOrchestrator:
         """
         log = logger.getChild("run")
         turn_started = monotonic()
+        from app.services.memory_query import withdrawal_reply
+        acknowledgement = withdrawal_reply(context)
+        if acknowledgement:
+            yield SSEEvent(SSEEventType.START, {"tools_available": 0}, context.session_id, context.request_id)
+            yield SSEEvent(SSEEventType.CHUNK, acknowledgement, context.session_id, context.request_id)
+            yield SSEEvent(SSEEventType.DONE, {}, context.session_id, context.request_id)
+            return
         await self.admit(context)
 
         if self._memory_runtime is not None and context.memory_packet is None:
@@ -249,7 +256,10 @@ class AgentOrchestrator:
                 "outcome materially and evidence cannot settle it, ask one focused question and explain "
                 "what it unlocks. A casual exchange can stand on its own. Base real-world commitments "
                 "on verified details or explicit discretion to choose them. An inferred detail is a "
-                "hypothesis. Describe actual progress using the result of the action."
+                "hypothesis. An intermediate stop, a ticket destination and the final destination may differ. "
+                "Check which journey and date the evidence describes before combining records. "
+                "If the owner withdraws a request, acknowledge and stop pursuing it. "
+                "Describe actual progress using the result of the action."
             )
             if context.triggered_by == 'n8n':
                 context.system_prompt += (
@@ -370,6 +380,10 @@ class AgentOrchestrator:
         recent_conversation = (context.memory_packet.recent_conversation
                                if context.memory_packet and context.triggered_by in {"user", "n8n"} else [])
         live_prompt = context.system_prompt
+        if (context.triggered_by == "user" and context.memory_packet and
+                context.memory_packet.recent_coverage == "private_conversation_withheld"):
+            live_prompt += ("\nThe requested private conversation is outside the current room audience. "
+                            "Use what the owner shared here. If its contents are essential, explain the scope.")
         if recent_conversation:
             live_prompt += (
                 "\n<recent_conversation_evidence>\n"

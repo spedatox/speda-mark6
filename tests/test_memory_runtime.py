@@ -121,7 +121,7 @@ async def test_future_validity_not_injected_as_current(memory):
     assert "starts the role" not in packet_json(packet)
 
 
-async def test_default_automatic_deadlines_keep_cold_and_warm_limits(memory, monkeypatch):
+async def test_default_automatic_deadlines_respect_the_remaining_turn_budget(memory, monkeypatch):
     from app.schemas.memory_runtime import Deadline
     budgets = []
     original = Deadline.after
@@ -140,7 +140,10 @@ async def test_default_automatic_deadlines_keep_cold_and_warm_limits(memory, mon
     for _ in range(2):
         packet = await runtime.prepare(memory.context())
         assert packet.status not in {'unavailable', 'deadline'}
-    assert budgets == [0.5, 0.25]
+    limited = memory.context()
+    limited.memory_budget.elapsed_seconds = 4.9
+    await runtime.prepare(limited)
+    assert budgets == pytest.approx([0.8, 0.8, 0.1])
 
 
 async def test_expired_review_is_unverified_not_completed(memory):

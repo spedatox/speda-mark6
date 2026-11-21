@@ -44,6 +44,30 @@ def conversation_content(context):
     return result
 
 
+def withdrawal_reply(context):
+    """Recognize a standalone withdrawal on a fresh, direct owner turn."""
+    if (context.triggered_by != "user" or context.parent_step_id or context.model_call_index
+            or context.system_prompt or context.task_role != "interactive"):
+        return None
+    for msg in reversed(context.conversation_history):
+        raw = source_text(msg.get("content", ""))
+        if context.room_id:
+            if raw.startswith('{"recorded_room_decisions":'):
+                continue
+            match = re.fullmatch(r"\[Owner message, room event \d+\]\n(.+)", raw)
+            if not match:
+                return None
+            raw = match[1]
+        if msg.get("role") != "user":
+            return None
+        phrase = fold(raw.strip())
+        if re.fullmatch(r"(?:(?:oh )?for god['’]?s sake[.! ,]+)?(?:please )?(?:forget i asked|never mind|nevermind|drop it)[.! ]*", phrase):
+            return "Understood."
+        if re.fullmatch(r"(?:bos ver|bosver|vazgectim)[.! ]*", phrase):
+            return "Tamam."
+        return None
+
+
 def referential(value):
     return len(value) < 160 and bool(re.search(
         r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin)\b|"

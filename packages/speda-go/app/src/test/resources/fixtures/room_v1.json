@@ -11,5 +11,7 @@
   {"room_id":"room","sequence":11,"run_id":"run","step_id":"peer","speaker":"speda","kind":"speaker_started","payload":{"mode":"address"}},
   {"room_id":"room","sequence":12,"run_id":"run","step_id":"peer","speaker":"speda","kind":"message","payload":{"message_id":4,"text":"The midterm is Friday."}},
   {"room_id":"room","sequence":13,"run_id":"run","step_id":"followup","speaker":"ultron","kind":"speaker_started","payload":{"mode":"return"}},
-  {"room_id":"room","sequence":14,"run_id":"run","step_id":"followup","speaker":"ultron","kind":"message","payload":{"message_id":5,"text":"Then review on Thursday."}}
+  {"room_id":"room","sequence":14,"run_id":"run","step_id":"followup","speaker":"ultron","kind":"message","payload":{"message_id":5,"text":"Then review on Thursday."}},
+  {"room_id":"room","sequence":15,"run_id":"run","step_id":"lead-return","speaker":"speda","kind":"speaker_started","payload":{"mode":"return"}},
+  {"room_id":"room","sequence":16,"run_id":"run","step_id":"lead-return","speaker":"speda","kind":"message","payload":{"message_id":6,"text":"Thursday is our review day."}}
 ]

@@ -429,13 +429,22 @@ class CapabilityRegistry:
         import json
         import re
         from app.schemas.tool_outcome import CompletedToolResult, ToolObservation
-        if call.name in {"memory_lookup", "search_history", "collaborate"}:
+        if call.name in {"memory_lookup", "search_history", "collaborate", "project_read", "run_command"}:
             try:
                 payload = json.loads(result)
             except (TypeError, ValueError):
                 payload = None
             if isinstance(payload, dict):
                 status = payload.get("status")
+                if call.name == "project_read" and status == "denied":
+                    return CompletedToolResult(result, ToolObservation("denied", payload.get("code")))
+                if call.name == "run_command":
+                    if status == "reconciling":
+                        return CompletedToolResult(result, ToolObservation("unavailable", "prior_command_unresolved"))
+                    if status in {"rejected", "unconfigured"}:
+                        return CompletedToolResult(result, ToolObservation("unavailable", status))
+                    if status == "finished" and (payload.get("timed_out") or payload.get("exit_code") != 0):
+                        return CompletedToolResult(result, ToolObservation("unavailable", "command_failed"))
                 if call.name == "collaborate" and status in {"queued", "denied"}:
                     return CompletedToolResult(result, ToolObservation(status, payload.get("code"), payload.get("queued_step")))
                 retained = status == "budget_exhausted" and bool(payload.get("retained_lookups"))

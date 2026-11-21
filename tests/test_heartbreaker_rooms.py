@@ -28,22 +28,22 @@ async def frames(adapter, request_id):
 
 async def test_named_speakers_membership_and_reconnect_share_durable_identity(memory):
     bits = await setup(memory, [tool({'action': 'invite', 'agent_id': 'ultron', 'message': 'Review the study plan'}),
-        reply('I am bringing Ultron in.'), reply('My study plan.')])
+        reply('I am bringing Ultron in.'), reply('My study plan.'), reply('Let us use the shorter plan.')])
     adapter = ClientCompatibility(bits.coordinator)
     result = await completed(bits, adapter)
     first = await frames(adapter, result['request_id'])
     events = [frame['data'] for frame in first if frame['type'] == 'room_event']
-    assert [e['speaker'] for e in events if e['kind'] == 'message'] == ['speda', 'ultron']
+    assert [e['speaker'] for e in events if e['kind'] == 'message'] == ['speda', 'ultron', 'speda']
     assert len({e['sequence'] for e in events}) == len(events)
     assert not any(frame['type'] == 'chunk' for frame in first)
     assert first[0]['data']['room']['members'] == ['speda', 'ultron']
     rows = await adapter.messages(1, result['session_id'], structured=True)
     public = [row for row in rows if row.get('speaker')]
-    assert [row['content'] for row in public] == ['I am bringing Ultron in.', 'My study plan.']
+    assert [row['content'] for row in public] == ['I am bringing Ultron in.', 'My study plan.', 'Let us use the shorter plan.']
     assert all(row['coordinationStepId'] for row in public)
     assert rows.index(public[0]) < next(i for i, row in enumerate(rows) if row.get('roomNotice')) < rows.index(public[1])
     assert await frames(adapter, result['request_id']) == first
-    assert len(bits.client.calls) == 3, 'reconnect does not make another provider call'
+    assert len(bits.client.calls) == 4, 'reconnect does not make another provider call'
     await bits.coordinator.shutdown()
 
 
@@ -52,7 +52,7 @@ async def test_late_room_stream_drains_collaborator_reply_before_terminal_fallba
     invite.content[0].id = 'invite_call'
     bits = await setup(memory, [reply('Earlier reply'),
         tool({'action': 'address', 'agent_id': 'ultron', 'message': 'Review the plan'}),
-        invite, reply('Ultron, what should change?'), reply('Move the deadline.')])
+        invite, reply('Ultron, what should change?'), reply('Move the deadline.'), reply('The deadline needs to move.')])
     adapter = ClientCompatibility(bits.coordinator)
     try:
         first = await completed(bits, adapter)
@@ -85,14 +85,15 @@ async def test_late_room_stream_drains_collaborator_reply_before_terminal_fallba
             stream = await frames(adapter, request_id)
         assert reads[:2] == [1, 0], 'the stream skips earlier rounds'
         assert [frame['data']['speaker'] for frame in stream if frame['type'] == 'room_event'
-                and frame['data']['kind'] == 'message'] == ['speda', 'ultron']
+                and frame['data']['kind'] == 'message'] == ['speda', 'ultron', 'speda']
         assert stream[-1]['type'] == 'done' and stream[-1]['data']['status'] == 'succeeded'
         assert not any(frame['type'] == 'error' for frame in stream)
         assert 'not_member' in str(bits.client.calls[2]['messages'])
         replay = await frames(adapter, request_id)
         assert replay[1:] == stream[1:], 'reconnect changes the room snapshot, not the event sequence'
         rows = await adapter.messages(1, first['session_id'], structured=True)
-        assert rows[-1]['speaker'] == 'ultron' and rows[-1]['content'] == 'Move the deadline.'
+        assert [(row['speaker'], row['content']) for row in rows[-2:]] == [
+            ('ultron', 'Move the deadline.'), ('speda', 'The deadline needs to move.')]
     finally:
         await bits.coordinator.shutdown()
 

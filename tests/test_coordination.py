@@ -397,7 +397,7 @@ async def test_cancellation_joins_stream_and_holds_uncertain_call(memory):
 
 async def test_queued_owner_input_waits_and_does_not_leak_into_active_round(memory):
     bits = await setup(memory, [tool({"action": "invite", "agent_id": "optimus", "message": "Review the first request"}),
-        reply("Inviting Optimus"), reply("First request reviewed"), reply("Second request answered")])
+        reply("Inviting Optimus"), reply("First request reviewed"), reply("Here is our conclusion"), reply("Second request answered")])
     entered, release = asyncio.Event(), asyncio.Event()
     original = bits.client.stream_message
     @asynccontextmanager
@@ -420,12 +420,12 @@ async def test_queued_owner_input_waits_and_does_not_leak_into_active_round(memo
     await asyncio.wait_for(first_task, 10)
     while bits.coordinator.live:
         await asyncio.wait_for(asyncio.gather(*list(bits.coordinator.live.values())), 10)
-    assert len(bits.client.calls) == 4
-    for call in bits.client.calls[:3]:
+    assert len(bits.client.calls) == 5
+    for call in bits.client.calls[:4]:
         assert "SECOND_OWNER_REQUEST" not in str(call["messages"])
     assert "FIRST_OWNER_REQUEST" in str(bits.client.calls[2]["messages"])
     assert "Second request" not in str(bits.client.calls[2]["messages"])
-    assert "SECOND_OWNER_REQUEST" in str(bits.client.calls[3]["messages"])
+    assert "SECOND_OWNER_REQUEST" in str(bits.client.calls[4]["messages"])
     assert (await bits.coordinator.inspect_run(1, second["run_id"]))["status"] == "succeeded"
     await bits.coordinator.shutdown()
 

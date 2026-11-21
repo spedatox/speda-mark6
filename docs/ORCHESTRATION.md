@@ -1,5 +1,7 @@
 # Mark VI orchestration renovation
 
+The [Proactive Cortex research and replay](architecture/orchestration/CORTEX_RESEARCH.md) documents first-call recall, specialist return turns and recoverable tool outcomes.
+
 For the 27 October IGOR/FORGE extension, including immediate asynchronous dispatch,
 supervisor steering, artifact acceptance and approved release drivers, see
 [IGOR_FORGE.md](IGOR_FORGE.md). Its execution and publication sections supersede

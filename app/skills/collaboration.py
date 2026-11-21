@@ -11,7 +11,7 @@ class CollaborationSkill(Skill):
     read_only = False
     description = ("Ask another persona to contribute to this conversation. For a reply the owner can see, "
         "use invite when the colleague is absent and address when they already belong to the room. "
-        "Address also gives you a follow-up turn after the colleague finishes. Use consult only for a "
+        "Both actions give you a follow-up turn after the colleague finishes. Use consult only for a "
         "deliberately private exchange whose answer you will summarize in your own reply. "
         "Write the actual question to your colleague, not an instruction for them to question the owner; "
         "finish your contribution without a dispatch announcement or an invented reply. "
@@ -149,7 +149,13 @@ class ProjectReadSkill(ProjectStatusSkill):
             file_offset: int = Field(default=0, ge=0)
             task_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
         body = Read.model_validate(args)
-        return json.dumps(await ProjectWorkspace(context.coordination).read(context, **body.model_dump()))
+        try:
+            return json.dumps(await ProjectWorkspace(context.coordination).read(context, **body.model_dump()))
+        except CoordinationError as exc:
+            if exc.code not in {"project_file_scope", "project_file_binary"}:
+                raise
+            return json.dumps({"status": "denied", "code": exc.code,
+                "detail": str(exc), "next": "Call project_read with an empty path for the authorized inventory."})
 
 
 class ProjectCheckpointSkill(ProjectStatusSkill):

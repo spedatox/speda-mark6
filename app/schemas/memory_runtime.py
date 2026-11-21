@@ -67,10 +67,13 @@ class MemoryPacket:
     status: str = "partial"
     recent_conversation: list[dict] = field(default_factory=list)
     recent_reference_count: int = 0
+    recent_coverage: str = "not_requested"
+    recent_elapsed_ms: float = 0
 
     def diagnostics(self) -> dict:
         return {"epoch": self.publication_epoch, "source_boundary": self.source_boundary,
                 "selected": len(self.evidence_handles), "recent_references": self.recent_reference_count,
+                "recent_coverage": self.recent_coverage, "recent_elapsed_ms": round(self.recent_elapsed_ms, 3),
                 "omitted": len(self.omissions),
                 "coverage": self.coverage, "freshness": self.freshness,
                 "status": self.status, "budget_upper_bound": self.token_upper_bound,

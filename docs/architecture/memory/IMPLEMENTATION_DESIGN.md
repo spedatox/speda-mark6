@@ -188,8 +188,8 @@ All numbers below are engineering targets, not measured results or ChatGPT speci
 | Metric | Initial release gate | Measurement boundary |
 |---|---|---|
 | Normal local memory preparation | Warm p95 <=100 ms; p99 <=200 ms | Reader entry to complete packet; includes queue/DB/formatting |
-| Normal memory deadline | 250 ms | Stop optional work; use safe complete units/partial evidence |
-| Cold cache memory preparation | p95 <=300 ms, 500 ms deadline | New process, existing indexed corpus; separately reported |
+| Normal memory deadline | 800 ms prepared, 500 ms recent | Concurrent reads share the remaining turn allowance. See the [Cortex replay and decision](../orchestration/CORTEX_RESEARCH.md). |
+| Cold cache memory preparation | p95 <=300 ms, 800 ms default deadline | New process, existing indexed corpus; separately reported |
 | Exceptional lookup | p95 <=500 ms local; server deadline 2,500 ms | Skill admission to serialized result |
 | Visible tool avoidance | >=90% of held-out routine memory turns answered correctly without an agent memory call | No suppressing necessary lookup to improve percentage |
 | First-answer factual adequacy | >=95% on answerable held-out routine cases | Correct required context used, with attribution/time |

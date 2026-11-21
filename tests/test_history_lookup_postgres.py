@@ -5,3 +5,4 @@ from tests.test_history_lookup import (
     test_archive_can_search_messages_with_escaped_zero_bytes,
     test_archive_packing_keeps_cursors_and_assistant_attribution_honest,
 )
+from tests.test_initiative_runtime import test_named_private_conversation_is_scoped_and_available_on_first_call

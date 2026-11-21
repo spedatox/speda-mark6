@@ -563,6 +563,8 @@ class FindPlacesSkill(Skill):
         except Exception as e:  # noqa: BLE001
             return f"find_places: request failed ({type(e).__name__}: {e})."
 
+        if resp.status_code == 403:
+            return "find_places: Places API returned HTTP 403. Place results, distance and arrival time are unavailable."
         if resp.status_code != 200:
             return f"find_places: Places API returned HTTP {resp.status_code}. {resp.text[:200]}"
 

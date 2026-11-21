@@ -309,3 +309,33 @@ async def test_authenticated_http_project_workflow(memory,tmp_path):
         res=await client.get(f"/projects/{bits.ui['id']}/workspace/file?path=example.txt&agent_id=optimus",headers=headers)
         assert res.status_code==200 and 'original' in res.json()['content']
     await bits.coordinator.shutdown()
+
+
+async def test_wrong_path_settles_receipt_and_allows_inventory_recovery(memory, tmp_path):
+    from app.models.model_policy import ToolExecutionReceipt
+    from app.schemas.llm import Block, LLMMessage
+    from app.skills.collaboration import ProjectReadSkill
+
+    def read(call_id, args):
+        return LLMMessage([Block(type="tool_use", id=call_id, name="project_read", input=args)],
+                          "tool_use", {"input_tokens": 10, "output_tokens": 10})
+
+    bits = await fixture(memory, tmp_path, [
+        read("wrong", {"path": "missing.txt"}), read("inventory", {}),
+        read("correct", {"path": "example.txt"}), reply("The example contains the original text.")
+    ])
+    await bits.engine._registry.register_skill(ProjectReadSkill())
+    try:
+        admitted = await chat(bits, project_id=bits.ui["id"])
+        result = await bits.coordinator.inspect_run(1, admitted["run_id"])
+        assert result["status"] == "succeeded" and not result["outcome"]["gaps"]
+        async with memory.sessions() as db:
+            receipts = list(await db.scalars(select(ToolExecutionReceipt).where(
+                ToolExecutionReceipt.request_id == result["steps"][0]["id"]).order_by(ToolExecutionReceipt.id)))
+        assert [(r.call_id, r.status) for r in receipts] == [
+            ("wrong", "completed"), ("inventory", "completed"), ("correct", "completed")]
+        assert receipts[0].result["observation"]["code"] == "project_file_scope"
+        assert "example.txt" in json.loads(receipts[1].result["text"])["files"]
+        assert "original" in json.loads(receipts[2].result["text"])["content"]
+    finally:
+        await bits.coordinator.shutdown()

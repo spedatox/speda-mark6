@@ -302,3 +302,86 @@ async def test_attention_items_validate_sources_dedupe_and_resolve(memory, kind)
         assert json.loads(result)["status"] == "answered"
         async with memory.sessions() as db:
             assert not await active_items(db, 1, "speda", "ask", cutoff)
+
+
+@pytest.mark.parametrize(("message", "withdrawn"), [
+    ("Oh for gods sake. Forget I asked.", True), ("Boş ver!", True),
+    ("Never mind the agenda. Please check the schedule instead.", False),
+    ('My friend wrote "forget I asked".', False),
+])
+async def test_withdrawal_stops_at_owner_turn_boundary(memory, message, withdrawn):
+    bits = await setup(memory, [] if withdrawn else [reply("Here is my response.")])
+    runtime = MemoryRuntime(memory.store)
+    bits.engine._memory_runtime = runtime
+    await bits.engine._registry.register_skill(MemoryLookupSkill(runtime))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        result = await send(bits, room, message)
+        assert result["status"] == "succeeded"
+        assert len(bits.client.calls) == (0 if withdrawn else 1)
+        if withdrawn:
+            assert not result["calls"]
+            assert result["steps"][0]["result"] in {"Understood.", "Tamam."}
+    finally:
+        await bits.coordinator.shutdown()
+
+
+@pytest.mark.parametrize(("message", "group", "expected"), [
+    ("Well I talked about it with Friday. Funny coincidence.", False, True),
+    ("Friday ile bunu konuştum.", False, True),
+    ("We talked about it on Friday.", False, False),
+    ("I talked about it with Friday.", True, False),
+])
+async def test_named_private_conversation_is_scoped_and_available_on_first_call(memory, message, group, expected):
+    bits = await setup(memory, [reply("The pottery workshop moved to Sunday."), reply("Understood.")])
+    runtime = MemoryRuntime(memory.store)
+    bits.engine._memory_runtime = runtime
+    await bits.engine._registry.register_skill(MemoryLookupSkill(runtime))
+    try:
+        source = await bits.coordinator.create(1, CreateRoom(lead="friday"))
+        await send(bits, source, "I am arranging a pottery workshop.")
+        room = await bits.coordinator.create(1, CreateRoom(members=["ultron"] if group else []))
+        result = await send(bits, room, message)
+        assert result["status"] == "succeeded"
+        prompt = bits.client.calls[-1]["system"]
+        assert ("I am arranging a pottery workshop." in prompt.partition("<recent_conversation_evidence>")[2]) == expected
+        if expected:
+            evidence = json.loads(prompt.split("<recent_conversation_evidence>")[1].split("</recent_conversation_evidence>")[0])
+            assert {item["agent_id"] for item in evidence} <= {"friday", "nightcrawler"}
+            assert {item["attribution"] for item in evidence} == {"owner_statement", "assistant_statement_not_owner_assertion"}
+        async with memory.sessions() as db:
+            assert (await db.get(CoordinationRun, result["id"])).memory["recent_conversation"] == []
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_invitee_can_answer_lead_without_spawning_a_second_exchange(memory):
+    bits = await setup(memory, [
+        tool({"action": "invite", "agent_id": "ultron", "message": "What is the deadline?"}),
+        reply("Ultron, when is the deadline?"),
+        tool({"action": "address", "agent_id": "speda", "message": "The deadline is Tuesday."}),
+        reply("@speda, the deadline is Tuesday."), reply("I will use Tuesday for planning."),
+    ])
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        result = await send(bits, room, "Ask Ultron to check the deadline.")
+        assert result["status"] == "succeeded"
+        assert [step["agent_id"] for step in result["steps"]] == ["speda", "ultron", "speda"]
+        assert [step["status"] for step in result["steps"]] == ["succeeded"] * 3
+        assert "the deadline is Tuesday" in str(bits.client.calls[-1]["messages"])
+    finally:
+        await bits.coordinator.shutdown()
+
+
+async def test_a_greeting_does_not_surface_old_assistant_reports(memory):
+    await seed(memory, "SPEDA assistant report from the previous session", role="assistant")
+    bits = await setup(memory, [reply("Hello!")])
+    runtime = MemoryRuntime(memory.store)
+    bits.engine._memory_runtime = runtime
+    await bits.engine._registry.register_skill(MemoryLookupSkill(runtime))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        await send(bits, room, "Hey SPEDA!")
+        assert "<recent_conversation_evidence>" not in bits.client.calls[0]["system"]
+    finally:
+        await bits.coordinator.shutdown()

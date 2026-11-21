@@ -475,6 +475,13 @@ class Coordinator:
                 raise CoordinationError("self_address", "Respond in your own voice instead of asking yourself")
             if caller.mode == "consult" and body.action != "consult":
                 raise CoordinationError("private_exchange", "A private participant may only consult privately")
+            if body.action == "address" and caller.parent_id:
+                parent = await db.get(AgentStep, caller.parent_id)
+                waiting = await db.scalar(select(AgentStep.id).where(AgentStep.run_id == run.id,
+                    AgentStep.operation_id == f"return:{caller.parent_id}", AgentStep.status == "waiting_reply"))
+                if waiting and parent.agent_id == aid:
+                    return json.dumps({"status": "queued", "queued_step": waiting, "code": "return_already_reserved",
+                        "message": "Give your answer in this contribution. The caller already has a reserved reply."})
             if body.reply_to is not None:
                 if await db.get(RoomEvent, (room.id, body.reply_to)) is None:
                     raise CoordinationError("reply_target", "Reply target is not in this room")
@@ -492,7 +499,7 @@ class Coordinator:
             step = await self._queue_collaboration(db, room, run, caller, aid, body, operation)
         await self.notify()
         return json.dumps({"queued_step": step.id, "status": "queued",
-            "returns_to_caller": body.action in {"address", "consult"},
+            "returns_to_caller": True,
             "note": "Address the participant directly in your own words, then finish this contribution. "
                 "Their answer will arrive in a separate turn; questions return to you automatically. "
                 "Do not announce a dispatch or ask the owner to relay the conversation."})
@@ -503,7 +510,7 @@ class Coordinator:
         return_key = f"return:{caller.id}"
         continuation = await db.scalar(select(AgentStep).where(AgentStep.run_id == run.id,
             AgentStep.operation_id == return_key))
-        needs_return = body.action in {"address", "consult"} and continuation is None
+        needs_return = continuation is None
         needed = 2 if needs_return else 1
         if count + needed > limit:
             raise CoordinationError("round_limit",
@@ -557,7 +564,7 @@ class Coordinator:
 
         addressed = set(await db.scalars(select(AgentStep.agent_id).where(AgentStep.run_id == run.id,
             AgentStep.parent_id == caller.id)))
-        if caller.mode == "address" and caller.parent_id:
+        if caller.mode in {"address", "invite"} and caller.parent_id:
             # The original questioner already has a reserved response turn.
             parent = await db.get(AgentStep, caller.parent_id)
             addressed.add(parent.agent_id)

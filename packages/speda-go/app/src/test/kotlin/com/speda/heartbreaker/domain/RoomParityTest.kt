@@ -56,17 +56,18 @@ class RoomParityTest {
     @Test fun shared_desktop_trace_keeps_peer_exchange_and_reply_ids_without_owner_relay() {
         val result = play(begin())
         val speakers = result.messages.filter { it.speaker != null }
-        assertEquals(listOf("speda", "ultron", "speda", "ultron"), speakers.map { it.speaker })
+        assertEquals(listOf("speda", "ultron", "speda", "ultron", "speda"), speakers.map { it.speaker })
         assertEquals(listOf("Bringing Ultron in.", "@SPEDA, when is the midterm?",
-            "The midterm is Friday.", "Then review on Thursday."), speakers.map { it.content })
+            "The midterm is Friday.", "Then review on Thursday.", "Thursday is our review day."), speakers.map { it.content })
         assertEquals("collaborate", speakers.first().tools.single().name)
         assertTrue(speakers.last().tools.isEmpty())
         assertEquals(9L, speakers[1].roomSequence)
-        assertEquals(14L, speakers.last().roomSequence)
+        assertEquals(14L, speakers[3].roomSequence)
+        assertEquals(16L, speakers.last().roomSequence)
         assertEquals(listOf("speda", "ultron"), result.room!!.members)
         assertEquals(1, result.messages.count { it.roomNotice != null })
         assertEquals(1, result.messages.count { it.role == Role.User })
-        assertEquals(5, historyMessageCount(result.messages))
+        assertEquals(6, historyMessageCount(result.messages))
         assertTrue(result.isStreaming) // Contributions do not finish the root reply.
         assertFalse(reduce(result, ChatAction.FinishRoomTurn(1)).isStreaming)
     }

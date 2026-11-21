@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.schemas.memory_runtime import Deadline, EvidenceSection, MemoryPacket, token_upper_bound
 from app.services.memory_store import fold
-from app.services.memory_query import query_terms, turn_query, relations, conversation_content
+from app.services.memory_query import query_terms, turn_query, relations, conversation_content, withdrawal_reply
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +34,15 @@ def section_block(section, title, *, today: date, prior_context=None) -> tuple[s
 
 
 class MemoryRuntime:
-    def __init__(self, store, *, prepare_timeout=0.25, lookup_timeout=2.5):
+    def __init__(self, store, *, prepare_timeout=0.8, lookup_timeout=2.5):
         self.store = store
         self.prepare_timeout = prepare_timeout
         self.lookup_timeout = lookup_timeout
         self._ready = False
 
     async def prepare(self, context) -> MemoryPacket:
+        if withdrawal_reply(context):
+            return MemoryPacket(request_id=context.request_id, user_id=context.user_id)
         query = turn_query(context)
         owner_chat = context.triggered_by == "user"
         personal_job = (context.triggered_by == "n8n" and context.trigger_payload.get("automation_key")
@@ -52,10 +54,11 @@ class MemoryRuntime:
         started = monotonic()
         budget = context.memory_budget
         already_elapsed = budget.elapsed_seconds
-        packet, recent = await asyncio.gather(
+        packet, recent_read = await asyncio.gather(
             self._read(context, query, automatic=True, reserved_bytes=min(2200, budget.automatic_limit // 3)),
-            self._recent(context, query, min(.15, self.prepare_timeout, 5 - already_elapsed)),
+            self._recent(context, query, min(.5, self.prepare_timeout, 5 - already_elapsed)),
         )
+        recent, packet.recent_coverage, packet.recent_elapsed_ms = recent_read
         byte_ceiling = min(2800, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
         # Preserve both speakers when long replies would crowd the owner turn out.
         for length in (600, 320, 160):
@@ -67,6 +70,8 @@ class MemoryRuntime:
                     item["partial_message"] = True
         while recent and token_upper_bound(json.dumps(recent, ensure_ascii=False)) > byte_ceiling:
             recent.pop()
+        if not recent and packet.recent_coverage in {"recent_episodes", "indexed_episode"}:
+            packet.recent_coverage = "packing_limit"
         if recent:
             packet.recent_conversation = recent
             packet.recent_reference_count = len(recent)
@@ -80,29 +85,39 @@ class MemoryRuntime:
     async def _recent(self, context, query, seconds, *, reference_ids=()):
         from app.services.history_lookup import search_archive
         deadline = Deadline.after(seconds)
+        started = monotonic()
+        def finish(rows, coverage):
+            return rows, coverage, (monotonic() - started) * 1000
+
         try:
             async with asyncio.timeout(deadline.remaining()):
                 async with self.store.reader(deadline) as db:
                     result = await search_archive(db, context, query, limit=4, recent=True, continuity=True,
                                                   reference_ids=reference_ids)
-                    if result.get("results") or reference_ids or not query_terms(query):
-                        return result.get("results", [])
-                    # Reuse the archive's indexed source hits to reach an older relevant session.
-                    # Hydration still enforces the same agent, project, visibility and input fence.
+                    rows = result.get("results", [])
+                    coverage = result.get("coverage") or ("matched" if rows else "no_match")
+                    if rows or coverage in {"greeting", "private_conversation_withheld"} or reference_ids or not query_terms(query):
+                        return finish(rows, coverage)
+                    # Indexed source hits can suggest older sessions. Hydration enforces
+                    # owner, audience, project and original input boundary again.
                     sessions = await self.store.matching_sessions(db, context.user_id, query_terms(query))
                     if not sessions:
-                        return []
-                    return (await search_archive(db, context, query, limit=4, recent=True, continuity=True,
-                                                 session_ids=sessions)).get("results", [])
+                        return finish([], "no_match")
+                    indexed = await search_archive(db, context, query, limit=4, recent=True, continuity=True,
+                                                   session_ids=sessions)
+                    rows = indexed.get("results", [])
+                    return finish(rows, "indexed_episode" if rows else "no_match")
         except Exception as exc:
             logger.info("recent_context_unavailable", extra={"request_id": context.request_id,
                 "error_type": type(exc).__name__})
-            return []
+            return finish([], "deadline" if isinstance(exc, TimeoutError) else "unavailable")
 
     async def restore_recent(self, context, ids):
         if context.triggered_by not in {"user", "n8n"} or not ids or "memory_lookup" not in (context.allowed_tools or ()):
             return []
-        return await self._recent(context, turn_query(context), min(.15, self.prepare_timeout), reference_ids=ids)
+        seconds = min(.5, self.prepare_timeout, max(0, 5 - context.memory_budget.elapsed_seconds))
+        rows, _, _ = await self._recent(context, turn_query(context), seconds, reference_ids=ids)
+        return rows
 
     async def lookup(self, context, query: str, *, source_ids=(), as_of=None) -> MemoryPacket:
         if context.memory_budget.lookup_batches >= 1:

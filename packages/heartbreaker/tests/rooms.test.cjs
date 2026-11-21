@@ -42,12 +42,13 @@ test('Android and Heartbreaker show the same peer exchange without an owner rela
   const speakers = state.messages.filter(message => message.speaker)
   assert.deepEqual(speakers.map(message => [message.speaker, message.content]), [
     ['speda', 'Bringing Ultron in.'], ['ultron', '@SPEDA, when is the midterm?'],
-    ['speda', 'The midterm is Friday.'], ['ultron', 'Then review on Thursday.'],
+    ['speda', 'The midterm is Friday.'], ['ultron', 'Then review on Thursday.'], ['speda', 'Thursday is our review day.'],
   ])
   assert.equal(speakers[0].tools[0].name, 'collaborate')
   assert.equal(speakers[1].roomSequence, 9)
   assert.equal(speakers[3].roomSequence, 14)
-  assert.equal(historyMessageCount(state.messages), 5)
+  assert.equal(speakers[4].roomSequence, 16)
+  assert.equal(historyMessageCount(state.messages), 6)
   assert.equal(state.messages.filter(message => message.roomNotice).length, 1)
   assert.equal(state.messages.filter(message => message.role === 'user').length, 1)
 })

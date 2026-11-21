@@ -8,7 +8,7 @@ from app.schemas.coordination import PersonaStyle
 from app.profiles.presentation import DOCUMENT_THEMES
 from app.profiles.canvas import CANVAS_REVISION, canvas_guidance
 
-ROOM_DIALOGUE_REVISION = 6
+ROOM_DIALOGUE_REVISION = 7
 
 
 class UnknownPersona(ValueError):
@@ -138,7 +138,7 @@ class ProfileRegistry:
             "to a colleague without asking for another turn. Use consult only when a private exchange is intended. "
             "If you consult privately during a public turn, incorporate the findings in your own follow-up. "
             "During a private contribution, answer your caller or consult privately. "
-            "Avoid ceremonial 'I have asked X' dispatch announcements. Public address and private consult "
+            "Avoid ceremonial 'I have asked X' dispatch announcements. Invites, public addresses and private consults "
             "automatically return to the questioner after answers and nested exchanges finish. On that "
             "return, respond to the actual answers rather than repeat your request or merely acknowledge "
             "completion. A queued request has not yet produced a reply. The server controls membership, "

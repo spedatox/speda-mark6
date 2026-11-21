@@ -101,4 +101,5 @@ async def test_sandbox_timeout_keeps_unknown_command_held_across_new_calls(memor
     second=Block(type='tool_use',id='command-two',name='run_command',input={'command':'do not start this'})
     result=json.loads(await bits.engine._registry.execute_recorded(second,ctx))
     assert result['status']=='reconciling' and len(calls)==1
+    assert isinstance(result['prior_receipt_id'], int)
     await bits.coordinator.shutdown()
