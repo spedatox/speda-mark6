@@ -172,3 +172,103 @@ async def test_child_copies_mcp_incarnation_snapshot_and_archivist_cannot_escape
     assert child.extra['mcp_grants']==frozenset() and child.extra['worker_tool_scope']==frozenset({'memory_lookup'})
     assert child.memory_budget is parent.memory_budget
     await bits.coordinator.shutdown()
+
+
+async def test_missing_worker_and_ticket_lookups_recover_in_turn_without_reconciling(memory):
+    from app.skills.legion import LegionStatusSkill
+    from app.models.model_policy import ToolExecutionReceipt
+
+    bits=await setup(memory,[])
+    control=await wire(bits)
+    await bits.engine._registry.register_skill(LegionStatusSkill())
+    adapter=ClientCompatibility(bits.coordinator)
+
+    # Turn 1: launch a detached background worker that succeeds.
+    worker_calls=0
+    turn1_calls=0
+    @asynccontextmanager
+    async def turn1_stream(**args):
+        nonlocal worker_calls, turn1_calls
+        bits.client.calls.append(args)
+        if args['role']=='worker':
+            worker_calls+=1
+            result=reply('Verified seismic report for Golvadi Evleri.')
+        else:
+            turn1_calls+=1
+            result=assignment(True) if turn1_calls==1 else reply('Background research is underway.')
+        result.policy=args['policy']
+        yield ReplayStream({'content':[block.model_dump() for block in result.content],
+            'stop_reason':result.stop_reason,'usage':result.usage,'continuation':None},args['policy'])
+    bits.client.stream_message=turn1_stream
+    first=await adapter.start(1,'speda',ClientChat(message='Research Golvadi Evleri.',request_id=str(uuid4())))
+    await asyncio.wait_for(bits.coordinator.live[first['run_id']],10)
+    workers=await control.list(1,first['session_id'])
+    assert len(workers)==1 and workers[0]['status']=='succeeded'
+    real_exec_id=workers[0]['execution_id']
+    real_ticket=workers[0]['ticket_id']
+
+    # Turn 2: model first guesses a coordination run_id and a wrong ticket, then recovers in the same turn.
+    turn2_calls=0
+    seen_history=[]
+    @asynccontextmanager
+    async def turn2_stream(**args):
+        nonlocal turn2_calls
+        bits.client.calls.append(args)
+        turn2_calls+=1
+        if turn2_calls==1:
+            seen_history.extend(args['messages'])
+            result=LLMMessage([Block(type='tool_use',id='bad-exec',name='legion_inspect',
+                input={'execution_id':first['run_id']})],'tool_use')
+        elif turn2_calls==2:
+            result=LLMMessage([Block(type='tool_use',id='bad-ticket',name='legion_status',
+                input={'id':999999})],'tool_use')
+        elif turn2_calls==3:
+            result=LLMMessage([Block(type='tool_use',id='good-ticket',name='legion_status',
+                input={'id':real_ticket})],'tool_use')
+        else:
+            result=reply('Final report collected: Verified seismic report for Golvadi Evleri.')
+        result.policy=args['policy']
+        yield ReplayStream({'content':[block.model_dump() for block in result.content],
+            'stop_reason':result.stop_reason,'usage':result.usage,'continuation':None},args['policy'])
+    bits.client.stream_message=turn2_stream
+
+    second=await adapter.start(1,'speda',ClientChat(
+        message='Whats the final situation?',session_id=first['session_id'],request_id=str(uuid4())))
+    await asyncio.wait_for(bits.coordinator.live[second['run_id']],10)
+
+    run=await bits.coordinator.inspect_run(1,second['run_id'])
+    assert run['status']=='succeeded'
+    # Follow-up turn surfaced room_worker_executions with real execution_id and ticket_id.
+    assert any(real_exec_id in str(m.get('content','')) and str(real_ticket) in str(m.get('content',''))
+        for m in seen_history)
+    # Tool results for bad-exec and bad-ticket were structured not_found JSON with available_executions.
+    bad_exec_msgs=[b['content'] for m in bits.client.calls[-1]['messages']
+        if isinstance(m.get('content'),list) for b in m['content']
+        if isinstance(b,dict) and b.get('tool_use_id')=='bad-exec']
+    bad_ticket_msgs=[b['content'] for m in bits.client.calls[-1]['messages']
+        if isinstance(m.get('content'),list) for b in m['content']
+        if isinstance(b,dict) and b.get('tool_use_id')=='bad-ticket']
+    assert json.loads(bad_exec_msgs[0])['found'] is False
+    assert json.loads(bad_exec_msgs[0])['available_executions'][0]['execution_id']==real_exec_id
+    assert json.loads(bad_ticket_msgs[0])['found'] is False
+    assert json.loads(bad_ticket_msgs[0])['available_executions'][0]['ticket_id']==real_ticket
+    # No ToolExecutionReceipt left stuck in 'started'.
+    async with memory.sessions() as db:
+        stuck=list(await db.scalars(select(ToolExecutionReceipt).where(ToolExecutionReceipt.status!='completed')))
+        assert stuck==[]
+    await bits.coordinator.shutdown()
+
+
+async def test_legion_control_returns_structured_rejection_for_missing_or_closed_worker(memory):
+    bits,control=await environment(memory)
+    bits.coordinator.workers=control
+    parent,child,_=await worker(memory,bits,control)
+    await control.finish(child,'succeeded','Done.')
+    command=LegionControlSkill()
+    missing=json.loads(await command.execute({'execution_id':uuid4().hex,'action':'stop'},parent))
+    assert missing['accepted'] is False and missing['error']=='not_found'
+    assert missing['available_executions'][0]['execution_id']==child.step_id
+    closed=json.loads(await command.execute({'execution_id':child.step_id,'action':'message','text':'Late note'},parent))
+    assert closed['accepted'] is False and closed['error']=='worker_closed'
+    await bits.coordinator.shutdown()
+

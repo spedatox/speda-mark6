@@ -699,6 +699,39 @@ class Coordinator:
                     history.append({"role": "user", "content": json.dumps({"recorded_room_decisions": selected,
                         "omitted_from_packet": len(decisions) - len(selected),
                         "authority": "attributed_operational_state"}, ensure_ascii=False)})
+                if self.workers:
+                    from app.models.legion import WorkerTicket
+                    worker_rows = (await db.execute(
+                        select(LegionExecution, WorkerTicket.id)
+                        .join(CoordinationRun, LegionExecution.run_id == CoordinationRun.id)
+                        .outerjoin(WorkerTicket, WorkerTicket.execution_id == LegionExecution.id)
+                        .where(CoordinationRun.room_id == room.id,
+                               LegionExecution.owner_agent == step.agent_id)
+                        .order_by(LegionExecution.created_at.desc())
+                        .limit(10)
+                    )).all()
+                    if worker_rows:
+                        selected_workers, worker_bytes = [], 0
+                        for exec_row, ticket_id in worker_rows:
+                            if exec_row.parent_step in hidden_steps:
+                                continue
+                            entry = {
+                                "execution_id": exec_row.id,
+                                "ticket_id": ticket_id,
+                                "role": exec_row.role,
+                                "status": exec_row.status,
+                                "task": (exec_row.task or "")[:200],
+                            }
+                            entry_size = len(json.dumps(entry, ensure_ascii=False).encode())
+                            if worker_bytes + entry_size <= 4000:
+                                selected_workers.append(entry)
+                                worker_bytes += entry_size
+                        if selected_workers:
+                            history.append({"role": "user", "content": json.dumps({
+                                "room_worker_executions": selected_workers,
+                                "usage": "Use legion_inspect(execution_id=...) or legion_status(id=ticket_id) to inspect or collect findings; never pass a coordination run_id or room event sequence.",
+                                "authority": "attributed_worker_state_not_owner_assertions",
+                            }, ensure_ascii=False)})
                 if step.operation_id != "owner":
                     parent = await db.get(AgentStep, step.parent_id) if step.parent_id else None
                     history.append({"role": "user", "content": json.dumps({
