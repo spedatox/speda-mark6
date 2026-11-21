@@ -293,7 +293,16 @@ class CapabilityRegistry:
     def preload_reads(self, context, cues):
         """Offer a small set of relevant, already-authorized read schemas."""
         from app.services.memory_query import query_terms
-        terms = set(query_terms(cues))
+        from app.services.episodic_cortex import concept_vector
+        concepts = concept_vector(cues or "")
+        expansion = []
+        if concepts.get("travel_mobility") or concepts.get("home_family_location"):
+            expansion.extend(["calendar", "events", "route", "navigation", "distance", "transit", "place", "history"])
+        if concepts.get("schedule_time_commitment") or concepts.get("academic_exam_grade"):
+            expansion.extend(["calendar", "events", "tasks", "course", "academic", "reminder", "schedule", "history"])
+        if concepts.get("personal_emotional_social") or concepts.get("system_memory_infra"):
+            expansion.extend(["history", "memory"])
+        terms = set(query_terms(f"{cues or ''} {' '.join(expansion)}"))
         if not terms:
             return
         visible = {tool['name'] for tool in self.list_tools(context)}
@@ -311,7 +320,7 @@ class CapabilityRegistry:
             score = 3 * overlap + len(terms & description)
             if overlap or score >= 2:
                 ranked.append((-score, name))
-        context.extra.setdefault('loaded_tools', set()).update(name for _, name in sorted(ranked)[:3])
+        context.extra.setdefault('loaded_tools', set()).update(name for _, name in sorted(ranked)[:4])
 
     def call_is_read_only(self, name, args):
         skill = self._skills.get(name)

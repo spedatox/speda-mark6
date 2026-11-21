@@ -69,37 +69,49 @@ def withdrawal_reply(context):
 
 
 def referential(value):
-    return len(value) < 160 and bool(re.search(
-        r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin)\b|"
-        r"^\s*(?:names?|adlari|isimleri)\s*\??\s*$", fold(value)))
+    folded = fold(value)
+    return len(value) < 180 and (
+        bool(re.search(
+            r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin|"
+            r"destination|still|way|there|bus|exam|result|score|time|changed)\b|"
+            r"^\s*(?:names?|adlari|isimleri)\s*\??\s*$",
+            folded,
+        ))
+        or len(re.findall(r"\w+", folded)) <= 5
+    )
 
 
 def turn_query(context, query=None) -> str:
-    if query is None and context.triggered_by == 'n8n':
-        payload = context.trigger_payload
-        data = payload.get('event_data')
-        if isinstance(data, dict) and payload.get('type') == 'mail_watch':
-            messages = data.get('messages', [])
+    if query is None and context.triggered_by == "n8n":
+        payload = context.trigger_payload or {}
+        data = payload.get("event_data")
+        if isinstance(data, dict) and payload.get("type") == "mail_watch":
+            messages = data.get("messages", [])
             if messages:
-                # Subjects carry course and event names. Put them ahead of
-                # instruction boilerplate and operational IDs in the search.
-                return '\n'.join(
-                    str(message.get(field, ''))
-                    for field in ('subject', 'from', 'snippet', 'body_excerpt')
+                return "\n".join(
+                    str(message.get(field, ""))
+                    for field in ("subject", "from", "snippet", "body", "body_excerpt")
                     for message in messages
                 )[:6000]
     history = conversation_content(context)
     latest = next((i for i in range(len(history)-1, -1, -1) if history[i][0] in {"user", "query"}), None)
     value = query if query is not None else (history[latest][1] if latest is not None else "")
     if latest is not None and referential(value):
-        # Borrow one useful nearby referent, not repeated retries or operational text.
+        # Borrow nearby user and assistant context when the turn is short, referential, or deictic
+        # (e.g. "hey speda" -> "Im on my way still" -> "how far am I from the destination",
+        # or "You have a younger brother and a sister." -> "theri names?").
+        name_follow_up = bool(re.search(r"\b(names?|adlari|isimleri)\b", fold(value)))
+        borrowed = []
         for _, prior in reversed(history[max(0, latest-6):latest]):
-            if query_terms(prior) and not referential(prior):
+            if query_terms(prior) and not (name_follow_up and referential(prior)):
                 referent = prior[:1200]
-                if re.search(r"\b(names?|adlari|isimleri)\b", fold(value)):
+                if name_follow_up:
                     referent = re.split(r"(?<=[.!?])\s", referent, maxsplit=1)[0]
-                value += "\n" + referent
-                break
+                borrowed.append(referent)
+                if name_follow_up or len(borrowed) >= 2:
+                    break
+        if borrowed:
+            value += "\n" + "\n".join(borrowed)
     value += "\n" + str(context.extra.get("attachment_text", ""))[:2000]
     return value[:6000]
 
