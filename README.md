@@ -1,4 +1,4 @@
-# SPEDA Mark VI · Renovated
+# SPEDA Mark VI
 
 [![CI/CD](https://github.com/spedatox/speda-mark6/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/spedatox/speda-mark6/actions/workflows/validate.yml)
 [![Android](https://github.com/spedatox/speda-mark6/actions/workflows/speda-go.yml/badge.svg?branch=main)](https://github.com/spedatox/speda-mark6/actions/workflows/speda-go.yml)
