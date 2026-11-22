@@ -174,8 +174,14 @@ class Catalogue:
         await db.execute(update(MemoryChange).where(MemoryChange.user_id == user_id,
             MemoryChange.source_key.like(key + ":%"), MemoryChange.revoked.is_(False)
         ).values(revoked=True, routing_text=""))
+        old_unit_ids = list((await db.execute(select(MemoryServingUnit.id).where(
+            MemoryServingUnit.user_id == user_id, MemoryServingUnit.stable_key == key
+        ))).scalars())
         await db.execute(delete(MemoryServingUnit).where(MemoryServingUnit.user_id == user_id,
                                                        MemoryServingUnit.stable_key == key))
+        if old_unit_ids and getattr(self.store, "semantic", None) and self.store.semantic.enabled:
+            for uid in old_unit_ids:
+                await self.store.semantic.delete_unit(db, user_id, uid)
         await bump_epoch(db, user_id)
         if row.status != "accepted":
             return

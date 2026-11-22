@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app.schemas.memory_runtime import Deadline, EvidenceSection, MemoryPacket, token_upper_bound
 from app.services.memory_store import fold
+from app.services.semantic_index import rrf_fuse, mmr_order
 from app.services.memory_query import (
     SCHOOL_TERM, conversation_content, education_fact_query, query_terms, relations, turn_query, withdrawal_reply,
 )
@@ -221,7 +222,7 @@ class MemoryRuntime:
                 if education_fact_query(query) and not source_ids:
                     terms = list(dict.fromkeys(["transcript", "transkript", "university", "universitesi", *terms]))
                 result = await self.store.read(context, terms, source_ids=source_ids,
-                                               include_recent=automatic, deadline=deadline)
+                                               include_recent=automatic, deadline=deadline, raw_query=query)
             self._ready = True
             packet.publication_epoch = result["epoch"]
             packet.source_boundary = result["boundary"]
@@ -378,6 +379,9 @@ class MemoryRuntime:
         available = max(0, ceiling - 512)
         education_candidates = []
         candidates = []
+        sem_unit_scores = result.get("semantic_unit_scores") or {}
+        sem_source_scores = result.get("semantic_source_scores") or {}
+        unit_id_by_key = result.get("unit_id_by_key") or {}
         matched_aliases = {}
         future_spans = []
         name_specificity = max((len(set(terms).intersection(unit["title_words"]))
@@ -404,7 +408,7 @@ class MemoryRuntime:
             if family_match:
                 score += 350
             title_relevance = sum(term in unit["folded_title"] for term in terms)
-            for section, body, section_dates in zip(unit["sections"], unit["section_search"], unit["section_dates"]):
+            for sidx, (section, body, section_dates) in enumerate(zip(unit["sections"], unit["section_search"], unit["section_dates"])):
                 if deadline.remaining() <= 0:
                     raise TimeoutError
                 try:
@@ -415,6 +419,7 @@ class MemoryRuntime:
                 if checked.valid_from and checked.valid_from > today:
                     future_spans.append((section["source_id"], section["start"], section["end"]))
                 relevance = sum(t in body for t in terms)
+                sem_score = float(sem_unit_scores.get((unit["key"], sidx), 0.0))
                 if education_query and (match := education_section(unit, checked, today)):
                     field, rank, evidence = match
                     education_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
@@ -448,10 +453,13 @@ class MemoryRuntime:
                 recency_bonus = max(0, 20 - (today - max(dated)).days / 2) if dated else 0
                 living = (automatic and not family_query and not personal_fact and unit["kind"] == "situation"
                           and not unit["key"].startswith("iacon:") and not section.get("historical"))
-                if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance:
+                sem_hit = sem_score >= 0.26 and not checked.historical
+                if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance and not sem_hit:
                     continue
-                candidates.append((score + iacon_bonus + dossier_heading_bonus + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus, unit["key"],
-                    unit["title"], section, unit["revision"]))
+                lex_score = score + iacon_bonus + dossier_heading_bonus + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus
+                vec_ref = ("unit", unit_id_by_key.get(unit["key"]), sidx)
+                candidates.append((lex_score, sem_score, bool(checked.historical), checked.attribution, vec_ref,
+                    unit["key"], unit["title"], section, unit["revision"]))
         for alias, keys in matched_aliases.items():
             if len(keys) > 1:
                 packet.ambiguities.append(f"Alias {alias!r} has multiple candidate identities; do not merge them.")
@@ -470,13 +478,15 @@ class MemoryRuntime:
             prior_body = fold((source["provenance"].get("prior_context") or {}).get("text", ""))
             context_match = any(t in prior_body for t in terms)
             relevant = sum(t in body or t in prior_body for t in terms)
+            sem_score = float(sem_source_scores.get(source["id"], 0.0))
+            sem_hit = sem_score >= 0.26 and not source["provenance"].get("historical")
             fresh_pending = source["role"] == "owner" and source.get("recent") and source["outcome"] not in {"accepted", "valid_empty", "source_only"}
-            if not relevant and terms and source["id"] not in requested_sources and not fresh_pending:
+            if not relevant and terms and source["id"] not in requested_sources and not fresh_pending and not sem_hit:
                 continue
-            if not relevant and source["role"] != "owner" and source["id"] not in requested_sources:
+            if not relevant and source["role"] != "owner" and source["id"] not in requested_sources and not sem_hit:
                 continue
             # Recent raw material remains owner-attributed, never a fresh canonical fact.
-            score = (130 if relevant else 5) if fresh_pending else (60 if source["role"] == "owner" else 20)
+            score = (130 if (relevant or sem_hit) else 5) if fresh_pending else (60 if source["role"] == "owner" else 20)
             score += 20 * min(2, sum(t in body for t in result.get("entity_terms", [])))
             source_day = date.fromisoformat(source["created_at"][:10])
             score += max(0, 20 - max(0, (today - source_day).days) / 2)
@@ -497,12 +507,50 @@ class MemoryRuntime:
                 if any(sid == span.source_id and span.start < stop and span.end > start
                        for sid, start, stop in future_spans):
                     continue
-                if terms and not any(t in span_search for t in terms) and not context_match and source["id"] not in requested_sources and not fresh_pending:
+                if terms and not any(t in span_search for t in terms) and not context_match and source["id"] not in requested_sources and not fresh_pending and not sem_hit:
                     continue
-                candidates.append((score + relevant, f"raw:{source['id']}",
+                vec_ref = ("source", source["id"], 0)
+                candidates.append((score + relevant, sem_score, bool(span.historical), span.attribution, vec_ref,
+                                   f"raw:{source['id']}",
                                    f"{source['role']} source ({source['created_at']}; event date may differ; claim level {source['provenance'].get('observation_level','source')})",
                                    span.model_dump(mode="json"), 0))
-        candidates.sort(key=lambda c: (-c[0], c[1], c[3]["start"]))
+        # Hybrid RRF (Dense Semantic + Lexical) + MMR Diversity Ordering
+        has_semantic = any(c[1] > 0.0 for c in candidates)
+        if has_semantic and len(candidates) > 1:
+            indexed = list(enumerate(candidates))
+            lex_ranked = [(i, c[0]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][0], pair[1][5], pair[1][7]["start"]))]
+            sem_ranked = [(i, c[1]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][1], pair[1][5], pair[1][7]["start"])) if c[1] > 0.0]
+            fused = rrf_fuse(sem_ranked, lex_ranked, k=40.0, w_sem=1.0, w_lex=0.85)
+            sem_index = getattr(self.store, "semantic", None)
+            mmr_inputs = []
+            for i, c in indexed:
+                lex_sc, sem_sc, is_hist, attr, vec_ref, key, _, _, _ = c
+                # Clean epistemic & temporal multipliers + strong exact/family lexical anchor
+                base = fused.get(i, 0.0)
+                if lex_sc >= 300:
+                    base += 0.015  # Exact identity / explicit relation anchor
+                if is_hist:
+                    base *= 0.35
+                if attr == "quoted_material":
+                    base *= 0.75
+                vec = None
+                if sem_index is not None and vec_ref[1] is not None:
+                    if vec_ref[0] == "unit":
+                        vec = sem_index.get_unit_vector(context.user_id, vec_ref[1], vec_ref[2])
+                    else:
+                        vec = sem_index.get_source_vector(context.user_id, vec_ref[1])
+                mmr_inputs.append((i, base, vec))
+            mmr_inputs.sort(key=lambda item: -item[1])
+            top_order = mmr_order(mmr_inputs[:64], limit=64, lambda_mult=0.78)
+            tail_order = [item[0] for item in mmr_inputs[64:]]
+            ordered_candidates = [(candidates[i][0], candidates[i][5], candidates[i][6], candidates[i][7], candidates[i][8])
+                                  for i in (*top_order, *tail_order)]
+        else:
+            ordered_candidates = sorted(
+                ((c[0], c[5], c[6], c[7], c[8]) for c in candidates),
+                key=lambda c: (-c[0], c[1], c[3]["start"]),
+            )
+        candidates = ordered_candidates
         selected_core = 0
         selected_focus = 0
         has_supporting = any(candidate[1].startswith("raw:") for candidate in candidates)

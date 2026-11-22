@@ -29,6 +29,8 @@ dependencies = [
     "python-pptx>=1.0",
     "weasyprint>=68.0",
     "psutil>=6.0",
+    "numpy>=1.26.0",
+    "fastembed>=0.6.0",
 ]
 
 [project.optional-dependencies]

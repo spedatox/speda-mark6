@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH" \
     SPEDA_DATA_DIR=/data \
+    FASTEMBED_CACHE_PATH=/app/.fastembed_cache \
     DATABASE_URL=sqlite+aiosqlite:////data/speda.db
 
 # PDF rendering needs native Pango/Harfbuzz; git and node support native tools
@@ -38,6 +39,7 @@ COPY forge/ forge/
 COPY scripts/ scripts/
 COPY --from=solus /build/static/solus/ app/static/solus/
 RUN uv sync --frozen --no-dev --no-editable \
+    && python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', cache_dir='/app/.fastembed_cache')" \
     && mkdir -p /tmp/speda_outputs /data
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \

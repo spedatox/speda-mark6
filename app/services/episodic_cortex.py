@@ -1,84 +1,34 @@
-"""Hybrid semantic vector, character n-gram, temporal and cross-agent episodic cortex.
+"""Neural multilingual episodic cortex: dense ONNX embeddings + char n-grams + temporal continuity.
 
-Provides zero-provider-call first-turn episodic continuity and semantic archive
-retrieval so relative, implicit, typo-heavy or zero-keyword turns ("phewwww.",
-"Im on my way still", "how far am I from the destination", "ok bus time changed",
-"remebet our conversation last night", "well I talked about it with friday")
-receive the right prior conversation episodes before the first model call.
+Replaces hardcoded keyword concept buckets with genuine local multilingual dense
+vectors (`intfloat/multilingual-e5-small`) combined with lexical overlap, character
+n-gram typo resilience, and smooth temporal decay.
 """
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, OrderedDict
 from datetime import datetime, time, timedelta, timezone
 import math
+import os
 import re
-from zoneinfo import ZoneInfo
+import threading
+
+import numpy as np
 
 from app.services.lexical import fold
 
-# Bilingual latent concept dimensions for zero-provider-call semantic vector projection.
-# These map relative phrases ("destination", "on my way", "phew", "last night", "score")
-# into shared dense semantic dimensions without hardcoded reply rules.
-_CONCEPT_DIMENSIONS: dict[str, tuple[str, ...]] = {
-    "travel_mobility": (
-        "bus", "ticket", "bilet", "otogar", "otogari", "asti", "flixbus", "ulusoy", "obilet",
-        "kamil", "koc", "destination", "way", "route", "trip", "journey", "travel", "travelling",
-        "traveling", "arrive", "arrival", "depart", "departure", "flight", "train", "yht",
-        "commute", "traffic", "distance", "far", "heading", "headed", "ride", "passenger",
-        "yol", "yoldayim", "sefer", "kalkis", "varis", "otobus", "tren", "mesafe", "rota",
-    ),
-    "home_family_location": (
-        "bursa", "ankara", "home", "family", "house", "dorm", "dormitory", "caliskanlar",
-        "karahidirkoy", "yenisehir", "akcalar", "nilufer", "ostim", "hacettepe", "yapracik",
-        "address", "location", "coordinates", "stay", "staying", "visit", "visiting", "weekend",
-        "ev", "aile", "yurt", "adres", "konum", "memleket",
-    ),
-    "academic_exam_grade": (
-        "exam", "exams", "midterm", "midterms", "final", "finals", "quiz", "vize", "vizeler",
-        "sinav", "score", "grade", "result", "results", "point", "points", "100", "99",
-        "study", "studying", "chapter", "course", "courses", "class", "classes", "lecture",
-        "professor", "teacher", "hoca", "melike", "bozkurt", "calculator", "casio", "fx", "991cw",
-        "statistics", "istatistik", "accounting", "muhasebe", "marketing", "data", "structures",
-        "supply", "chain", "logistics", "mis", "mis215", "mis231", "mis243", "mis251", "mar411",
-        "wap225", "luck", "phew", "pheww", "phewww", "phewwww", "judgment", "formula", "formulas",
-        "closing", "debit", "credit", "journal", "ledger", "not", "puan", "sonuc", "ders",
-    ),
-    "schedule_time_commitment": (
-        "calendar", "schedule", "plan", "planning", "tomorrow", "today", "tonight", "morning",
-        "afternoon", "evening", "night", "monday", "tuesday", "wednesday", "thursday", "friday",
-        "saturday", "sunday", "satursay", "wedensday", "clear", "clen", "delete", "remove",
-        "add", "move", "shift", "changed", "change", "gap", "conflict", "overlap", "meeting",
-        "appointment", "reminder", "task", "todo", "deadline", "hour", "hours", "minute", "minutes",
-        "takvim", "program", "yarin", "bugun", "iptal", "ekle", "sil", "hatirlatma", "saat",
-    ),
-    "personal_emotional_social": (
-        "lonely", "loneliness", "exhausted", "tired", "sleep", "sleeping", "bed", "feeling",
-        "feel", "hurt", "burn", "burned", "impaled", "lost", "dating", "girlfriend", "couple",
-        "romantic", "love", "care", "cared", "sevval", "rumeysa", "ilayda", "alper", "kaan",
-        "sister", "brother", "sibling", "mother", "father", "friend", "vent", "venting", "rough",
-        "yalniz", "yalnizlik", "yorgun", "uyku", "sevgili", "kardes", "abla", "abi",
-    ),
-    "health_wellbeing": (
-        "gym", "workout", "training", "steps", "walk", "walking", "health", "samsung",
-        "medication", "medicine", "pill", "lustral", "vitamin", "vitamins", "eat", "eaten",
-        "breakfast", "dinner", "sleepy", "ilac", "saglik", "spor", "adim",
-    ),
-    "system_memory_infra": (
-        "memory", "retrieval", "retrival", "retrivial", "recall", "archive", "timeout",
-        "timing", "deadline", "budget", "sandbox", "reconciling", "incident", "report",
-        "diagnose", "diagnosis", "fix", "patch", "push", "deploy", "container", "postgres",
-        "sqlite", "index", "database", "vector", "tool", "tools", "context", "lag", "broken",
-    ),
-    "security_network": (
-        "contabo", "vps", "ddos", "flood", "udp", "47584", "ufw", "firewall", "watchdog",
-        "brute", "ssh", "attack", "compromise", "suspended", "suspension", "security", "breach",
-    ),
+# Clean, general domain descriptions embedded once by the neural model for
+# zero-regex tool preloading & semantic domain routing (no hardcoded personal names/places).
+_DOMAIN_PROTOTYPES: dict[str, str] = {
+    "travel_mobility": "travel, trip, bus, flight, train, ticket, departure, arrival, commute, route, distance, traffic, destination, heading somewhere",
+    "home_family_location": "home, family, city, dorm, address, location, visiting family, staying home, weekend away",
+    "academic_exam_grade": "university exam, midterm, final, quiz, grade, score, course, lecture, study, professor, syllabus, class",
+    "schedule_time_commitment": "calendar, schedule, plan, appointment, meeting, deadline, reminder, rescheduling, time change, overlap, conflict",
+    "personal_emotional_social": "feelings, relationships, friends, family emotions, tired, lonely, personal conversation, venting",
+    "health_wellbeing": "health, gym, workout, exercise, sleep, medication, nutrition, steps, wellbeing",
+    "system_memory_infra": "software engineering, memory retrieval, database, server, logs, debugging, deployment, container, timeout",
+    "security_network": "cybersecurity, firewall, ssh, network attack, intrusion, watchdog, vulnerability, security audit",
 }
-_CONCEPT_PREFIXES = {
-    dimension: [(term, {term[:length] for length in range(4, len(term))}) for term in terms]
-    for dimension, terms in _CONCEPT_DIMENSIONS.items()
-}
-_MAX_CONCEPT_TERM = max(len(term) for terms in _CONCEPT_DIMENSIONS.values() for term in terms)
 
 _RELIEF_OR_OPENING_CUE = re.compile(
     r"^\s*(?:phew+|whew+|uff+|of+|oh\s+man|oh\s+boy|thank\s+god|finally|well\.{2,}|[a-z_]+\.{3,}|"
@@ -96,6 +46,73 @@ _TEMPORAL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"konustugumuz|sohbetimiz|gecen\s+konusma\w*)\b"
     )),
 )
+
+_VEC_CACHE_LOCK = threading.Lock()
+_QUERY_VEC_CACHE: OrderedDict[str, np.ndarray] = OrderedDict()
+_PASSAGE_VEC_CACHE: OrderedDict[str, np.ndarray] = OrderedDict()
+_PROTOTYPE_MATRIX: tuple[list[str], np.ndarray] | None = None
+
+
+def _semantic_enabled() -> bool:
+    return os.getenv("SPEDA_SEMANTIC_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _cached_query_vec(text: str) -> np.ndarray | None:
+    if not _semantic_enabled() or not (text or "").strip():
+        return None
+    key = text[:1500]
+    with _VEC_CACHE_LOCK:
+        cached = _QUERY_VEC_CACHE.get(key)
+        if cached is not None:
+            _QUERY_VEC_CACHE.move_to_end(key)
+            return cached
+    try:
+        from app.services.semantic_index import NeuralEmbedder
+        vec = NeuralEmbedder.shared().embed_query_sync(key)
+    except Exception:
+        return None
+    with _VEC_CACHE_LOCK:
+        _QUERY_VEC_CACHE[key] = vec
+        while len(_QUERY_VEC_CACHE) > 256:
+            _QUERY_VEC_CACHE.popitem(last=False)
+    return vec
+
+
+def _cached_passage_vec(text: str) -> np.ndarray | None:
+    if not _semantic_enabled() or not (text or "").strip():
+        return None
+    key = text[:1500]
+    with _VEC_CACHE_LOCK:
+        cached = _PASSAGE_VEC_CACHE.get(key)
+        if cached is not None:
+            _PASSAGE_VEC_CACHE.move_to_end(key)
+            return cached
+    try:
+        from app.services.semantic_index import NeuralEmbedder
+        vec = NeuralEmbedder.shared().embed_passages_sync([key])[0]
+    except Exception:
+        return None
+    with _VEC_CACHE_LOCK:
+        _PASSAGE_VEC_CACHE[key] = vec
+        while len(_PASSAGE_VEC_CACHE) > 512:
+            _PASSAGE_VEC_CACHE.popitem(last=False)
+    return vec
+
+
+def _prototype_matrix() -> tuple[list[str], np.ndarray] | None:
+    global _PROTOTYPE_MATRIX
+    if _PROTOTYPE_MATRIX is not None:
+        return _PROTOTYPE_MATRIX
+    if not _semantic_enabled():
+        return None
+    try:
+        from app.services.semantic_index import NeuralEmbedder
+        names = list(_DOMAIN_PROTOTYPES.keys())
+        mat = NeuralEmbedder.shared().embed_passages_sync([_DOMAIN_PROTOTYPES[n] for n in names])
+        _PROTOTYPE_MATRIX = (names, mat)
+        return _PROTOTYPE_MATRIX
+    except Exception:
+        return None
 
 
 def _normalize_token(token: str) -> str:
@@ -138,26 +155,22 @@ def cosine_counter(a: Counter[str], b: Counter[str]) -> float:
 
 
 def concept_vector(text: str) -> Counter[str]:
-    """Project text into latent bilingual semantic concept dimensions."""
-    folded = fold(text)
-    raw_words = re.findall(r"\w+", folded)
-    word_set = set(raw_words) | {_normalize_token(word) for word in raw_words}
-    word_prefixes = {word[:length] for word in word_set
-                     for length in range(4, min(len(word), _MAX_CONCEPT_TERM + 1))}
+    """Project text onto general domain prototypes using neural multilingual cosine similarity."""
     vec: Counter[str] = Counter()
-    if _RELIEF_OR_OPENING_CUE.match(folded.strip()):
-        # Emotional relief / post-event exhale strongly correlates with active exams/commitments.
-        vec["academic_exam_grade"] += 3
-        vec["schedule_time_commitment"] += 1
-    for dim, vocab in _CONCEPT_PREFIXES.items():
-        hits = 0
-        for term, term_prefixes in vocab:
-            if term in word_set:
-                hits += 2
-            elif term in word_prefixes or not word_set.isdisjoint(term_prefixes):
-                hits += 1
-        if hits:
-            vec[dim] += hits
+    if not (text or "").strip():
+        return vec
+    q_vec = _cached_query_vec(text)
+    proto = _prototype_matrix()
+    if q_vec is None or proto is None:
+        return vec
+    names, mat = proto
+    sims = mat @ q_vec
+    top_sim = float(np.max(sims)) if sims.size else 0.0
+    threshold = max(0.22, top_sim - 0.24)
+    for name, sim in zip(names, sims):
+        sc = float(sim)
+        if sc >= threshold:
+            vec[name] = max(1, int(round(sc * 100)))
     return vec
 
 
@@ -171,14 +184,14 @@ def hybrid_episode_score(
     idf: dict[str, float] | None = None,
     age_hours: float = 0.0,
 ) -> float:
-    """Compute hybrid lexical (BM25-like) + char-ngram vector + concept vector score."""
+    """Compute genuine neural semantic + lexical + char-ngram + temporal episode score."""
     folded_ep = fold(episode_text)
     if not folded_ep.strip():
         return 0.0
     ep_words = set(re.findall(r"\w+", folded_ep))
     ep_norm_words = ep_words | {_normalize_token(w) for w in ep_words}
 
-    # 1. Lexical / BM25-style weighted term match
+    # 1. Lexical term match
     lexical_score = 0.0
     for term in query_terms_list:
         norm_t = _normalize_token(term)
@@ -188,27 +201,27 @@ def hybrid_episode_score(
         elif term in folded_ep or (len(norm_t) >= 4 and norm_t in folded_ep):
             lexical_score += weight * 1.8
 
-    # 2. Character n-gram cosine similarity (catches typos like "remebet" / "satursay" / "phewwww")
+    # 2. Character n-gram cosine similarity (resilient to typos like "remebet" / "satursay")
     q_ng = query_ngrams if query_ngrams is not None else char_ngrams(query)
     ep_ng = char_ngrams(folded_ep[:2400])
     ngram_sim = cosine_counter(q_ng, ep_ng)
 
-    # 3. Latent semantic concept cosine similarity (catches relative phrases like
-    # "how far am I from the destination" -> Bursa trip, "phewwww" -> exam)
-    q_cp = query_concepts if query_concepts is not None else concept_vector(query)
-    ep_cp = concept_vector(folded_ep[:2400])
-    concept_sim = cosine_counter(q_cp, ep_cp)
-    shared_concepts = len(set(q_cp.keys()) & set(ep_cp.keys()))
+    # 3. Genuine multilingual neural dense cosine similarity
+    neural_sim = 0.0
+    q_vec = _cached_query_vec(query)
+    ep_vec = _cached_passage_vec(episode_text[:1500]) if q_vec is not None else None
+    if q_vec is not None and ep_vec is not None:
+        neural_sim = float(np.dot(q_vec, ep_vec))
 
-    # 4. Temporal decay bonus (recent 72h episodes get a smooth recency boost)
+    # 4. Smooth temporal decay bonus for recent 72h episodes
     recency_bonus = max(0.0, 12.0 * math.exp(-max(0.0, age_hours) / 36.0)) if (
-        lexical_score > 0 or ngram_sim >= 0.14 or concept_sim >= 0.35
+        lexical_score > 0 or ngram_sim >= 0.14 or neural_sim >= 0.35
     ) else 0.0
 
     total = (
         lexical_score
         + (28.0 * ngram_sim if ngram_sim >= 0.10 else 0.0)
-        + (24.0 * concept_sim + 4.0 * shared_concepts if concept_sim >= 0.30 else 0.0)
+        + (40.0 * neural_sim if neural_sim >= 0.32 else 0.0)
         + recency_bonus
     )
     return round(total, 4)
@@ -261,8 +274,6 @@ def detect_named_peer(text: str, profiles, current_agent_id: str):
     if not profiles or not text:
         return None
     folded = fold(text.strip())
-    # Match explicit conversational references anywhere in the owner's message,
-    # while avoiding bare weekday false positives ("this friday was rough").
     patterns = (
         r"\b(?:(?:i|we)\s+(?:talked|spoke|chatted|discussed|vented|checked|worked)(?:\s+[\w'-]+){0,6}?\s+(?:with|to)\s+|"
         r"(?:my|our|last\s+night'?s|yesterday'?s)\s+(?:chat|conversation|talk|discussion|session|thread)\s+with\s+|"
@@ -291,14 +302,5 @@ def is_unanchored_or_implicit_opening(query: str, user_turn_count: int) -> bool:
         return True
     words = re.findall(r"\w+", folded)
     if user_turn_count <= 2 and len(words) <= 6:
-        return True
-    if user_turn_count <= 3 and any(
-        phrase in folded
-        for phrase in (
-            "on my way", "from the destination", "the destination", "how far am i",
-            "time changed", "bus time", "last night", "our conversation",
-            "wish me luck", "result released", "know my", "remember", "remebet",
-        )
-    ):
         return True
     return False

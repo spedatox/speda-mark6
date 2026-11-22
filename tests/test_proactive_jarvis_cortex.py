@@ -777,7 +777,7 @@ async def test_temporal_life_states_expose_phase_and_date_bounds(jarvis_env):
         agent_id="speda",
         created_at=datetime.utcnow(),
         turns=[],
-        current_user_text="What does my next week plan look like?",
+        current_user_text="What does this week's plan look like?",
     )
     packet = await runtime.prepare(ctx)
     states = json.loads(packet_json(packet))["current_states"]

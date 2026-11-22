@@ -5,7 +5,7 @@ from app.models.message import Message
 from app.models.agent import AgentRecord
 from app.models.tool_call import ToolCall
 from app.models.notification import Notification
-from app.models.memory_serving import MemoryChange, MemoryServingUnit, MemoryServingState
+from app.models.memory_serving import MemoryChange, MemoryServingUnit, MemoryServingState, MemoryEmbedding
 from app.models.model_policy import ModelPolicyState, ToolExecutionReceipt
 from app.models.iacon import (IaconRecord, IaconLink, IaconRevision, IaconWork,
     IaconControl, IaconAllowance, IaconCall, IaconFollowup, IaconTelegramUpdate)

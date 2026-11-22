@@ -1,7 +1,7 @@
 """Original source intake and disposable, revision-fenced serving projections."""
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Index, JSON, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, JSON, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -80,3 +80,23 @@ class MemoryServingState(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     epoch: Mapped[int] = mapped_column(default=0)
     schema_version: Mapped[int] = mapped_column(default=1)
+
+
+class MemoryEmbedding(Base):
+    """Additive persistent vector index for serving units and sources (SQLite + PostgreSQL)."""
+    __tablename__ = "memory_embeddings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "target_kind", "target_id", "section_idx", name="uq_memory_embedding_target"),
+        Index("ix_memory_embeddings_owner_kind_model", "user_id", "target_kind", "model_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    target_kind: Mapped[str] = mapped_column(String(16))  # "unit" | "source"
+    target_id: Mapped[int] = mapped_column()
+    section_idx: Mapped[int] = mapped_column(default=0)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    model_id: Mapped[str] = mapped_column(String(128))
+    dims: Mapped[int] = mapped_column()
+    vector: Mapped[bytes] = mapped_column(LargeBinary)
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

@@ -19,6 +19,7 @@ from app.models.memory_serving import MemoryChange, MemoryServingState, MemorySe
 from app.models.iacon import IaconRecord, IaconSourceRetirement
 from app.schemas.memory_runtime import EvidenceSection
 from app.services.postgres_search import PostgresMemorySearch, pin_search_snapshot
+from app.services.semantic_index import SemanticIndex
 
 
 def fold(value: str) -> str:
@@ -105,6 +106,7 @@ class MemoryStore:
         self.source_cache: OrderedDict = OrderedDict()
         self.source_cache_bytes = 0
         self.postgres_search = PostgresMemorySearch()
+        self.semantic = SemanticIndex(session_factory)
 
     @asynccontextmanager
     async def reader(self, deadline=None):
@@ -128,6 +130,14 @@ class MemoryStore:
             if db.bind.dialect.name == "postgresql":
                 await self.postgres_search.rank(db, MemoryChange, "sources", 0, '"warm"', 1, False)
                 await self.postgres_search.rank(db, MemoryServingUnit, "units", 0, '"warm"', 1, False)
+        await self.semantic.warm()
+        if self.semantic.enabled:
+            try:
+                async with self.sessions() as db, db.begin():
+                    await self.semantic.sync_units_for_user(db, 1, max_new=512)
+                    await self.semantic.sync_recent_sources(db, 1, scan_limit=250, max_new=128)
+            except Exception:
+                pass
 
     async def epoch(self, context, deadline=None) -> int:
         async with self.reader(deadline) as db:
@@ -198,13 +208,22 @@ class MemoryStore:
             if result.rowcount != 1:
                 raise StalePublication("Serving inputs changed; reload the affected unit")
             revision = expected_revision + 1
+            await db.flush()
+            await db.refresh(old)
+            target_unit = old
         else:
             if expected_revision != 0:
                 raise StalePublication("Serving unit no longer exists")
-            db.add(MemoryServingUnit(user_id=context.user_id, stable_key=stable_key,
-                                    revision=1, **values))
+            target_unit = MemoryServingUnit(user_id=context.user_id, stable_key=stable_key,
+                                            revision=1, **values)
+            db.add(target_unit)
             revision = 1
-        await db.flush()
+            await db.flush()
+        if self.semantic.enabled:
+            try:
+                await self.semantic.sync_unit_sections(db, context.user_id, target_unit)
+            except Exception:
+                pass
         await bump_epoch(db, context.user_id)
         return revision
 
@@ -214,11 +233,29 @@ class MemoryStore:
                 MemoryChange.user_id == context.user_id, MemoryChange.id == source_id
             ).values(revoked=True, routing_text=""))
             if result.rowcount:
+                if self.semantic.enabled:
+                    try:
+                        await self.semantic.delete_source(db, context.user_id, source_id)
+                    except Exception:
+                        pass
                 await bump_epoch(db, context.user_id)
 
     async def read(self, context, terms: list[str], *, limit=32, source_ids=(),
-                   include_recent=True, deadline=None) -> dict:
+                   include_recent=True, deadline=None, raw_query: str = "") -> dict:
         """Bounded indexed reads on an independent AsyncSession (aiosqlite thread)."""
+        query_vec = None
+        sem_unit_hits: list[tuple[int, int, float]] = []
+        sem_source_hits: list[tuple[int, float]] = []
+        semantic_query = (raw_query or " ".join(terms)).strip()
+        if self.semantic.enabled and semantic_query:
+            query_vec = await self.semantic.embed_query(semantic_query)
+            if query_vec is not None:
+                try:
+                    async with self.sessions() as sdb, sdb.begin():
+                        sem_unit_hits = await self.semantic.search_units(sdb, context.user_id, query_vec, limit=32)
+                        sem_source_hits = await self.semantic.search_sources(sdb, context.user_id, query_vec, limit=24)
+                except Exception:
+                    sem_unit_hits, sem_source_hits = [], []
         async with self.reader(deadline) as db:
             # Pin the epoch and evidence in one short read transaction.
             epoch, boundary = (await db.execute(select(
@@ -360,6 +397,12 @@ class MemoryStore:
                     MemoryServingUnit.user_id == context.user_id,
                     MemoryServingUnit.id.in_(sorted(person_ids)[:limit])
                 ))).scalars().all()
+            if sem_unit_hits:
+                sem_uids = list(dict.fromkeys(uid for uid, _, _ in sem_unit_hits))[:limit]
+                units += (await db.execute(select(MemoryServingUnit).where(
+                    MemoryServingUnit.user_id == context.user_id,
+                    MemoryServingUnit.id.in_(sem_uids)
+                ))).scalars().all()
             if terms:
                 focused_terms = sorted(name_terms) if name_terms else terms
                 units += await self._search(db, MemoryServingUnit, "units", context.user_id, focused_terms, limit)
@@ -367,6 +410,12 @@ class MemoryStore:
                 if name_terms:
                     hits += await self._search(db, MemoryChange, "sources", context.user_id,
                                                focused_terms, 12, recent=True)
+            if sem_source_hits:
+                sem_sids = list(dict.fromkeys(sid for sid, _ in sem_source_hits))[:limit]
+                hits += (await db.execute(select(MemoryChange).where(
+                    MemoryChange.user_id == context.user_id, MemoryChange.id.in_(sem_sids),
+                    MemoryChange.revoked.is_(False)
+                ).limit(limit))).scalars().all()
             if source_ids:
                 hits += (await db.execute(select(MemoryChange).where(
                     MemoryChange.user_id == context.user_id, MemoryChange.id.in_(source_ids),
@@ -518,8 +567,19 @@ class MemoryStore:
             while self.source_cache and (len(self.source_cache)>128 or self.source_cache_bytes>8000000):
                 _, removed = self.source_cache.popitem(last=False)
                 self.source_cache_bytes -= removed["size"]
+            unit_id_by_key = {u.stable_key: u.id for u in units}
+            key_by_unit_id = {u.id: u.stable_key for u in units}
+            semantic_unit_scores = {
+                (key_by_unit_id[uid], sidx): sc
+                for uid, sidx, sc in sem_unit_hits
+                if uid in key_by_unit_id
+            }
+            semantic_source_scores = {sid: sc for sid, sc in sem_source_hits}
             return {"epoch": epoch, "boundary": boundary, "units": valid_units, "current_states": current_states,
                     "provisional_states": provisional_states,
+                    "semantic_unit_scores": semantic_unit_scores,
+                    "semantic_source_scores": semantic_source_scores,
+                    "unit_id_by_key": unit_id_by_key,
                     "entity_terms": sorted(name_terms),
                     "relation_keys": {u.stable_key for u in units if u.id in relation_ids},
                     "contexts": {s.id: s.provenance.get("prior_context")
