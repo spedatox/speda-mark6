@@ -7,6 +7,7 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 import hashlib
+import os
 import re
 import unicodedata
 from zoneinfo import ZoneInfo
@@ -107,6 +108,19 @@ class MemoryStore:
         self.source_cache_bytes = 0
         self.postgres_search = PostgresMemorySearch()
         self.semantic = SemanticIndex(session_factory)
+        from app.services.associative_graph import AssociativeGraphIndex
+        self.graph = AssociativeGraphIndex()
+
+    def invalidate_user_caches(self, user_id: int) -> None:
+        """Deterministically evict all in-memory caches for user_id across layers."""
+        for key in [k for k in self.catalog if k[0] == user_id]:
+            self.catalog.pop(key, None)
+        for key in [k for k in self.cache if k[0] == user_id]:
+            self.cache.pop(key, None)
+        self.source_cache.clear()
+        self.source_cache_bytes = 0
+        self.semantic.evict_user(user_id)
+        self.graph.invalidate_user(user_id)
 
     @asynccontextmanager
     async def reader(self, deadline=None):
@@ -153,7 +167,7 @@ class MemoryStore:
                     return await self.publish(context, stable_key=stable_key, kind=kind,
                         title=title, sections=sections, aliases=aliases,
                         expected_revision=expected_revision, db=own_db, source_only_ids=source_only_ids)
-        if not sections or kind not in {"core", "person", "situation", "project", "course", "episode"}:
+        if not sections or kind not in {"core", "person", "situation", "project", "course", "episode", "narrative"}:
             raise ValueError("A serving unit needs sourced sections and a known kind")
         if len(sections) > 64 or len(stable_key) > 256 or len(title) > 256:
             raise ValueError("Serving unit exceeds its bounded shape")
@@ -238,6 +252,7 @@ class MemoryStore:
                         await self.semantic.delete_source(db, context.user_id, source_id)
                     except Exception:
                         pass
+                self.invalidate_user_caches(context.user_id)
                 await bump_epoch(db, context.user_id)
 
     async def read(self, context, terms: list[str], *, limit=32, source_ids=(),
@@ -575,10 +590,120 @@ class MemoryStore:
                 if uid in key_by_unit_id
             }
             semantic_source_scores = {sid: sc for sid, sc in sem_source_hits}
+
+            # --- Operation Iacon: Sparse Bi-Temporal PPR + Autobiographical Dreaming Narratives ---
+            ppr_record_scores: dict[str, float] = {}
+            associative_chains: list[list[dict]] = []
+            autobiographical_narratives: list[dict] = []
+            dreaming_enabled = os.getenv("SPEDA_DREAMING_CONTEXT", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+            if self.graph.enabled and semantic_query:
+                try:
+                    from app.services.associative_graph import parse_structural_temporal_scope
+                    graph = await self.graph.load(db, context.user_id, epoch)
+                    if graph.num_nodes > 0 and graph.num_edges > 0:
+                        seed_weights: dict[str, float] = {}
+                        for (ukey, _), sc in semantic_unit_scores.items():
+                            if ukey.startswith("iacon:"):
+                                rid = ukey[6:]
+                                seed_weights[rid] = max(seed_weights.get(rid, 0.0), float(sc))
+                        for rid in graph.match_aliases(semantic_query):
+                            seed_weights[rid] = max(seed_weights.get(rid, 0.0), 0.90)
+                        for u in units:
+                            if u.stable_key.startswith("iacon:") and u.kind != "core":
+                                rid = u.stable_key[6:]
+                                if rid not in seed_weights and any(t in u.routing_text for t in terms):
+                                    seed_weights[rid] = 0.50
+                        if seed_weights:
+                            local_today = datetime.now(ZoneInfo(context.timezone)).date()
+                            t_scope = parse_structural_temporal_scope(semantic_query, today=local_today, default_mode="biographical")
+                            ppr_hits = graph.personalized_pagerank(seed_weights, scope=t_scope, alpha=0.25, iterations=15, top_k=16)
+                            ppr_record_scores = {rid: sc for rid, sc in ppr_hits}
+                            top_seeds = [rid for rid, _ in sorted(seed_weights.items(), key=lambda kv: -kv[1])[:6]]
+                            top_targets = [rid for rid, _ in ppr_hits[:10]]
+                            raw_chains = graph.extract_chains(top_seeds, top_targets, scope=t_scope, max_hops=3, max_chains=6)
+                            for ch in raw_chains:
+                                associative_chains.append([{
+                                    "edge_id": e.edge_id,
+                                    "source_id": e.source_id,
+                                    "source": graph.node_titles.get(e.source_id, e.source_id),
+                                    "relation": e.relation,
+                                    "target_id": e.target_id,
+                                    "target": graph.node_titles.get(e.target_id, e.target_id),
+                                    "description": e.description,
+                                    "epistemic_mode": e.epistemic_mode,
+                                    "valid_from": e.valid_from.date().isoformat() if e.valid_from else None,
+                                    "valid_until": e.valid_until.date().isoformat() if e.valid_until else None,
+                                } for e in ch])
+                            # Ensure PPR-reached iacon units are present in valid_units
+                            existing_keys = {u["key"] for u in valid_units}
+                            missing_keys = ["iacon:" + rid for rid in ppr_record_scores if ("iacon:" + rid) not in existing_keys][:12]
+                            if missing_keys:
+                                extra_units = (await db.execute(select(MemoryServingUnit).where(
+                                    MemoryServingUnit.user_id == context.user_id,
+                                    MemoryServingUnit.stable_key.in_(missing_keys),
+                                ))).scalars().all()
+                                for eu in extra_units:
+                                    unit_id_by_key[eu.stable_key] = eu.id
+                                    valid_units.append({
+                                        "key": eu.stable_key, "kind": eu.kind, "title": eu.title,
+                                        "folded_title": fold(eu.title), "aliases": eu.aliases,
+                                        "title_words": set(re.findall(r"\w+", fold(eu.title))),
+                                        "identity": eu.stable_key, "revision": eu.revision,
+                                        "sections": eu.sections,
+                                        "section_search": [fold(s.get("text", "")) for s in eu.sections],
+                                        "section_dates": [parsed_days(s.get("text", "")) for s in eu.sections],
+                                    })
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning("associative_ppr_failed: %s", exc, exc_info=True)
+                    ppr_record_scores, associative_chains = {}, []
+
+            if dreaming_enabled:
+                try:
+                    from app.models.iacon import IaconNarrative
+                    nar_rows = (await db.execute(select(IaconNarrative).where(
+                        IaconNarrative.user_id == context.user_id,
+                        IaconNarrative.status == "accepted",
+                    ).order_by(IaconNarrative.priority_weight.desc(), IaconNarrative.updated_at.desc()).limit(24))).scalars().all()
+                    ppr_node_set = set(ppr_record_scores.keys())
+                    for nar in nar_rows:
+                        n_key = "narrative:" + nar.slug
+                        sem_sc = float(semantic_unit_scores.get((n_key, 0), 0.0))
+                        # Also check if narrative unit had a semantic hit even if not in units list
+                        if sem_sc == 0.0 and sem_unit_hits:
+                            n_uid = await db.scalar(select(MemoryServingUnit.id).where(
+                                MemoryServingUnit.user_id == context.user_id,
+                                MemoryServingUnit.stable_key == n_key,
+                            ))
+                            if n_uid is not None:
+                                for uid, sidx, sc in sem_unit_hits:
+                                    if uid == n_uid and sidx == 0:
+                                        sem_sc = float(sc)
+                                        break
+                        overlap = len(ppr_node_set.intersection(nar.source_record_ids or []))
+                        autobiographical_narratives.append({
+                            "id": nar.id, "tier": nar.tier, "slug": nar.slug, "title": nar.title,
+                            "summary_markdown": nar.summary_markdown,
+                            "explicit_facts": nar.explicit_facts, "inferred_links": nar.inferred_links,
+                            "source_record_ids": nar.source_record_ids,
+                            "time_span_start": nar.time_span_start.date().isoformat() if nar.time_span_start else None,
+                            "time_span_end": nar.time_span_end.date().isoformat() if nar.time_span_end else None,
+                            "priority_weight": nar.priority_weight,
+                            "semantic_score": sem_sc,
+                            "ppr_overlap": overlap,
+                            "version": nar.version,
+                        })
+                except Exception:
+                    autobiographical_narratives = []
+
             return {"epoch": epoch, "boundary": boundary, "units": valid_units, "current_states": current_states,
                     "provisional_states": provisional_states,
                     "semantic_unit_scores": semantic_unit_scores,
                     "semantic_source_scores": semantic_source_scores,
+                    "ppr_record_scores": ppr_record_scores,
+                    "associative_chains": associative_chains,
+                    "autobiographical_narratives": autobiographical_narratives,
                     "unit_id_by_key": unit_id_by_key,
                     "entity_terms": sorted(name_terms),
                     "relation_keys": {u.stable_key for u in units if u.id in relation_ids},

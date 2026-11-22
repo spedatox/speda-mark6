@@ -70,6 +70,12 @@ class Orion:
         self.enabled = enabled
         self.lock = asyncio.Lock()
         self.library_indexer = None
+        from app.services.iacon_dreaming import OrionDreamer
+        self.dreamer = OrionDreamer(catalogue, budget, model_policy)
+
+    async def dream(self, user_id: int, *, timezone_name: str = "UTC", use_llm: bool = True, force: bool = False) -> dict:
+        """Run an incremental Orion Dreaming consolidation cycle for user_id."""
+        return await self.dreamer.dream_user(user_id, timezone_name=timezone_name, use_llm=use_llm, force=force)
 
     async def enqueue(self, *, user_id, kind, unique_key, payload, db=None, retry=False):
         if db is None:
@@ -413,6 +419,20 @@ class Orion:
         if job.kind == "refresh":
             await self.catalogue.refresh(context.user_id, job.payload["record_id"])
             return {"status": "refreshed"}
+        if job.kind == "dream_cycle":
+            return await self.dreamer.dream_user(
+                context.user_id,
+                timezone_name=getattr(context, "timezone", "UTC") or "UTC",
+                use_llm=bool(job.payload.get("use_llm", True)),
+                force=bool(job.payload.get("force", False)),
+            )
+        if job.kind == "dream_rebuild":
+            return await self.dreamer.rebuild_narrative(
+                context.user_id,
+                job.payload["narrative_slug"],
+                timezone_name=getattr(context, "timezone", "UTC") or "UTC",
+                use_llm=bool(job.payload.get("use_llm", True)),
+            )
         if job.kind == "library_index" and self.library_indexer:
             if job.payload.get("source_id") != self.library_indexer.source_id:
                 raise ValueError("Library work belongs to another source")

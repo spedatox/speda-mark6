@@ -289,6 +289,11 @@ class SemanticIndex:
             self._buckets[key] = bucket
         return bucket
 
+    def evict_user(self, user_id: int) -> None:
+        """Immediately evict all in-memory vector buckets for user_id."""
+        for key in [k for k in self._buckets if k[0] == user_id]:
+            self._buckets.pop(key, None)
+
     async def warm(self) -> None:
         if not self.enabled:
             return

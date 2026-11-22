@@ -8,7 +8,8 @@ from app.models.notification import Notification
 from app.models.memory_serving import MemoryChange, MemoryServingUnit, MemoryServingState, MemoryEmbedding
 from app.models.model_policy import ModelPolicyState, ToolExecutionReceipt
 from app.models.iacon import (IaconRecord, IaconLink, IaconRevision, IaconWork,
-    IaconControl, IaconAllowance, IaconCall, IaconFollowup, IaconTelegramUpdate)
+    IaconControl, IaconAllowance, IaconCall, IaconFollowup, IaconTelegramUpdate,
+    IaconEdge, IaconNarrative, IaconEntityAlias)
 
 from app.models.library import LibrarySource, LibraryDocument, LibraryRevision, LibraryIndexGeneration, LibraryPassage, LibraryCitation, LibraryEmbedding
 from app.models.coordination import (Room, RoomEvent, CoordinationRun, AgentStep,

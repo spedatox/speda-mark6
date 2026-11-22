@@ -134,3 +134,48 @@ async def sync(request: Request, full: bool = False):
 async def citation(request: Request, citation_id: str):
     async with asyncio.timeout(3):
         return await request.app.state.library.citation_source(citation_id)
+
+
+@router.get("/narratives")
+async def narratives(request: Request):
+    return await request.app.state.iacon.list_narratives(1)
+
+
+@router.delete("/records/{record_id}")
+async def delete_record(request: Request, record_id: str, retire_sources: bool = True):
+    try:
+        return await request.app.state.iacon.delete_record(1, record_id, actor="owner", retire_sources=retire_sources)
+    except KeyError as exc:
+        raise HTTPException(404, "Record not found") from exc
+
+
+@router.post("/dream")
+async def dream(request: Request, force: bool = False, use_llm: bool = True, backfill: bool = False):
+    """n8n-scheduled Orion Dreaming consolidation endpoint (n8n remains the sole scheduler)."""
+    scheduler(request)
+    _, policy = await request.app.state.iacon_budget.policy(1)
+    if policy.paused:
+        return {"status": "paused"}
+    ctx = context()
+    try:
+        async with asyncio.timeout(max(30, policy.run_seconds)):
+            bf = await request.app.state.iacon.backfill_links_and_aliases(1) if backfill else None
+            dream_res = await request.app.state.orion.dream(
+                1, timezone_name=ctx.timezone, use_llm=use_llm, force=force,
+            )
+            return {"status": "ok", "dream": dream_res, **({"backfill": bf} if bf else {})}
+    except TimeoutError:
+        return {"status": "time_limit", "detail": "Incremental dreaming checkpoint preserved; resume next run"}
+
+
+@router.post("/backfill")
+async def backfill(request: Request, use_llm: bool = False):
+    """n8n/operator historical backfill: migrate legacy links/aliases and consolidate narratives."""
+    scheduler(request)
+    _, policy = await request.app.state.iacon_budget.policy(1)
+    if policy.paused:
+        return {"status": "paused"}
+    ctx = context()
+    bf = await request.app.state.iacon.backfill_links_and_aliases(1)
+    dream_res = await request.app.state.orion.dream(1, timezone_name=ctx.timezone, use_llm=use_llm, force=False)
+    return {"status": "ok", "backfill": bf, "dream": dream_res}

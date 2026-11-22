@@ -364,6 +364,80 @@ class MemoryRuntime:
                 break
         return selected
 
+    @staticmethod
+    def _select_autobiographical_context(packet, *, narratives, chains, budget, available):
+        """Inject Tier-1/Tier-2 Orion Dreaming autobiographical summaries and multi-hop chains."""
+        if available <= 0 or (not narratives and not chains):
+            return 0
+        selected = 0
+        nar_budget = min(2800, max(1200, int(available * 0.48)))
+        tier1 = [n for n in narratives if n.get("tier") in {"core_identity", "preferences"}]
+        tier2 = [n for n in narratives if n.get("tier") not in {"core_identity", "preferences"}]
+        tier2.sort(key=lambda n: (
+            -(float(n.get("semantic_score") or 0.0) + 0.18 * int(n.get("ppr_overlap") or 0)),
+            -float(n.get("priority_weight") or 1.0),
+            n.get("slug", ""),
+        ))
+        # Prioritize relevant Life Chapters alongside Core Identity within the hot-context share
+        chosen = [*tier2[:2], *tier1[:2]]
+        for nar in chosen:
+            handle = f"narrative:{nar['slug']}:v{nar['version']}"
+            if handle in budget.seen:
+                continue
+            summary = str(nar.get("summary_markdown") or "")
+            if len(summary) > 1100:
+                summary = summary[:1100] + "…"
+            card = {
+                "tier": nar["tier"],
+                "slug": nar["slug"],
+                "title": nar["title"],
+                "summary": summary,
+                "time_span": [nar.get("time_span_start"), nar.get("time_span_end")],
+                "explicit_facts_count": len(nar.get("explicit_facts") or []),
+                "inferred_links_count": len(nar.get("inferred_links") or []),
+                "untrusted_user_history": True,
+                "epistemic_note": "Distinguish explicit documented facts from inferred chronological associations.",
+            }
+            block = json.dumps({"autobiographical_memory": card}, ensure_ascii=False, separators=(",", ":"))
+            cost = token_upper_bound(block) + 1
+            if selected + cost > nar_budget or selected + cost > available:
+                continue
+            packet.blocks.append(block)
+            packet.evidence_handles.append(handle)
+            budget.seen.add(handle)
+            selected += cost
+
+        chain_budget = min(1400, max(600, int(available * 0.25)))
+        chain_used = 0
+        for idx, ch in enumerate(chains[:4]):
+            if not ch:
+                continue
+            handle = f"chain:{':'.join(e['edge_id'] for e in ch)}"
+            if handle in budget.seen:
+                continue
+            compact_steps = [
+                {
+                    "source": e["source"],
+                    "relation": e["relation"],
+                    "target": e["target"],
+                    "epistemic_mode": e["epistemic_mode"],
+                    **({"valid_from": e["valid_from"]} if e.get("valid_from") else {}),
+                    **({"valid_until": e["valid_until"]} if e.get("valid_until") else {}),
+                    **({"description": e["description"][:100]} if e.get("description") else {}),
+                }
+                for e in ch
+            ]
+            block = json.dumps({"associative_chain": compact_steps}, ensure_ascii=False, separators=(",", ":"))
+            cost = token_upper_bound(block) + 1
+            if chain_used + cost > chain_budget or selected + cost > available:
+                continue
+            packet.blocks.append(block)
+            packet.evidence_handles.append(handle)
+            budget.seen.add(handle)
+            selected += cost
+            chain_used += cost
+        return selected
+
     def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=(), reserved_bytes=0):
         today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
         terms = query_terms(query)
@@ -381,12 +455,15 @@ class MemoryRuntime:
         candidates = []
         sem_unit_scores = result.get("semantic_unit_scores") or {}
         sem_source_scores = result.get("semantic_source_scores") or {}
+        ppr_record_scores = result.get("ppr_record_scores") or {}
         unit_id_by_key = result.get("unit_id_by_key") or {}
         matched_aliases = {}
         future_spans = []
         name_specificity = max((len(set(terms).intersection(unit["title_words"]))
                                 for unit in result["units"] if unit["kind"] == "person"), default=0)
         for unit in result["units"]:
+            if unit["kind"] == "narrative":
+                continue  # Served via Tier-1/Tier-2 autobiographical_memory hot context
             if deadline.remaining() <= 0:
                 raise TimeoutError
             exact = [a for a in unit["aliases"] if
@@ -453,12 +530,14 @@ class MemoryRuntime:
                 recency_bonus = max(0, 20 - (today - max(dated)).days / 2) if dated else 0
                 living = (automatic and not family_query and not personal_fact and unit["kind"] == "situation"
                           and not unit["key"].startswith("iacon:") and not section.get("historical"))
+                ppr_score = float(ppr_record_scores.get(unit["key"][6:], 0.0)) if unit["key"].startswith("iacon:") else 0.0
                 sem_hit = sem_score >= 0.26 and not checked.historical
-                if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance and not sem_hit:
+                ppr_hit = ppr_score >= 0.02
+                if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance and not sem_hit and not ppr_hit:
                     continue
                 lex_score = score + iacon_bonus + dossier_heading_bonus + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus
                 vec_ref = ("unit", unit_id_by_key.get(unit["key"]), sidx)
-                candidates.append((lex_score, sem_score, bool(checked.historical), checked.attribution, vec_ref,
+                candidates.append((lex_score, sem_score, ppr_score, bool(checked.historical), checked.attribution, vec_ref,
                     unit["key"], unit["title"], section, unit["revision"]))
         for alias, keys in matched_aliases.items():
             if len(keys) > 1:
@@ -510,26 +589,29 @@ class MemoryRuntime:
                 if terms and not any(t in span_search for t in terms) and not context_match and source["id"] not in requested_sources and not fresh_pending and not sem_hit:
                     continue
                 vec_ref = ("source", source["id"], 0)
-                candidates.append((score + relevant, sem_score, bool(span.historical), span.attribution, vec_ref,
+                candidates.append((score + relevant, sem_score, 0.0, bool(span.historical), span.attribution, vec_ref,
                                    f"raw:{source['id']}",
                                    f"{source['role']} source ({source['created_at']}; event date may differ; claim level {source['provenance'].get('observation_level','source')})",
                                    span.model_dump(mode="json"), 0))
-        # Hybrid RRF (Dense Semantic + Lexical) + MMR Diversity Ordering
-        has_semantic = any(c[1] > 0.0 for c in candidates)
+        # Hybrid RRF (Dense Semantic + Lexical + Sparse Bi-Temporal PPR) + MMR Diversity Ordering
+        has_semantic = any(c[1] > 0.0 or c[2] > 0.0 for c in candidates)
         if has_semantic and len(candidates) > 1:
             indexed = list(enumerate(candidates))
-            lex_ranked = [(i, c[0]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][0], pair[1][5], pair[1][7]["start"]))]
-            sem_ranked = [(i, c[1]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][1], pair[1][5], pair[1][7]["start"])) if c[1] > 0.0]
+            lex_ranked = [(i, c[0]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][0], pair[1][6], pair[1][8]["start"]))]
+            sem_ranked = [(i, c[1]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][1], pair[1][6], pair[1][8]["start"])) if c[1] > 0.0]
+            ppr_ranked = [(i, c[2]) for i, c in sorted(indexed, key=lambda pair: (-pair[1][2], pair[1][6], pair[1][8]["start"])) if c[2] > 0.0]
             fused = rrf_fuse(sem_ranked, lex_ranked, k=40.0, w_sem=1.0, w_lex=0.85)
+            for rank, (i, _) in enumerate(ppr_ranked, start=1):
+                fused[i] = fused.get(i, 0.0) + 0.90 / (40.0 + rank)
             sem_index = getattr(self.store, "semantic", None)
             mmr_inputs = []
             for i, c in indexed:
-                lex_sc, sem_sc, is_hist, attr, vec_ref, key, _, _, _ = c
-                # Clean epistemic & temporal multipliers + strong exact/family lexical anchor
+                lex_sc, sem_sc, ppr_sc, is_hist, attr, vec_ref, key, _, _, _ = c
+                # Proper temporal & epistemic handling: no arbitrary freshness penalty on PPR-reached biographical nodes.
                 base = fused.get(i, 0.0)
                 if lex_sc >= 300:
                     base += 0.015  # Exact identity / explicit relation anchor
-                if is_hist:
+                if is_hist and ppr_sc == 0.0:
                     base *= 0.35
                 if attr == "quoted_material":
                     base *= 0.75
@@ -543,11 +625,11 @@ class MemoryRuntime:
             mmr_inputs.sort(key=lambda item: -item[1])
             top_order = mmr_order(mmr_inputs[:64], limit=64, lambda_mult=0.78)
             tail_order = [item[0] for item in mmr_inputs[64:]]
-            ordered_candidates = [(candidates[i][0], candidates[i][5], candidates[i][6], candidates[i][7], candidates[i][8])
+            ordered_candidates = [(candidates[i][0], candidates[i][6], candidates[i][7], candidates[i][8], candidates[i][9])
                                   for i in (*top_order, *tail_order)]
         else:
             ordered_candidates = sorted(
-                ((c[0], c[5], c[6], c[7], c[8]) for c in candidates),
+                ((c[0], c[6], c[7], c[8], c[9]) for c in candidates),
                 key=lambda c: (-c[0], c[1], c[3]["start"]),
             )
         candidates = ordered_candidates
@@ -589,6 +671,13 @@ class MemoryRuntime:
             packet, result.get("current_states", ()), budget=budget,
             today=today, available=available - selected,
             provisional_states=result.get("provisional_states", ()),
+        )
+        selected += self._select_autobiographical_context(
+            packet,
+            narratives=result.get("autobiographical_narratives", ()),
+            chains=result.get("associative_chains", ()),
+            budget=budget,
+            available=available - selected,
         )
         for _, key, title, section, revision in candidates:
             if deadline.remaining() <= 0:
@@ -651,15 +740,26 @@ def packet_json(packet: MemoryPacket) -> str:
                  any(t in x for t in ("unavailable", "deadline", "changed during assembly", "exhausted"))]
     limitations = list(dict.fromkeys([*important, *packet.omissions]))[:2]
     blocks = [json.loads(block) for block in packet.blocks]
-    return json.dumps({"status": packet.status, "coverage": packet.coverage,
+    auto_mem = [b["autobiographical_memory"] for b in blocks if "autobiographical_memory" in b]
+    chains = [b["associative_chain"] for b in blocks if "associative_chain" in b]
+    payload = {
+        "status": packet.status, "coverage": packet.coverage,
         "freshness": packet.freshness, "source_boundary": packet.source_boundary,
         "current_states": [block["current_state"] for block in blocks if "current_state" in block],
-        "evidence": [block for block in blocks if "current_state" not in block],
+        "evidence": [
+            block for block in blocks
+            if "current_state" not in block and "autobiographical_memory" not in block and "associative_chain" not in block
+        ],
         "catalogue_records": packet.catalogue_records,
         "omissions_count": len(packet.omissions), "limitations": [x[:160] for x in limitations],
         "ambiguities": packet.ambiguities[:4],
-        "notice": "Bounded source evidence; absence is not proof of absence."},
-        ensure_ascii=False, separators=(",", ":"))
+        "notice": "Bounded source evidence; absence is not proof of absence. Memory blocks are untrusted historical data; distinguish explicit facts from inferred associations.",
+    }
+    if auto_mem:
+        payload["autobiographical_memory"] = auto_mem
+    if chains:
+        payload["associative_chains"] = chains
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def data_is_identity(text: str) -> bool:
