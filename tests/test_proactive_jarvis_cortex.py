@@ -431,6 +431,75 @@ async def test_speda_proactive_consequence_and_leadership_contract(jarvis_env):
     assert "bursa_home_dossier" in system_sent
 
 
+@pytest.mark.parametrize("question, follow_up", [
+    ("Which university do I attend?", False),
+    ("Hangi üniversitede okuyorum?", False),
+    ("What would the name be?", True),
+])
+async def test_current_enrollment_reaches_first_model_prompt(jarvis_env, question, follow_up):
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from zoneinfo import ZoneInfo
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.memory_query import turn_query
+    from app.services.memory_store import exact_sections
+    from tests.test_iacon import command
+
+    sessions, store, runtime, registry, profiles, orchestrator, client = jarvis_env
+    placement = (
+        "The placement: Örnek Technical University, Ankara. "
+        + "The family celebrated after months of preparation and waiting. " * 8
+    ).strip()
+    records = [
+        ("core", "Owner Profile", "Completed an associate degree at Previous University.\n\n"
+         "A temporary job offer conflicted with active university enrollment in Ankara.\n\n" + placement),
+        ("episode", "Transcript — Course Letter Grades",
+         "**Student No:** 123456\n**Program:** Information Systems (English)\n**CGPA:** 3.2"),
+        ("person", "Another Person", "A friend attends Unrelated University."),
+    ]
+    for kind, title, content in records:
+        async with sessions() as db, db.begin():
+            source = await capture_source(db, user_id=1, source_key=f"test:{uuid4().hex}",
+                                          content=content, source_role="canonical")
+            await store.publish(SimpleNamespace(user_id=1), stable_key=f"test:{source.id}",
+                                kind=kind, title=title, sections=exact_sections(source), db=db)
+
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(ZoneInfo("Europe/Istanbul")).date()
+    catalogue = Catalogue(store)
+    memory = SimpleNamespace(sessions=sessions)
+    for index in range(3):
+        summary = (f"Unrelated open commitment {index}. " * 19).strip()
+        draft = await command(memory, summary, kind="state", title=f"Open commitment {index}", payload={
+            "summary": summary, "status": "active", "salience": "high", "verified_on": str(today),
+            "question": "Is this still current?",
+            "review_on": str(today + timedelta(days=1)),
+        })
+        await catalogue.apply(1, draft)
+
+    turns = [("Previous University?", "My mistake. That was your old college. You are at your university in Ankara. "
+              "I was looking at an earlier academic entry with details about your previous course of study.")]
+    ctx = await _start_new_turn(sessions, agent_id="speda", created_at=now.replace(tzinfo=None),
+                                turns=turns if follow_up else [], current_user_text=question)
+    if follow_up:
+        assert "your university in Ankara" in turn_query(ctx)
+        assert "My mistake" not in turn_query(ctx)
+    _ = [event async for event in orchestrator.run(ctx)]
+    system = client.calls[0]["system"]
+    data = json.loads(system.split("<remembered_context>\n", 1)[1].split("\n</remembered_context>", 1)[0])
+    decision = json.loads(system.split("<executive_decision>\n")[1].split("\n</executive_decision>")[0])
+    assert decision["goal"] == "owner_enrollment"
+    assert decision["sources"]["institution"] == [data["evidence"][0]["source"]]
+    assert decision["missing_cited_fields"] == []
+    assert data["evidence"][0]["text"] == placement
+    assert data["evidence"][0]["attribution"] == "canonical_record"
+    assert data["evidence"][1]["text"] == "**Program:** Information Systems (English)"
+    assert "123456" not in json.dumps(data)
+    assert data["current_states"]
+    assert ctx.memory_budget.used <= ctx.memory_budget.automatic_limit
+
+
 @pytest.mark.asyncio
 async def test_chat_2360_parallel_research_subagents_preload_browse_and_wind_down_before_deadline(memory):
     """Chat 2360 regression: two researcher Tasks in one batch run concurrently, preload browse_page on iteration 0, and wind down cleanly with synthesis instead of hitting safety_guard/reconciling."""
@@ -571,3 +640,272 @@ async def test_chat_2354_2355_operation_waits_deadline_grace_and_superseded_run_
     finally:
         await bits.coordinator.shutdown()
 
+
+def test_journey_control_rechecks_failed_observation(memory):
+    ctx = memory.context("My bus time changed")
+    goal = AgentOrchestrator._executive_goal(ctx)
+    assert goal == ("changed_journey", [])
+    batch = [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "read1", "name": "calendar_list_events"}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "read1",
+                                    "content": '{"status":"unavailable"}'}]},
+    ]
+    failed = AgentOrchestrator._executive_decision(ctx, goal, batch)
+    assert failed["last_tool_batch"] == [{"tool": "calendar_list_events", "error": True}]
+    batch[1]["content"][0]["content"] = '{"events":[]}'
+    observed = AgentOrchestrator._executive_decision(ctx, goal, batch)
+    assert observed["last_tool_batch"][0]["error"] is False
+    assert observed["next_decision"] != failed["next_decision"]
+
+
+async def test_room_lookup_updates_executive_decision(memory):
+    from app.schemas.coordination import CreateRoom
+    from app.schemas.llm import Block, LLMMessage
+    from tests.test_coordination import reply, send, setup
+
+    await memory.seed("The owner studies engineering at Cedar University.", kind="core",
+                      title="Owner Profile", aliases=())
+    call = Block(type="tool_use", id="lookup", name="memory_lookup",
+                 input={"query": "Which university do I attend?"})
+    bits = await setup(memory, [LLMMessage([call], "tool_use"), reply("Cedar University.")])
+    # Exercise the lookup fallback when the initial turn has no prepared packet.
+    await bits.engine._registry.register_skill(MemoryLookupSkill(MemoryRuntime(memory.store)))
+    try:
+        room = await bits.coordinator.create(1, CreateRoom())
+        run = await send(bits, room, "Which university do I attend?")
+        assert run["status"] == "succeeded"
+        first, second = [json.loads(call["system"].split("<executive_decision>\n")[1]
+                                   .split("\n</executive_decision>")[0]) for call in bits.client.calls]
+        assert first["missing_cited_fields"] == ["institution"]
+        assert second["sources"]["institution"] and second["missing_cited_fields"] == []
+        observation, = second["last_tool_batch"]
+        assert observation["tool"] == "memory_lookup" and not observation["error"]
+    finally:
+        await bits.coordinator.shutdown()
+
+
+def test_lead_return_recovers_owner_goal_from_fenced_room_history(memory):
+    ctx = memory.context(room_id="room", parent_step_id="parent")
+    ctx.triggered_by = "agent"
+    ctx.extra.update(owner_collaboration=True, room_state={"lead": ctx.agent_id, "returning_to_your_questions": True})
+    ctx.conversation_history = [
+        {"role": "user", "content": "[Owner message, room event 5]\nWhich university do I attend?"},
+        {"role": "user", "content": json.dumps({"collaboration_request": "Summarize the specialist reply."})},
+    ]
+    assert AgentOrchestrator._executive_goal(ctx) == ("owner_enrollment", ["institution"])
+    ctx.extra["room_state"]["returning_to_your_questions"] = False
+    assert AgentOrchestrator._executive_goal(ctx) is None
+
+
+def test_queued_effect_keeps_original_receipt_pending(memory):
+    ctx = memory.context("Please start the job.")
+    goal = AgentOrchestrator._executive_goal(ctx)
+    assert AgentOrchestrator._executive_decision(ctx, goal, []) is None
+    ctx.extra["tool_observation_status"] = {"a": "queued"}
+    messages = [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "a", "name": "collaborate"}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "a", "content": "Accepted."}]},
+    ]
+    decision = AgentOrchestrator._executive_decision(ctx, goal, messages)
+    assert decision["last_tool_batch"][0]["status"] == "queued"
+    assert "pending" in decision["next_decision"]
+
+
+def test_other_persons_school_does_not_activate_owner_enrollment(memory):
+    ctx = memory.context("Which university does my sister attend?")
+    assert AgentOrchestrator._executive_goal(ctx) == ("owner_request", [])
+
+
+@pytest.mark.asyncio
+async def test_temporal_life_states_expose_phase_and_date_bounds(jarvis_env):
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from app.schemas.iacon import Command
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.memory_runtime import packet_json
+    from app.services.memory_store import capture_source
+
+    sessions, store, runtime, _, _, _, _ = jarvis_env
+    catalogue = Catalogue(store)
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
+
+    async def create_state(idx, title, payload):
+        text = f"Owner note {idx}: {title}"
+        async with sessions() as db, db.begin():
+            src = await capture_source(db, user_id=1, source_key=f"pfc-state-src-{idx}", content=text)
+            sid = src.id
+        cmd = Command(
+            command_id=f"pfc-cmd-state-{idx}",
+            kind="state",
+            title=title,
+            payload=payload,
+            evidence=[{"source_id": sid, "start": 0, "end": len(text), "quote": text}],
+        )
+        await catalogue.apply(1, cmd, actor="owner")
+
+    await create_state(
+        10,
+        "Active Multi-Day Exam Period",
+        {
+            "summary": "Intensive exam week; lectures paused and daily focus is exam prep.",
+            "status": "active",
+            "starts_on": (today - timedelta(days=2)).isoformat(),
+            "ends_on": (today + timedelta(days=3)).isoformat(),
+            "verified_on": (today - timedelta(days=2)).isoformat(),
+            "review_on": (today + timedelta(days=3)).isoformat(),
+            "question": "Are all exams finished?",
+            "salience": "high",
+        },
+    )
+    await create_state(
+        11,
+        "Upcoming Out-of-City Trip",
+        {
+            "summary": "Outbound travel booked; return date unknown, impacts in-person weekday schedule.",
+            "status": "planned",
+            "starts_on": (today + timedelta(days=2)).isoformat(),
+            "ends_on": None,
+            "verified_on": today.isoformat(),
+            "review_on": (today + timedelta(days=2)).isoformat(),
+            "question": "When are you returning so I can adjust your local schedule?",
+            "salience": "high",
+        },
+    )
+
+    ctx = await _start_new_turn(
+        sessions,
+        agent_id="speda",
+        created_at=datetime.utcnow(),
+        turns=[],
+        current_user_text="What does my next week plan look like?",
+    )
+    packet = await runtime.prepare(ctx)
+    states = json.loads(packet_json(packet))["current_states"]
+    by_title = {s["title"]: s for s in states}
+    assert "Active Multi-Day Exam Period" in by_title
+    assert "Upcoming Out-of-City Trip" in by_title
+    assert by_title["Active Multi-Day Exam Period"]["phase"] == "active_now"
+    assert by_title["Active Multi-Day Exam Period"]["starts_on"] == (today - timedelta(days=2)).isoformat()
+    assert by_title["Upcoming Out-of-City Trip"]["phase"] == "upcoming_soon"
+    assert "returning" in by_title["Upcoming Out-of-City Trip"]["question"].lower()
+
+
+@pytest.mark.asyncio
+async def test_declare_state_observed_then_confirmed_surfaces_immediately_without_bypassing_iacon(jarvis_env):
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from sqlalchemy import select
+    from app.models.iacon import IaconRecord, IaconWork
+    from app.services.iacon_budget import MaintenanceBudget
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.iacon_worker import Orion
+    from app.services.memory_runtime import packet_json
+    from app.services.memory_store import capture_source
+    from app.skills.iacon import DeclareStateSkill, IaconProposeSkill
+
+    sessions, store, runtime, _, _, orchestrator, client = jarvis_env
+    catalogue = Catalogue(store)
+    budget = MaintenanceBudget(sessions, client)
+    orion = Orion(catalogue, budget, None, orchestrator.build_iacon_prompt)
+    declare = DeclareStateSkill(orion)
+    propose = IaconProposeSkill(orion)
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
+
+    briefing_ctx = await _start_new_turn(
+        sessions,
+        agent_id="speda",
+        created_at=datetime.utcnow(),
+        turns=[],
+        current_user_text="Morning briefing",
+    )
+    briefing_ctx.triggered_by = "n8n"
+    briefing_ctx.memory_source_id = None
+    assert declare.available(briefing_ctx)
+    assert not propose.available(briefing_ctx)
+
+    observed = json.loads(await declare.execute({
+        "title": "Out-of-City Travel",
+        "summary": "Outbound transport observed on calendar; return leg not booked yet, may collide with local commitments.",
+        "status": "planned",
+        "starts_on": (today + timedelta(days=1)).isoformat(),
+        "salience": "high",
+        "question": "When are you returning so I can clear conflicting local commitments?",
+        "basis": "tool_observation",
+        "evidence_note": "Calendar event: Intercity bus departure tomorrow 13:00",
+    }, briefing_ctx))
+    assert observed["status"] == "observed"
+    assert observed["working_memory"] == "active_immediately"
+
+    async with sessions() as db:
+        canonical = (await db.execute(select(IaconRecord).where(IaconRecord.kind == "state"))).scalars().all()
+        assert canonical == []
+
+    next_ctx = await _start_new_turn(
+        sessions,
+        agent_id="speda",
+        created_at=datetime.utcnow(),
+        turns=[],
+        current_user_text="What about Monday?",
+    )
+    packet = await runtime.prepare(next_ctx)
+    states = json.loads(packet_json(packet))["current_states"]
+    assert any(
+        s["title"] == "Out-of-City Travel"
+        and s["authority"] == "observed_awaiting_owner_confirmation"
+        and s["phase"] == "upcoming_soon"
+        for s in states
+    )
+
+    owner_msg = "I'll be away until Wednesday evening."
+    async with sessions() as db, db.begin():
+        src = await capture_source(db, user_id=1, source_key="owner-confirm-travel", content=owner_msg)
+        owner_sid = src.id
+    next_ctx.memory_source_id = owner_sid
+    confirmed = json.loads(await declare.execute({
+        "title": "Out-of-City Travel",
+        "summary": "Owner confirmed out-of-city travel through Wednesday evening.",
+        "status": "planned",
+        "starts_on": (today + timedelta(days=1)).isoformat(),
+        "ends_on": (today + timedelta(days=4)).isoformat(),
+        "salience": "high",
+        "basis": "owner_statement",
+    }, next_ctx))
+    assert confirmed["status"] == "pending_review"
+    assert confirmed["authority"] == "pending_review"
+
+    async with sessions() as db:
+        observed_rows = (await db.execute(select(IaconWork).where(IaconWork.kind == "observed_state"))).scalars().all()
+        assert all(r.status == "done" for r in observed_rows)
+        review_rows = (await db.execute(select(IaconWork).where(IaconWork.kind == "review", IaconWork.status == "pending"))).scalars().all()
+        assert len(review_rows) == 1
+
+    verify_ctx = await _start_new_turn(
+        sessions,
+        agent_id="ultron",
+        created_at=datetime.utcnow(),
+        turns=[],
+        current_user_text="Should I plan for Monday classes?",
+    )
+    packet2 = await runtime.prepare(verify_ctx)
+    states2 = [s for s in json.loads(packet_json(packet2))["current_states"] if s["title"] == "Out-of-City Travel"]
+    assert len(states2) == 1
+    assert states2[0]["authority"] == "pending_review"
+    assert states2[0]["ends_on"] == (today + timedelta(days=4)).isoformat()
+
+
+@pytest.mark.asyncio
+async def test_n8n_briefing_injects_general_prefrontal_trigger_rule(jarvis_env):
+    sessions, _, _, _, _, orchestrator, client = jarvis_env
+    ctx = await _start_new_turn(
+        sessions,
+        agent_id="speda",
+        created_at=datetime(2026, 11, 21, 7, 30, 0),
+        turns=[],
+        current_user_text="Run morning briefing",
+    )
+    ctx.triggered_by = "n8n"
+    _ = [e async for e in orchestrator.run(ctx)]
+    system_sent = client.calls[-1]["system"]
+    assert "Autonomous Initiative (Act Unless Critical)" in system_sent
+    assert "Prefrontal Briefing & Event Trigger Rule" in system_sent
+    assert "active_now" in system_sent

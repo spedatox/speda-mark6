@@ -196,7 +196,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.services.library_indexer import LibraryIndexer
     from app.services.library import LibraryService
     from app.services.library_controls import LibraryControls
-    from app.skills.iacon import IaconProposeSkill
+    from app.skills.iacon import IaconProposeSkill, DeclareStateSkill
     catalogue = Catalogue(memory_store)
     budget = MaintenanceBudget(AsyncSessionLocal, client)
     preparer = Orion(catalogue, budget, model_policy, orchestrator.build_iacon_prompt,
@@ -214,6 +214,7 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     from app.skills.search_history import SearchHistorySkill
     await registry.register_skill(SearchHistorySkill(lookup))
     await registry.register_skill(IaconProposeSkill(preparer))
+    await registry.register_skill(DeclareStateSkill(preparer))
     titles = SessionTitles(AsyncSessionLocal, client)
     chat_turns = ChatTurns(session_manager, profile, orchestrator, preparer, AsyncSessionLocal, titles=titles)
     from app.services.coordination import Coordinator

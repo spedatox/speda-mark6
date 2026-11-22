@@ -1,4 +1,5 @@
 """Local query routing over attributed conversation content, never prompt authority."""
+from datetime import date, timedelta
 import json
 import re
 
@@ -68,6 +69,31 @@ def withdrawal_reply(context):
         return None
 
 
+def planning_window(query, today):
+    """Inclusive owner-local dates for common personal planning questions."""
+    text = fold(query.partition("\n")[0])
+    monday = today - timedelta(days=today.weekday())
+    explicit_dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+    if 1 <= len(explicit_dates) <= 2:
+        try:
+            first, last = date.fromisoformat(explicit_dates[0]), date.fromisoformat(explicit_dates[-1])
+            if today <= first <= last:
+                return first, last
+        except ValueError:
+            pass
+    if re.search(r"\b(next weekend|(?:gelecek|onumuzdeki) hafta sonu)\b", text):
+        return monday + timedelta(days=12), monday + timedelta(days=13)
+    if re.search(r"\b(next week|gelecek hafta|onumuzdeki hafta)\b", text):
+        return monday + timedelta(days=7), monday + timedelta(days=13)
+    if re.search(r"\b(this week|bu hafta)\b", text) and not re.search(r"weekend|hafta sonu", text):
+        return today, monday + timedelta(days=6)
+    if re.search(r"\b(this weekend|bu hafta sonu)\b", text):
+        return max(today, monday + timedelta(days=5)), monday + timedelta(days=6)
+    if re.search(r"\b(tomorrow|yarin)\b", text):
+        return today + timedelta(days=1), today + timedelta(days=1)
+    return today, today
+
+
 def referential(value):
     folded = fold(value)
     return len(value) < 180 and (
@@ -79,6 +105,37 @@ def referential(value):
         ))
         or len(re.findall(r"\w+", folded)) <= 5
     )
+
+
+_NAME_QUESTION = re.compile(r"\b(?:names?|adlari|isimleri|adi)\b")
+SCHOOL_TERM = re.compile(r"\b(?:universit\w*|college|school|okul\w*)\b")
+_OWNER_SCHOOL = re.compile(
+    r"\b(?:my|your|owner(?:['’]s)?)\b(?:\W+\w+){0,3}\W+(?:universit\w*|college|school)\b"
+    r"|\b(?:universitem\w*|okulum\w*)\b"
+)
+_PAST_SCHOOL = re.compile(r"\b(?:old|former|previous|used to|graduated|once|eski|onceki|mezun)\b")
+
+
+def education_fact_query(query):
+    """Recognize a current enrollment or program question from the owner turn."""
+    primary, _, borrowed = fold(query).partition("\n")
+    if _PAST_SCHOOL.search(primary):
+        return False
+    if re.search(r"\b(?:where (?:do i study|am i enrolled)|what (?:do i study|am i studying)|"
+                 r"(?:what|which) is my (?:major|degree|program|school)|my major|"
+                 r"ne okuyorum|bolumum|hangi bolum\w*)\b", primary):
+        return True
+    if SCHOOL_TERM.search(primary):
+        owner_subject = re.search(r"\b(?:i|owner|okuyorum|my (?:current )?(?:university|college|school))\b", primary)
+        if owner_subject and re.search(
+            r"\b(?:which|what|hangi|name|adi|attend|enroll\w*|okuyor\w*)\b", primary
+        ):
+            return True
+        if re.fullmatch(r"(?:my (?:university|college|school)|universitem\w*|okulum\w*)", primary.strip(" ?.?!")):
+            return True
+    referent = borrowed.partition("\n")[0]
+    return bool(_NAME_QUESTION.search(primary) and _OWNER_SCHOOL.search(referent)
+                and not _PAST_SCHOOL.search(referent))
 
 
 def turn_query(context, query=None) -> str:
@@ -96,20 +153,30 @@ def turn_query(context, query=None) -> str:
     history = conversation_content(context)
     latest = next((i for i in range(len(history)-1, -1, -1) if history[i][0] in {"user", "query"}), None)
     value = query if query is not None else (history[latest][1] if latest is not None else "")
-    if latest is not None and referential(value):
+    if latest is not None and referential(value) and not education_fact_query(value):
         # Borrow nearby user and assistant context when the turn is short, referential, or deictic
         # (e.g. "hey speda" -> "Im on my way still" -> "how far am I from the destination",
         # or "You have a younger brother and a sister." -> "theri names?").
-        name_follow_up = bool(re.search(r"\b(names?|adlari|isimleri)\b", fold(value)))
+        name_follow_up = bool(_NAME_QUESTION.search(fold(value)))
         borrowed = []
         for _, prior in reversed(history[max(0, latest-6):latest]):
-            if query_terms(prior) and not (name_follow_up and referential(prior)):
-                referent = prior[:1200]
-                if name_follow_up:
-                    referent = re.split(r"(?<=[.!?])\s", referent, maxsplit=1)[0]
-                borrowed.append(referent)
-                if name_follow_up or len(borrowed) >= 2:
-                    break
+            if not query_terms(prior):
+                continue
+            referent = prior[:1200]
+            if name_follow_up:
+                sentences = re.split(r"(?<=[.!?])\s+", referent)
+                first = sentences[0]
+                school = None
+                if not relations(first):
+                    school = next((sentence for sentence in sentences
+                                   if _OWNER_SCHOOL.search(fold(sentence))
+                                   and not _PAST_SCHOOL.search(fold(sentence))), None)
+                if not school and referential(prior) and not education_fact_query(prior):
+                    continue
+                referent = school or first
+            borrowed.append(referent)
+            if name_follow_up or len(borrowed) >= 2:
+                break
         if borrowed:
             value += "\n" + "\n".join(borrowed)
     value += "\n" + str(context.extra.get("attachment_text", ""))[:2000]

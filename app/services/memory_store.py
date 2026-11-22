@@ -283,28 +283,67 @@ class MemoryStore:
             person_ids.update(relation_ids)
             units, hits = list(core), []
             state_candidates = []
+            work_rows = []
             if include_recent:
-                today = datetime.now(ZoneInfo(context.timezone)).date().isoformat()
+                from app.models.iacon import IaconWork
+                from app.services.memory_query import planning_window, turn_query
+                local_day = datetime.now(ZoneInfo(context.timezone)).date()
+                today = local_day.isoformat()
+                query = turn_query(context)
+                start_day, end_day = planning_window(query, local_day)
+                primary = fold(query.partition("\n")[0])
+                planning = (start_day != local_day or end_day != local_day or bool(re.search(
+                    r"\b(plan\w*|schedule|calendar|travel\w*|trip|vacation|holiday|midterm\w*|exam\w*|"
+                    r"study|bus|flight|takvim\w*|tatil\w*|seyahat\w*|gezi\w*|vize\w*|sinav\w*|"
+                    r"agenda|briefing|good morning|gunaydin|what should i focus on|haftalik plan)\b", primary))
+                    or bool(context.trigger_payload.get("include_attention_digest") or context.trigger_payload.get("attention_only")))
                 payload = IaconRecord.payload
                 status = payload["status"].as_string()
                 high = payload["salience"].as_string() == "high"
                 review = payload["review_on"].as_string()
                 verified = payload["verified_on"].as_string()
                 starts, ends = payload["starts_on"].as_string(), payload["ends_on"].as_string()
+                state_order = []
+                if planning:
+                    dated = or_(starts.is_not(None), ends.is_not(None))
+                    # Promote matching titles before the database candidate cutoff.
+                    # A dated commitment can matter even when its title shares no word with the question.
+                    from app.services.memory_query import query_terms
+                    generic_terms = {"next", "week", "tomorrow", "today", "should", "plan", "calendar",
+                                     "schedule", "hangi", "hafta", "gelecek", "onumuzdeki", "yarin"}
+                    title_terms = {word for word in query_terms(primary) if len(word) >= 4} - generic_terms
+                    for cue, labels in (
+                        (r"\b(?:study|studying|midterm\w*|exam\w*|vize\w*|sinav\w*)", ("exam", "midterm", "vize", "sınav")),
+                        (r"\b(?:trip|travel\w*|flight|bus|seyahat\w*|yolculuk\w*)", ("trip", "travel", "seyahat", "yolculuk")),
+                        (r"\b(?:vacation|holiday|tatil\w*)", ("vacation", "holiday", "tatil")),
+                    ):
+                        if re.search(cue, primary):
+                            title_terms.update(labels)
+                    if title_terms:
+                        title_matches = or_(*(func.lower(IaconRecord.title).contains(word, autoescape=True)
+                                              for word in sorted(title_terms)))
+                        state_order.append(case((title_matches, 0), else_=1))
+                    state_order.append(case((and_(starts.is_not(None), ends.is_not(None)), 0),
+                                            (dated, 1), else_=2))
                 state_candidates = (await db.execute(select(MemoryServingUnit, IaconRecord).join(IaconRecord,
                     MemoryServingUnit.stable_key == literal("iacon:") + IaconRecord.id).where(
                     MemoryServingUnit.user_id == context.user_id, IaconRecord.user_id == context.user_id,
                     IaconRecord.kind == "state", IaconRecord.status == "accepted",
                     status.in_(("active", "waiting", "planned")), payload["closed_on"].as_string().is_(None),
                     verified <= today, or_(high, review > today),
-                    or_(starts.is_(None), starts <= today), or_(ends.is_(None), ends >= today),
-                ).order_by(case((and_(high, status == "active"), 0), (high, 1),
+                    or_(starts.is_(None), starts <= end_day.isoformat()), or_(ends.is_(None), ends >= start_day.isoformat()),
+                ).order_by(*state_order, case((and_(high, status == "active"), 0), (high, 1),
                                (payload["salience"].as_string() == "low", 3), else_=2),
                            verified.desc(),
                            case((status == "active", 0), (status == "waiting", 1), else_=2),
                            IaconRecord.updated_at.desc(),
-                           MemoryServingUnit.id).limit(8))).all()
+                           MemoryServingUnit.id).limit(12))).all()
                 units.extend(unit for unit, _ in state_candidates)
+                work_rows = (await db.execute(select(IaconWork).where(
+                    IaconWork.user_id == context.user_id,
+                    IaconWork.kind.in_(["review", "observed_state"]),
+                    IaconWork.status.in_(["pending", "observed"]),
+                ).order_by(IaconWork.updated_at.desc(), IaconWork.id).limit(12))).scalars().all()
             recent_ids = set()
             if person_ids:
                 units += (await db.execute(select(MemoryServingUnit).where(
@@ -366,6 +405,8 @@ class MemoryStore:
                 self.cache.popitem(last=False)
             valid_by_key = {unit["key"]: unit for unit in valid_units}
             current_states = []
+            canonical_state_ids = set()
+            canonical_state_titles = set()
             for unit, state in state_candidates:
                 valid = valid_by_key.get(unit.stable_key)
                 if valid is None:
@@ -373,9 +414,46 @@ class MemoryStore:
                 for section in valid["sections"]:
                     provenance = deps[section["source_id"]].provenance
                     if provenance.get("iacon_record") == state.id and provenance.get("version") == state.version:
+                        canonical_state_ids.add(state.id)
+                        canonical_state_titles.add(fold(state.title))
                         current_states.append({"record_id": state.id, "version": state.version, "title": state.title,
                             "payload": state.payload, "section": section, "revision": unit.revision})
                         break
+            provisional_states = []
+            seen_provisional_titles = set()
+            for work in work_rows:
+                raw_payload = work.payload if isinstance(work.payload, dict) else {}
+                if work.kind == "review":
+                    cmd = raw_payload.get("command")
+                    if not isinstance(cmd, dict) or cmd.get("kind") != "state":
+                        continue
+                    state_payload = cmd.get("payload")
+                    title = str(cmd.get("title") or "").strip()
+                    record_id = cmd.get("record_id")
+                    authority = "pending_review"
+                    basis = "owner_statement"
+                    evidence_note = None
+                else:
+                    state_payload = raw_payload.get("state")
+                    title = str(raw_payload.get("title") or "").strip()
+                    record_id = raw_payload.get("record_id")
+                    authority = "observed_awaiting_owner_confirmation"
+                    basis = str(raw_payload.get("basis") or "tool_observation")
+                    evidence_note = raw_payload.get("evidence_note")
+                if not title or not isinstance(state_payload, dict) or state_payload.get("closed_on"):
+                    continue
+                folded_title = fold(title)
+                if (record_id and record_id in canonical_state_ids) or folded_title in canonical_state_titles or folded_title in seen_provisional_titles:
+                    continue
+                seen_provisional_titles.add(folded_title)
+                provisional_states.append({
+                    "work_id": work.id,
+                    "title": title,
+                    "authority": authority,
+                    "basis": basis,
+                    "evidence_note": evidence_note,
+                    "payload": state_payload,
+                })
             source_rows = {s.id: s for s in hits if
                 (s.id not in retired_ids or s.id in source_ids) and
                 (s.provenance.get("eligible_for_context", True) or s.id in source_ids) and
@@ -431,6 +509,7 @@ class MemoryStore:
                 _, removed = self.source_cache.popitem(last=False)
                 self.source_cache_bytes -= removed["size"]
             return {"epoch": epoch, "boundary": boundary, "units": valid_units, "current_states": current_states,
+                    "provisional_states": provisional_states,
                     "entity_terms": sorted(name_terms),
                     "relation_keys": {u.stable_key for u in units if u.id in relation_ids},
                     "contexts": {s.id: s.provenance.get("prior_context")

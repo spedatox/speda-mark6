@@ -305,8 +305,9 @@ async def search_archive(
         else set()
     )
 
-    q_ngrams = char_ngrams(query) if ranked else None
-    q_concepts = concept_vector(query) if ranked else None
+    score_candidates = ranked and not reference_ids
+    q_ngrams = char_ngrams(query) if score_candidates else None
+    q_concepts = concept_vector(query) if score_candidates else None
     now_utc = local_now.astimezone(timezone.utc)
 
     results = []
@@ -369,7 +370,7 @@ async def search_archive(
                 "partial_message": start > 0 or start + len(excerpt) < len(body_text(message.content)),
             }
         )
-        if ranked:
+        if score_candidates:
             msg_time = message.created_at
             if msg_time.tzinfo is None:
                 msg_time = msg_time.replace(tzinfo=timezone.utc)
@@ -383,7 +384,7 @@ async def search_archive(
                 query_concepts=q_concepts,
                 age_hours=age_hours,
             )
-        elif len(results) >= min(8, max(1, limit)):
+        elif not ranked and len(results) >= min(8, max(1, limit)):
             break
 
     more = bool(candidates and (consumed != candidates[-1][0].id or len(candidates) > candidate_limit))

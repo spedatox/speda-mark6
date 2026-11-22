@@ -74,6 +74,11 @@ _CONCEPT_DIMENSIONS: dict[str, tuple[str, ...]] = {
         "brute", "ssh", "attack", "compromise", "suspended", "suspension", "security", "breach",
     ),
 }
+_CONCEPT_PREFIXES = {
+    dimension: [(term, {term[:length] for length in range(4, len(term))}) for term in terms]
+    for dimension, terms in _CONCEPT_DIMENSIONS.items()
+}
+_MAX_CONCEPT_TERM = max(len(term) for terms in _CONCEPT_DIMENSIONS.values() for term in terms)
 
 _RELIEF_OR_OPENING_CUE = re.compile(
     r"^\s*(?:phew+|whew+|uff+|of+|oh\s+man|oh\s+boy|thank\s+god|finally|well\.{2,}|[a-z_]+\.{3,}|"
@@ -136,19 +141,20 @@ def concept_vector(text: str) -> Counter[str]:
     """Project text into latent bilingual semantic concept dimensions."""
     folded = fold(text)
     raw_words = re.findall(r"\w+", folded)
-    words = [w for w in raw_words] + [_normalize_token(w) for w in raw_words]
-    word_set = set(words)
+    word_set = set(raw_words) | {_normalize_token(word) for word in raw_words}
+    word_prefixes = {word[:length] for word in word_set
+                     for length in range(4, min(len(word), _MAX_CONCEPT_TERM + 1))}
     vec: Counter[str] = Counter()
     if _RELIEF_OR_OPENING_CUE.match(folded.strip()):
         # Emotional relief / post-event exhale strongly correlates with active exams/commitments.
         vec["academic_exam_grade"] += 3
         vec["schedule_time_commitment"] += 1
-    for dim, vocab in _CONCEPT_DIMENSIONS.items():
+    for dim, vocab in _CONCEPT_PREFIXES.items():
         hits = 0
-        for term in vocab:
+        for term, term_prefixes in vocab:
             if term in word_set:
                 hits += 2
-            elif len(term) >= 4 and any(w.startswith(term) or term.startswith(w) for w in word_set if len(w) >= 4):
+            elif term in word_prefixes or not word_set.isdisjoint(term_prefixes):
                 hits += 1
         if hits:
             vec[dim] += hits

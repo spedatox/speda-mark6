@@ -425,3 +425,34 @@ def test_write_contract_is_explicit_but_not_in_everyday_answer_context(memory):
     branches = schema["properties"]["payload"]["oneOf"]
     state = next(b for b in branches if b["title"] == "State")
     assert {"review_on", "verified_on", "question", "status"}.issubset(state["required"])
+
+
+async def test_planning_states_survive_competing_incidents_and_keep_dates(memory):
+    ctx = memory.context("What should I study next week?")
+    today = datetime.now(ZoneInfo(ctx.timezone)).date()
+    monday = today + timedelta(days=7 - today.weekday())
+    sunday = monday + timedelta(days=6)
+    catalogue = Catalogue(memory.store)
+
+    async def save(title, salience="normal", **dates):
+        draft = await command(memory, title, kind="state", title=title, payload={
+            "summary": title, "status": "planned", "salience": salience, "question": "Still current?",
+            "verified_on": str(today), "review_on": str(sunday + timedelta(days=3)), **dates})
+        await catalogue.apply(1, draft)
+
+    for index in range(9):
+        await save(f"Server incident {index}", "high")
+    for title in ("Midterm week", "Family trip", "Vacation"):
+        await save(title, starts_on=str(monday), ends_on=str(sunday))
+    await save("Expired exam week", ends_on=str(today - timedelta(days=1)))
+    await save("Later exam week", starts_on=str(sunday + timedelta(days=1)))
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2)
+    for question, first in ((ctx.conversation_history[0]["content"], "Midterm week"),
+                            ("Gelecek hafta seyahat planım nedir?", "Family trip"),
+                            ("What about my vacation next week?", "Vacation")):
+        result = json.loads(packet_json(await runtime.prepare(memory.context(question))))
+        states = result["current_states"]
+        assert states[0]["title"] == first
+        assert {s["title"] for s in states} == {"Midterm week", "Family trip", "Vacation"}
+        assert all(s["starts_on"] == str(monday) and s["ends_on"] == str(sunday)
+                   and s["timing"] == "upcoming" for s in states)

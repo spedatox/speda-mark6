@@ -75,6 +75,162 @@ class Orion:
                            payload={"command": command.model_dump(mode="json")})
         return {"status": "pending_review", "command_id": command.command_id}
 
+    async def declare_state(self, context, args: dict):
+        """Record a live situational state in working memory and queue canonical review when owner-evidenced.
+
+        Canonical writes still go exclusively through Catalogue.apply() after Orion review.
+        Tool-observed states (e.g., from calendar/email during a briefing) are stored as
+        durable observed_state working-memory items awaiting owner confirmation.
+        """
+        from datetime import date
+        import re
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        from app.models.iacon import IaconRecord
+        from app.schemas.iacon import State
+        from app.services.memory_store import fold
+        from app.services.memory_runtime import classify_state_phase
+
+        title = str(args.get("title") or "").strip()[:256]
+        summary = str(args.get("summary") or "").strip()[:4000]
+        if not title or not summary:
+            raise ValueError("title and summary are required")
+        status = str(args.get("status") or "active").strip()
+        salience = str(args.get("salience") or "high").strip()
+        basis = str(args.get("basis") or "owner_statement").strip()
+        if basis not in {"owner_statement", "tool_observation"}:
+            raise ValueError("basis must be 'owner_statement' or 'tool_observation'")
+        try:
+            today = datetime.now(ZoneInfo(context.timezone)).date()
+        except (ValueError, ZoneInfoNotFoundError):
+            today = datetime.now(timezone.utc).date()
+
+        starts_on = date.fromisoformat(args["starts_on"][:10]) if args.get("starts_on") else None
+        ends_on = date.fromisoformat(args["ends_on"][:10]) if args.get("ends_on") else None
+        if starts_on and ends_on and ends_on < starts_on:
+            raise ValueError("ends_on cannot precede starts_on")
+        terminal = status in {"completed", "cancelled", "superseded"}
+        closed_on = today if terminal else None
+        if args.get("review_on"):
+            review_on = max(today, date.fromisoformat(args["review_on"][:10]))
+        elif ends_on and ends_on >= today:
+            review_on = ends_on
+        elif starts_on and starts_on > today:
+            review_on = min(starts_on, today + timedelta(days=3))
+        else:
+            review_on = today + timedelta(days=3)
+        question = str(args.get("question") or "").strip()[:500] or f"Is '{title}' still accurate, and what are its exact dates or boundaries?"
+        state_obj = State(
+            summary=summary,
+            status=status,
+            review_on=review_on,
+            verified_on=today,
+            starts_on=starts_on,
+            ends_on=ends_on,
+            closed_on=closed_on,
+            question=question,
+            salience=salience,
+        )
+        state_payload = state_obj.model_dump(mode="json")
+        phase, _ = classify_state_phase(state_payload, today)
+        folded_title = fold(title)
+        slug = re.sub(r"[^a-z0-9]+", "_", folded_title).strip("_")[:80] or uuid4().hex[:12]
+        observed_key = f"observed_state:{slug}"
+
+        source_id = args.get("source_id") or getattr(context, "memory_source_id", None)
+        owner_source = None
+        record_id = args.get("record_id")
+        expected_version = int(args.get("expected_version") or 0)
+        async with self.sessions() as db:
+            if basis == "owner_statement" and source_id:
+                row = await db.get(MemoryChange, int(source_id))
+                if row and row.user_id == context.user_id and not row.revoked and row.source_role == "owner" and row.content.strip():
+                    owner_source = row
+            if not record_id:
+                existing_rows = (await db.execute(select(IaconRecord).where(
+                    IaconRecord.user_id == context.user_id,
+                    IaconRecord.kind == "state",
+                    IaconRecord.status == "accepted",
+                    IaconRecord.payload["closed_on"].as_string().is_(None),
+                ).limit(50))).scalars().all()
+                for existing in existing_rows:
+                    if fold(existing.title) == folded_title:
+                        record_id = existing.id
+                        expected_version = existing.version
+                        break
+
+        if owner_source is not None:
+            excerpt = owner_source.content[:2000]
+            command_id = f"declare:{context.request_id}:{slug}:{uuid4().hex[:8]}"
+            command = Command(
+                command_id=command_id,
+                record_id=record_id,
+                expected_version=expected_version if record_id else 0,
+                kind="state",
+                title=title,
+                payload=state_payload,
+                evidence=[{"source_id": owner_source.id, "start": 0, "end": len(excerpt), "quote": excerpt}],
+            )
+            queued = await self.propose(context, command)
+            async with write_session(self.sessions) as db:
+                await db.execute(update(IaconWork).where(
+                    IaconWork.user_id == context.user_id,
+                    IaconWork.kind == "observed_state",
+                    IaconWork.work_key == observed_key,
+                    IaconWork.status == "observed",
+                ).values(status="done", updated_at=datetime.now(timezone.utc)))
+            return {
+                **queued,
+                "authority": "pending_review",
+                "working_memory": "active_immediately",
+                "title": title,
+                "phase": phase,
+                "starts_on": state_payload.get("starts_on"),
+                "ends_on": state_payload.get("ends_on"),
+            }
+
+        observed_payload = {
+            "title": title,
+            "basis": basis,
+            "evidence_note": str(args.get("evidence_note") or "").strip()[:300] or None,
+            "record_id": record_id,
+            "state": state_payload,
+        }
+        now_ts = datetime.now(timezone.utc)
+        async with write_session(self.sessions) as db:
+            existing_work = (await db.execute(select(IaconWork).where(
+                IaconWork.user_id == context.user_id,
+                IaconWork.work_key == observed_key,
+            ))).scalar_one_or_none()
+            target_status = "done" if terminal else "observed"
+            if existing_work:
+                existing_work.payload = observed_payload
+                existing_work.status = target_status
+                existing_work.updated_at = now_ts
+                work_id = existing_work.id
+            else:
+                work_id = uuid4().hex
+                db.add(IaconWork(
+                    id=work_id,
+                    user_id=context.user_id,
+                    work_key=observed_key,
+                    kind="observed_state",
+                    payload=observed_payload,
+                    status=target_status,
+                    attempts=0,
+                    available_at=now_ts,
+                    updated_at=now_ts,
+                ))
+        return {
+            "status": "closed" if terminal else "observed",
+            "work_id": work_id,
+            "authority": "observed_awaiting_owner_confirmation",
+            "working_memory": "cleared" if terminal else "active_immediately",
+            "title": title,
+            "phase": phase,
+            "starts_on": state_payload.get("starts_on"),
+            "ends_on": state_payload.get("ends_on"),
+        }
+
     async def resolve(self, user_id, job_id, body):
         async with self.sessions() as db, db.begin():
             job = (await db.execute(select(IaconWork).where(IaconWork.id == job_id,
@@ -295,7 +451,20 @@ class Orion:
                 raise ValueError("Invalid review contract")
             if not value["accept"]:
                 return {"status": "rejected", "reason": str(value["reason"])[:500]}
-            return await self.catalogue.apply(context.user_id, command, actor="orion_review")
+            applied = await self.catalogue.apply(context.user_id, command, actor="orion_review")
+            if command.kind == "state":
+                import re
+                from app.services.memory_store import fold
+                slug = re.sub(r"[^a-z0-9]+", "_", fold(command.title)).strip("_")[:80]
+                if slug:
+                    async with write_session(self.sessions) as db:
+                        await db.execute(update(IaconWork).where(
+                            IaconWork.user_id == context.user_id,
+                            IaconWork.kind == "observed_state",
+                            IaconWork.work_key == f"observed_state:{slug}",
+                            IaconWork.status == "observed",
+                        ).values(status="done", updated_at=datetime.now(timezone.utc)))
+            return applied
         if not isinstance(value, list) or len(value) > 4:
             raise ValueError("Invalid interpretation contract")
         commands = []

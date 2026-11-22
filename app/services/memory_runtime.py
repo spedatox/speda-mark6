@@ -1,6 +1,6 @@
 """One provider-free serving path for initial context and deliberate lookup."""
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 import logging
 import re
@@ -10,12 +10,88 @@ from pydantic import ValidationError
 
 from app.schemas.memory_runtime import Deadline, EvidenceSection, MemoryPacket, token_upper_bound
 from app.services.memory_store import fold
-from app.services.memory_query import query_terms, turn_query, relations, conversation_content, withdrawal_reply
+from app.services.memory_query import (
+    SCHOOL_TERM, conversation_content, education_fact_query, query_terms, relations, turn_query, withdrawal_reply,
+)
 
 logger = logging.getLogger(__name__)
 
+_ENROLLMENT = re.compile(
+    r"\b(?:enroll(?:ed|s|ing)? (?:at|in)|attends?|student at|stud(?:y|ies|ying) .*?\bat|okuyor\w*|ogrencisi)\b"
+)
+_PLACEMENT = re.compile(r"\b(?:placement\s*:|yerlestir\w*|yerlesti\w*)")
+_FORMER_ENROLLMENT = re.compile(r"\b(?:old|former|previous|used to|graduated|completed|eski|mezun)\b")
+_PROGRAM_LINE = re.compile(r"(?im)^[ \t]*\*{0,2}(?:program|bölüm)\*{0,2}:\*{0,2}[ \t]+[^\r\n]+")
 
-def section_block(section, title, *, today: date, prior_context=None) -> tuple[str, str]:
+
+def _parse_iso_day(value) -> date | None:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and len(value) >= 10:
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def classify_state_phase(payload: dict, today: date) -> tuple[str, int]:
+    """Classify any situational state's temporal phase relative to today."""
+    starts_on = _parse_iso_day(payload.get("starts_on"))
+    ends_on = _parse_iso_day(payload.get("ends_on"))
+    status = str(payload.get("status") or "open")
+    soon_cutoff = today + timedelta(days=7)
+    if starts_on and ends_on:
+        if starts_on <= today <= ends_on:
+            return ("active_now", 0)
+        if today < starts_on <= soon_cutoff:
+            return ("upcoming_soon", 1)
+        if today > ends_on:
+            return ("ended_unconfirmed", 4)
+        return ("planned_later", 5)
+    if starts_on:
+        if starts_on <= today:
+            return ("active_now", 0)
+        if starts_on <= soon_cutoff:
+            return ("upcoming_soon", 1)
+        return ("planned_later", 5)
+    if ends_on:
+        if today <= ends_on:
+            return ("active_now", 0)
+        return ("ended_unconfirmed", 4)
+    if status == "active":
+        return ("active_now", 2)
+    return ("open_situation", 3)
+
+
+def _salience_rank(value) -> int:
+    return {"high": 0, "normal": 1, "low": 2}.get(str(value or "normal"), 1)
+
+
+def education_section(unit, section, today):
+    """Use exact spans from the owner profile and transcript for enrollment recall."""
+    if (section.attribution != "canonical_record" or section.historical
+            or (section.valid_from and section.valid_from > today)
+            or (section.valid_until and section.valid_until <= today)):
+        return None
+    if unit["kind"] == "core":
+        statements = [line for line in re.split(r"\n|(?<=[.!?])\s+", fold(section.text))
+                      if SCHOOL_TERM.search(line) and not _FORMER_ENROLLMENT.search(line)]
+        if any(_ENROLLMENT.search(line) for line in statements):
+            return "institution", 2, section
+        if any(_PLACEMENT.search(line) for line in statements):
+            return "institution", 1, section
+    if re.search(r"\b(?:transcript|transkript)\b", unit["folded_title"]):
+        if match := _PROGRAM_LINE.search(section.text):
+            value = match[0].strip()
+            start = section.start + match.start() + len(match[0]) - len(match[0].lstrip())
+            return "program", 1, section.model_copy(update={
+                "start": start, "end": start + len(value), "text": value,
+            })
+    return None
+
+
+def section_block(section, title, *, today: date, prior_context=None, supports=None) -> tuple[str, str]:
     data = section if isinstance(section, EvidenceSection) else EvidenceSection.model_validate(section)
     handle = f"source:{data.source_id}:{data.start}:{data.end}"
     warnings = []
@@ -25,7 +101,7 @@ def section_block(section, title, *, today: date, prior_context=None) -> tuple[s
         warnings.append("historical; not evidence of current status")
     if data.review_on and data.review_on <= today:
         warnings.append("review overdue; current status unverified")
-    return handle, json.dumps({"source": handle, "topic": title,
+    return handle, json.dumps({"source": handle, "topic": title, **({"supports": supports} if supports else {}),
         "attribution": data.attribution, "text": data.text,
         "valid_from": str(data.valid_from) if data.valid_from else None,
         "valid_until": str(data.valid_until) if data.valid_until else None,
@@ -136,7 +212,10 @@ class MemoryRuntime:
         stage = "store_read"
         try:
             async with asyncio.timeout(deadline.remaining()):
-                result = await self.store.read(context, query_terms(query), source_ids=source_ids,
+                terms = query_terms(query)
+                if education_fact_query(query) and not source_ids:
+                    terms = list(dict.fromkeys(["transcript", "transkript", "university", "universitesi", *terms]))
+                result = await self.store.read(context, terms, source_ids=source_ids,
                                                include_recent=automatic, deadline=deadline)
             self._ready = True
             packet.publication_epoch = result["epoch"]
@@ -180,21 +259,11 @@ class MemoryRuntime:
         packet.unit_revisions.clear()
         packet.catalogue_records.clear()
 
-    def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=(), reserved_bytes=0):
-        today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
-        terms = query_terms(query)
-        family_query = bool(relations(query))
-        names_only = family_query and bool(re.search(r"\b(names?|adlari|isimleri|adi)\b", fold(query))) and not bool(
-            re.search(r"\b(where|when|why|happened|relationship|nerede|ne zaman|neden)\b", fold(query)))
-        personal_fact = not terms and bool(re.search(r"\b(fact|facts|about me|hakkimda)\b", fold(query)))
-        folded_query = " " + fold(query) + " "
-        budget = context.memory_budget
-        ceiling = min(budget.automatic_limit - reserved_bytes if automatic else budget.lookup_limit,
-                      budget.turn_limit - budget.used)
-        available = max(0, ceiling - 512)
+    @staticmethod
+    def _select_current_states(packet, states, *, budget, today, available, provisional_states=()):
         selected = 0
         state_count = 0
-        for state in result.get("current_states", ()):
+        for state in states:
             try:
                 data = EvidenceSection.model_validate(state["section"])
             except (ValidationError, ValueError, TypeError):
@@ -207,14 +276,25 @@ class MemoryRuntime:
             if handle in budget.seen:
                 continue
             payload = state["payload"]
+            phase, _ = classify_state_phase(payload, today)
+            review_due = payload["review_on"] <= today.isoformat()
             summary = payload["summary"].encode("utf-8")
             brief = {
                 "record_id": state["record_id"], "version": state["version"], "title": state["title"],
-                "source": handle, "status": payload["status"], "salience": payload.get("salience", "normal"),
+                "source": handle, "authority": "canonical",
+                "status": payload["status"], "phase": phase,
+                "salience": payload.get("salience", "normal"),
                 "verified_on": payload["verified_on"], "review_on": payload["review_on"],
-                "freshness": "review_due" if payload["review_on"] <= today.isoformat() else "confirmed",
+                "freshness": "review_due" if review_due else "confirmed",
                 "summary": summary[:600].decode("utf-8", errors="ignore") + ("…" if len(summary) > 600 else ""),
             }
+            for field in ("starts_on", "ends_on"):
+                if payload.get(field):
+                    brief[field] = payload[field]
+            if payload.get("starts_on") and payload["starts_on"] > today.isoformat():
+                brief["timing"] = "upcoming"
+            if payload.get("question") and (review_due or phase == "ended_unconfirmed" or (phase in {"active_now", "upcoming_soon"} and not payload.get("ends_on"))):
+                brief["question"] = str(payload["question"])[:240]
             # Keep the existing persisted packet shape so saved room runs can be restored across releases.
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
@@ -229,6 +309,69 @@ class MemoryRuntime:
             state_count += 1
             if state_count == 3:
                 break
+        provisional_ranked = []
+        for item in provisional_states:
+            payload = item.get("payload") or {}
+            phase, phase_rank = classify_state_phase(payload, today)
+            if phase == "planned_later":
+                continue
+            handle = f"provisional:{item['work_id']}"
+            if handle in budget.seen:
+                continue
+            provisional_ranked.append((
+                (phase_rank, _salience_rank(payload.get("salience")), item["work_id"]),
+                item, handle, phase,
+            ))
+        provisional_ranked.sort(key=lambda entry: entry[0])
+        provisional_count = 0
+        for _, item, handle, phase in provisional_ranked:
+            payload = item["payload"]
+            summary = str(payload.get("summary", "")).encode("utf-8")
+            brief = {
+                "work_id": item["work_id"], "title": item["title"],
+                "authority": item["authority"], "basis": item["basis"],
+                "status": payload.get("status", "planned"), "phase": phase,
+                "salience": payload.get("salience", "high"),
+                "freshness": "unconfirmed",
+                "summary": summary[:450].decode("utf-8", errors="ignore") + ("…" if len(summary) > 450 else ""),
+            }
+            for field in ("starts_on", "ends_on"):
+                if payload.get(field):
+                    brief[field] = payload[field]
+            if payload.get("starts_on") and payload["starts_on"] > today.isoformat():
+                brief["timing"] = "upcoming"
+            if payload.get("question"):
+                brief["question"] = str(payload["question"])[:240]
+            if item.get("evidence_note"):
+                brief["evidence_note"] = str(item["evidence_note"])[:200]
+            block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
+            cost = token_upper_bound(block) + 1
+            if selected + cost > min(3400, available):
+                packet.omissions.append("Current state context reached its budget")
+                continue
+            packet.blocks.append(block)
+            packet.evidence_handles.append(handle)
+            budget.seen.add(handle)
+            selected += cost
+            provisional_count += 1
+            if provisional_count == 2:
+                break
+        return selected
+
+    def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=(), reserved_bytes=0):
+        today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
+        terms = query_terms(query)
+        education_query = education_fact_query(query) and not requested_sources
+        family_query = bool(relations(query))
+        names_only = family_query and bool(re.search(r"\b(names?|adlari|isimleri|adi)\b", fold(query))) and not bool(
+            re.search(r"\b(where|when|why|happened|relationship|nerede|ne zaman|neden)\b", fold(query)))
+        personal_fact = not terms and bool(re.search(r"\b(fact|facts|about me|hakkimda)\b", fold(query)))
+        folded_query = " " + fold(query) + " "
+        budget = context.memory_budget
+        ceiling = min(budget.automatic_limit - reserved_bytes if automatic else budget.lookup_limit,
+                      budget.turn_limit - budget.used)
+        available = max(0, ceiling - 512)
+        education_candidates = []
         candidates = []
         matched_aliases = {}
         future_spans = []
@@ -269,6 +412,9 @@ class MemoryRuntime:
                 if checked.valid_from and checked.valid_from > today:
                     future_spans.append((section["source_id"], section["start"], section["end"]))
                 relevance = sum(t in body for t in terms)
+                if education_query and (match := education_section(unit, checked, today)):
+                    field, rank, evidence = match
+                    education_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
                 if names_only and family_match and not data_is_identity(section["text"]):
                     continue
                 identity_bonus = 50 if unit["kind"] == "person" and data_is_identity(section["text"]) else 0
@@ -356,8 +502,41 @@ class MemoryRuntime:
         selected_focus = 0
         has_supporting = any(candidate[1].startswith("raw:") for candidate in candidates)
         core_keys = {u["key"] for u in result["units"] if u["kind"] == "core"}
-        local_seen = set()
         covered_spans = {}
+        selected = 0
+
+        def pack(data, title, *, supports=None):
+            handle, block = section_block(data, title, today=today,
+                prior_context=result.get("contexts", {}).get(data.source_id), supports=supports)
+            cost = token_upper_bound(block) + 1
+            return handle, block, cost
+
+        def append(data, key, revision, handle, block):
+            packet.blocks.append(block)
+            packet.evidence_handles.append(handle)
+            if revision:
+                packet.unit_revisions[key] = revision
+            covered_spans.setdefault(data.source_id, []).append((data.start, data.end))
+            budget.seen.add(handle)
+
+        # Give the best exact span for each requested field room before standing states.
+        packed_fields = set()
+        education_candidates.sort(key=lambda c: (c[0], -c[1], c[2].start))
+        for field, _, data, key, title, revision in education_candidates:
+            if field in packed_fields:
+                continue
+            handle, block, cost = pack(data, title, supports=field)
+            if handle in budget.seen:
+                packed_fields.add(field)
+            elif selected + cost <= min(1800, available):
+                append(data, key, revision, handle, block)
+                packed_fields.add(field)
+                selected += cost
+        selected += self._select_current_states(
+            packet, result.get("current_states", ()), budget=budget,
+            today=today, available=available - selected,
+            provisional_states=result.get("provisional_states", ()),
+        )
         for _, key, title, section, revision in candidates:
             if deadline.remaining() <= 0:
                 packet.status = "deadline"
@@ -373,15 +552,12 @@ class MemoryRuntime:
             if data.valid_from and data.valid_from > today:
                 packet.omissions.append(f"{key}: not valid at requested date")
                 continue
-            handle, block = section_block(data, title, today=today,
-                prior_context=result.get("contexts", {}).get(data.source_id))
+            handle, block, cost = pack(data, title)
             # Overlapping views of the same source are not independent corroboration.
-            identity = (data.source_id, data.start, data.end)
-            if handle in budget.seen or identity in local_seen or any(
+            if handle in budget.seen or any(
                 data.start < end and data.end > start
                 for start, end in covered_spans.get(data.source_id, [])):
                 continue
-            cost = token_upper_bound(block) + 1
             if has_supporting and key not in core_keys and not key.startswith("raw:") and selected_focus + cost > min(3600, available * .60):
                 packet.omissions.append(f"{key}: supporting-source share reserved")
                 continue
@@ -391,13 +567,7 @@ class MemoryRuntime:
             if selected + cost > available:
                 packet.omissions.append(f"{key}: complete source section exceeds remaining budget")
                 continue
-            packet.blocks.append(block)
-            packet.evidence_handles.append(handle)
-            if revision:
-                packet.unit_revisions[key] = revision
-            local_seen.add(identity)
-            covered_spans.setdefault(data.source_id, []).append((data.start, data.end))
-            budget.seen.add(handle)
+            append(data, key, revision, handle, block)
             selected += cost
             if key in core_keys:
                 selected_core += cost
@@ -413,7 +583,7 @@ class MemoryRuntime:
         while packet.blocks and token_upper_bound(packet_json(packet)) + 64 > ceiling:
             removed = packet.evidence_handles.pop()
             block = json.loads(packet.blocks.pop())
-            if state := block.get("current_state"):
+            if (state := block.get("current_state")) and state.get("record_id"):
                 packet.unit_revisions.pop("iacon:" + state["record_id"], None)
             budget.seen.discard(removed)
             packet.omissions.append("Serialized packet budget reached")

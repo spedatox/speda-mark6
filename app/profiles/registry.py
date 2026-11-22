@@ -67,6 +67,8 @@ class ProfileRegistry:
                 'generate_document', 'send_push_notification','text_to_speech','speech_to_text'}
             if aid in {'speda', 'optimus', 'scourge', 'orion'}:
                 tools = tools | {'system_info'}
+            if aid in {'speda', 'ultron', 'friday', 'atomix', 'sentinel', 'orion'}:
+                tools = tools | {'declare_state'}
             roles = worker_roles.get(aid, frozenset())
             theme = DOCUMENT_THEMES[aid]
             revision = hashlib.sha256(json.dumps([aid, reference, domain, character, sorted(tools), sorted(roles), theme, CANVAS_REVISION, ROOM_DIALOGUE_REVISION]).encode()).hexdigest()

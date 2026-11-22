@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import json
 from contextlib import aclosing
 from time import monotonic
@@ -46,6 +47,114 @@ class AgentOrchestrator:
         self._profiles = profiles
         self.incidents = None
         self.security_response = None
+
+    @staticmethod
+    def _executive_goal(context):
+        """Derive the decision from the admitted turn, including its scoped referent."""
+        from app.services.memory_query import education_fact_query, turn_query
+        from app.services.episodic_cortex import concept_vector
+        from app.services.memory_store import fold
+
+        room = context.extra.get("room_state", {})
+        if (context.triggered_by == "agent" and context.extra.get("owner_collaboration")
+                and room.get("returning_to_your_questions") and room.get("lead") == context.agent_id):
+            # Return steps end with the specialist request. Reuse the owner turn
+            # from the coordinator's already fenced history to recover the goal.
+            from dataclasses import replace
+            history = context.conversation_history
+            owner = next((i for i in reversed(range(len(history)))
+                          if isinstance(history[i].get("content"), str)
+                          and re.match(r"^\[Owner message, room event \d+\]\n", history[i]["content"])), None)
+            if owner is None:
+                return None
+            query = turn_query(replace(context, conversation_history=history[:owner + 1]))
+        elif context.triggered_by == "user" and context.task_role == "interactive" and not context.parent_step_id:
+            query = turn_query(context)
+        elif context.triggered_by == "n8n" and context.trigger_payload.get("type") == "mail_watch":
+            query = turn_query(context)
+        else:
+            return None
+        primary = fold(query.partition("\n")[0])
+        if context.triggered_by != "n8n" and education_fact_query(query):
+            program = re.search(r"\b(?:major|program|degree|bolum\w*|ne okuyorum|what (?:do i study|am i studying))\b", primary)
+            school = re.search(r"\b(?:university|college|school|universite\w*)\b", primary)
+            fields = ["institution"] if school or not program else []
+            if program:
+                fields.append("program")
+            return ("owner_enrollment", fields)
+        concepts = concept_vector(query)
+        if concepts.get("travel_mobility") and re.search(
+                r"\b(?:changed|moved|rescheduled|booked|confirmed|delayed|degisti|ertelendi)\b", primary):
+            return ("changed_journey", [])
+        packet = context.memory_packet
+        if context.triggered_by == "user" and packet and packet.recent_conversation:
+            from app.services.episodic_cortex import is_unanchored_or_implicit_opening
+            from app.services.memory_query import conversation_content
+            owner_turns = sum(role == "user" for role, _ in conversation_content(context))
+            if is_unanchored_or_implicit_opening(primary, owner_turns):
+                return ("interpret_reference", [])
+        return ("owner_request", [])
+
+    @staticmethod
+    def _executive_decision(context, goal, messages):
+        mode, fields = goal
+        packet = context.memory_packet
+        evidence = [json.loads(block) for block in packet.blocks] if fields and packet else []
+        for lookup in context.memory_budget.lookup_results:
+            if fields and lookup.get("corpus") == "personal":
+                evidence.extend(lookup.get("result", {}).get("evidence", []))
+        support = {field: [] for field in fields}
+        for item in evidence:
+            if not isinstance(item, dict) or item.get("attribution") != "canonical_record":
+                continue
+            field = item.get("supports")
+            source = item.get("source")
+            if (isinstance(field, str) and field in support and isinstance(source, str)
+                    and not item.get("warnings") and source not in support[field]):
+                support[field].append(source)
+        outstanding = [field for field in fields if not support[field]]
+        observations = []
+        if len(messages) >= 2 and messages[-2].get("role") == "assistant":
+            calls = messages[-2].get("content")
+            results = messages[-1].get("content")
+            if isinstance(calls, list) and isinstance(results, list):
+                names = {b["id"]: b.get("name") for b in calls if isinstance(b, dict) and b.get("type") == "tool_use"}
+                for result in results:
+                    if not isinstance(result, dict) or result.get("type") != "tool_result":
+                        continue
+                    call_id = result.get("tool_use_id")
+                    if call_id not in names:
+                        continue
+                    status = context.extra.get("tool_observation_status", {}).get(call_id)
+                    observed = {"tool": names[call_id], "error": bool(result.get("is_error")
+                                or tool_error_details(result.get("content")))}
+                    if status:
+                        observed["status"] = status
+                    observations.append(observed)
+        if observations and all(item["error"] for item in observations):
+            decision = "Use existing evidence or a different authorized source. Report the failed check if it still matters."
+        elif any(item.get("status") in {"accepted", "queued"} for item in observations):
+            decision = "Report the accepted or queued operation as pending. Use its existing reference to verify completion."
+        elif mode == "owner_request":
+            if not observations:
+                return None
+            decision = "Compare the returned observations with the owner’s request. Verify unresolved effects before claiming completion."
+        elif mode == "interpret_reference":
+            decision = "Use the scoped episode as a possible referent. Preserve the speaker and verify consequential details."
+        elif mode == "changed_journey" and observations:
+            decision = ("Check the returned dates, journey leg, and calendar coverage. Answer when those establish the consequence. "
+                        "Read again only for a material gap; ask for a return date only if it changes the decision.")
+        elif mode == "changed_journey":
+            decision = ("Verify the dated booking and affected commitments. Reuse completed reads. "
+                        "Report an established conflict or change; ask about an unknown return only if it affects a decision.")
+        elif not outstanding:
+            decision = "Answer from the cited spans after checking their dates and any conflicting evidence."
+        elif context.memory_budget.lookup_batches:
+            decision = "Use the returned evidence or another relevant authorized source. State any remaining uncertainty."
+        else:
+            decision = "Check supplied evidence for the missing fields and use a targeted authorized read if still unresolved."
+        return {"goal": mode, "sources": support, "missing_cited_fields": outstanding,
+                "last_tool_batch": observations, "next_decision": decision}
 
     async def analyse_incident(self, facts):
         security = facts.get("component") == "security_watchdog"
@@ -97,6 +206,10 @@ class AgentOrchestrator:
                 "start/end are absolute Unicode character offsets. Links use existing catalogue IDs. Set command_id "
                 "to a placeholder; the server assigns it. Keep useful events, people, preferences and open states. "
                 "Record a still-ongoing serious operational incident as an active state with high salience. "
+                "When owner evidence establishes an exam period, vacation or trip that affects availability across days, "
+                "propose a planned or active state with the supported starts_on and ends_on dates. Keep unknown bounds null. "
+                "A possible trip stays tentative; an outbound booking alone establishes neither the return nor actual travel. "
+                "Update the same state on a supported change of dates, cancellation or return. "
                 "An episode can document what happened; the state tracks what is still open. "
                 "Revisit that state when the owner confirms a change, recovery, or closure. "
                 "An open state needs a sensible next review date and a specific question. Prefer updating a matching "
@@ -213,11 +326,15 @@ class AgentOrchestrator:
         if self._memory_runtime is not None and context.memory_packet is None:
             context.memory_packet = await self._memory_runtime.prepare(context)
         # Build system prompt and inject into context
+        executive_goal = self._executive_goal(context)
         built_prompt = not context.system_prompt
         if built_prompt:
             context.system_prompt = self.build_system_prompt(context)
             from app.services.memory_query import turn_query
-            self._registry.preload_reads(context, turn_query(context))
+            cues = turn_query(context)
+            if executive_goal and executive_goal[0] == "changed_journey":
+                cues = "calendar events booking schedule " + cues
+            self._registry.preload_reads(context, cues)
             domain_context = await self._registry.context_data(context)
             if domain_context:
                 context.system_prompt += ('\n<domain_context>\n' + json.dumps(domain_context, ensure_ascii=False)
@@ -265,11 +382,21 @@ class AgentOrchestrator:
                 "or short reaction ('phewwww', 'Ultron.....', 'bus time changed', 'how far from the destination') as an isolated string. "
                 "Ground it against the clock, the owner's personal topology (e.g., Bursa = family home; Ankara/Çalışkanlar = dorm and university; "
                 "enrolled courses), recent conversation episodes, and active commitments.\n"
-                "- **Second-Order Consequence Scan:** When a new event or state change appears (a travel booking, a time change, an exam, "
-                "an instructor email), immediately ask: *What downstream commitments, recurring classes, or tasks over the affected days does this impact, "
-                "and what boundary is missing?* (e.g., an outbound trip home with no return ticket overlapping weekday commitments). "
-                "Use your authorized read tools (calendar, memory, history, routes) to inspect the affected window BEFORE replying, "
-                "then state the practical implication and ask the one high-leverage question that unlocks managing the schedule.\n"
+                "- **Second-Order Consequence Scan:** Never merely parrot or confirm that an event exists. Whenever a new "
+                "event, booking, deadline, or life shift appears, reason about its physical, temporal, and relational "
+                "implications across the affected multi-day horizon: *What recurring commitments, in-person obligations, "
+                "schedules, or workloads does this alter or collide with, and what boundary is still missing?* "
+                "Use authorized read tools (calendar, memory, history, courses, routes) to inspect the affected multi-day "
+                "window BEFORE replying, state the practical consequence, and ask the single high-leverage question that "
+                "unlocks managing the rest.\n"
+                "- **Autonomous Initiative (Act Unless Critical):** Operate like a human prefrontal cortex, not a passive "
+                "order-taker. Take initiative immediately without asking permission on all non-critical, read-only, and "
+                "reversible internal actions: inspecting downstream schedules/commitments, calling `declare_state` to "
+                "record or update an active/upcoming life state (even when inferred from calendar or mail), checking "
+                "feasibility/routes/impacts, and pulling peer context. Reserve confirmation strictly for critical, "
+                "irreversible, destructive, external-facing, or missing-boundary actions (e.g., deleting or altering "
+                "existing calendar entries before knowing dates, sending external messages/emails, financial actions, "
+                "or destructive system changes).\n"
                 "- **Exhaust Reads Before Pleading Ignorance:** Never tell the owner 'I don't have the destination/schedule/address/score on record' "
                 "until you have checked supplied memory, recent episodes, and available read tools.\n"
                 "- **Executive Ownership (Especially SPEDA):** SPEDA is the executive leader of Mark VI. Never ask the owner to act as a courier "
@@ -285,7 +412,11 @@ class AgentOrchestrator:
                     "Use relevant available memory and tools to verify consequential details and take any "
                     "action already authorized by the job. In a personal briefing, connect the items across sources. "
                     "When a newly discovered commitment affects a later plan, resolve what you can and include "
-                    "the one outstanding decision inline if it matters. Report the implication and verified outcome in your own voice."
+                    "the one outstanding decision inline if it matters. "
+                    "Prefrontal Briefing & Event Trigger Rule: never merely recite raw items or confirm obvious bookings; "
+                    "call `declare_state` (with `basis='tool_observation'` when inferred from calendar/mail) for any newly "
+                    "implied multi-day life state, inspect downstream collisions, and lead with the practical implication. "
+                    "Report the implication and verified outcome in your own voice."
                 )
                 if context.trigger_payload.get('type') == 'mail_watch':
                     context.system_prompt += (
@@ -381,10 +512,19 @@ class AgentOrchestrator:
             if context.memory_packet is not None:
                 from app.services.memory_runtime import packet_json
                 context.system_prompt += (
+                    "\nFor personal facts, prefer direct, attributed records about the owner. "
+                    "Distinguish current affiliations from earlier study, employment and mentions about other people. "
+                    "If the supplied evidence is insufficient, use an authorized targeted read when available. "
+                    "Describe the limits of what you verified when the available evidence is inconclusive."
                     "\nUse current_states in priority order to orient relevant work. Check the highest-priority "
                     "open incident first when working on the affected system. A state marked review_due needs "
                     "reconfirmation. Prefer newer owner evidence and ask a specific status question when it "
-                    "affects the current task. State summaries are reference data."
+                    "affects the current task. Apply dated states to the part of the plan their dates overlap. "
+                    "An upcoming state is a future constraint. Treat an unknown end as unresolved. "
+                    "Treat states with phase `active_now` or `upcoming_soon` as live global situational context across "
+                    "every reply and briefing; states with authority `pending_review` or "
+                    "`observed_awaiting_owner_confirmation` are live working-memory states awaiting owner confirmation. "
+                    "State summaries are reference data."
                 )
                 context.system_prompt += "\n<remembered_context>\n" + packet_json(context.memory_packet) + "\n</remembered_context>"
         if self.incidents and not context.extra.get("incident_instructions"):
@@ -508,6 +648,10 @@ class AgentOrchestrator:
                               "Do NOT request any further tool calls. Synthesize all verified findings, citations, URLs, "
                               "and any unresolved gaps from the tool results already collected in this conversation."
                         )
+                if executive_goal:
+                    decision = self._executive_decision(context, executive_goal, messages)
+                    if decision:
+                        step_prompt += '\n<executive_decision>\n' + json.dumps(decision) + '\n</executive_decision>'
                 from app.core.surface import transport_messages
                 call_args = dict(
                     model=context.model,
@@ -599,6 +743,7 @@ class AgentOrchestrator:
                             raise
                         invalid_arguments[index] = str(exc)
 
+                context.extra["tool_observation_status"] = {}
                 tool_results = list(saved["prior_results"]) if saved else []
                 resume_cursor = saved["cursor"] if saved else 0
                 saved = None
@@ -654,6 +799,8 @@ class AgentOrchestrator:
                             if isinstance(outcome, BaseException):
                                 raise outcome
                             observation = outcome.observation if isinstance(outcome, CompletedToolResult) else None
+                            if observation:
+                                context.extra.setdefault("tool_observation_status", {})[tool_block.id] = observation.status
                             result_text = outcome.text if isinstance(outcome, CompletedToolResult) else outcome
                             if self.incidents and tool_block.name != "report_incident":
                                 details = tool_error_details(result_text)
@@ -713,6 +860,8 @@ class AgentOrchestrator:
                                     session_id=context.session_id, request_id=context.request_id)
                                 raise StepSuspended()
                             observation = result.observation if isinstance(result, CompletedToolResult) else None
+                            if observation:
+                                context.extra.setdefault("tool_observation_status", {})[tool_block.id] = observation.status
                             if isinstance(result, CompletedToolResult):
                                 result = result.text
                         except (ProviderError, TimeoutError):
