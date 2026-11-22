@@ -176,3 +176,69 @@ async def test_unrelated_person_dossier_does_not_outrank_topic_evidence_on_non_p
     )
     topics = [json.loads(b)["topic"] for b in packet.blocks]
     assert topics[0] == "2026 Midterm Scores"
+
+
+async def test_owner_dossier_heading_survives_for_what_is_my_name(memory):
+    await memory.seed(
+        "# Owner Profile\n\n## DOSSIER: Ahmet Erol Bayrak — Complete Personal History\n\n## Origins\nBorn in Bursa.",
+        title="Owner Profile", kind="core", aliases=(),
+    )
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2.5)
+    packet = await runtime.prepare(memory.context("what is my name?"))
+    texts = [json.loads(b).get("text", "") for b in packet.blocks]
+    assert any("Ahmet Erol Bayrak" in t for t in texts)
+
+
+async def test_brother_query_with_vocative_finds_turkish_kardes_despite_active_states(memory):
+    from datetime import date, timedelta
+    from app.schemas.iacon import Command
+    from app.services.iacon_catalogue import Catalogue
+    from app.services.memory_store import capture_source
+
+    await memory.seed(
+        "# Owner Profile\n\n## DOSSIER: Ahmet Erol Bayrak — Complete Personal History\n\n## Origins\nBorn in Bursa.",
+        title="Owner Profile", kind="core", aliases=(),
+    )
+    await memory.seed(
+        "# Alper Kaan Bayrak\n\n**Who:** Ahmet Erol Bayrak'ın kardeşi; aile içinden yakını.",
+        title="Alper Kaan Bayrak", kind="person", aliases=("Alper",),
+    )
+    await memory.seed(
+        "# İlayda Bayrak\n\n**Who:** Ahmet Erol Bayrak'ın kız kardeşi (sister).",
+        title="İlayda Bayrak", kind="person", aliases=("İlayda",),
+    )
+    # Seed 2 large active states AND a closed historical state mentioning "SPEDA"
+    catalogue = Catalogue(memory.store)
+    today = date.today()
+    for i, summary in enumerate([
+        "Long operational incident description about memory timeouts " + ("details " * 90),
+        "Long operational incident description about SSH PDF report " + ("details " * 90),
+    ], 1):
+        async with memory.sessions() as db, db.begin():
+            src = await capture_source(db, user_id=1, source_key=f"big-state-{i}", content=summary)
+            sid = src.id
+        await catalogue.apply(1, Command(
+            command_id=f"big-state-cmd-{i}", kind="state", title=f"incident-{i}",
+            payload={"summary": summary, "status": "active", "salience": "high",
+                     "verified_on": str(today), "review_on": str(today + timedelta(days=5)),
+                     "question": "Still open?"},
+            evidence=[{"source_id": sid, "start": 0, "end": len(summary), "quote": summary}],
+        ))
+    closed_text = "Active cyberattack on the SPEDA Mark VI server"
+    async with memory.sessions() as db, db.begin():
+        src = await capture_source(db, user_id=1, source_key="closed-speda", content=closed_text)
+        sid = src.id
+    await catalogue.apply(1, Command(
+        command_id="closed-speda-cmd", kind="state", title=closed_text,
+        payload={"summary": closed_text, "status": "superseded", "salience": "high",
+                 "verified_on": str(today - timedelta(days=5)), "review_on": str(today - timedelta(days=2)),
+                 "closed_on": str(today - timedelta(days=2)), "question": "Closed?"},
+        evidence=[{"source_id": sid, "start": 0, "end": len(closed_text), "quote": closed_text}],
+    ))
+
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2.5)
+    packet = await runtime.prepare(memory.context("hey speda what my brothers name?", agent_id="speda"))
+    topics = [json.loads(b).get("topic", "") for b in packet.blocks if "current_state" not in json.loads(b)]
+    assert "Alper Kaan Bayrak" in topics
+    assert "İlayda Bayrak" not in topics
+    assert closed_text not in topics

@@ -252,11 +252,21 @@ class MemoryStore:
                     self.catalog.popitem(last=False)
             from app.services.memory_query import relations
             requested = relations(" ".join(terms))
-            # Specific sister/mother requests must not expand to every sibling/parent.
+            # Specific sister/mother requests must not expand to every sibling/parent,
+            # except when no catalog entry carries the gendered tag (e.g. Turkish "kardeşi").
+            excluded_opposite = None
             if len(requested.intersection({"sister", "brother"})) == 1:
-                requested.discard("sibling")
+                specific = next(iter(requested.intersection({"sister", "brother"})))
+                if any(specific in family for _, _, _, family in self.catalog[catalog_key]):
+                    requested.discard("sibling")
+                else:
+                    excluded_opposite = "brother" if specific == "sister" else "sister"
             if len(requested.intersection({"mother", "father"})) == 1:
-                requested.discard("parent")
+                specific = next(iter(requested.intersection({"mother", "father"})))
+                if any(specific in family for _, _, _, family in self.catalog[catalog_key]):
+                    requested.discard("parent")
+                else:
+                    excluded_opposite = "father" if specific == "mother" else "mother"
             person_ids, name_terms, relation_ids = set(), set(), set()
             named_candidates = []
             for person_id, title, aliases, family in self.catalog[catalog_key]:
@@ -264,7 +274,7 @@ class MemoryStore:
                 matches = words.intersection(terms)
                 if matches:
                     named_candidates.append((person_id, matches))
-                if requested.intersection(family):
+                if requested.intersection(family) and (not excluded_opposite or excluded_opposite not in family):
                     relation_ids.add(person_id)
             if named_candidates:
                 # A shared surname must not flood a named person's dossier

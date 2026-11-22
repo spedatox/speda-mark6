@@ -9,7 +9,7 @@ from app.services.memory_store import fold, source_text
 def query_terms(value: str) -> list[str]:
     stop = set("the a an and or to of in on is it its this that my me we our you your her him "
                "they them their theri he she what who how about just know meant right current relationship "
-               "perfect almighty all mighty great sir please remember recall context "
+               "perfect almighty all mighty great sir please remember recall context hey hello hi selam merhaba "
                "owner owners personal specific fact facts tell names name not merely from find grounded "
                "remembered conversations transient timezone said have has are was were for "
                "bir bu su ve ile ben benim sen onun o ne nasil mi mu icin adi adlari isim isimleri".split())
@@ -204,7 +204,7 @@ def relations(text):
 
 
 def identity_text(text):
-    match = re.match(r"\s*(?:\*\*)?(?:Who|Identity|Kim)(?:\*\*)?\s*:\s*(.*)", text, re.I | re.S)
+    match = re.search(r"(?m)^\s*(?:\*\*)?(?:Who|Identity|Kim)(?:\*\*)?\s*:\s*(.*)", text, re.I | re.S)
     if match:
         return re.split(r"\n|(?<=[.!?])\s", match[1], maxsplit=1)[0]
     # Plain identity statements are also used by native serving records.

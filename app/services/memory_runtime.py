@@ -213,6 +213,11 @@ class MemoryRuntime:
         try:
             async with asyncio.timeout(deadline.remaining()):
                 terms = query_terms(query)
+                aid_term = fold(getattr(context, "agent_id", "") or "")
+                if aid_term and aid_term in terms and len(terms) > 1:
+                    primary_folded = fold(query.partition("\n")[0]).strip()
+                    if re.search(rf"(?:^(?:hey|hi|hello|selam|merhaba)?\s*{re.escape(aid_term)}\b|\b{re.escape(aid_term)}[\s?!.,]*$)", primary_folded):
+                        terms = [t for t in terms if t != aid_term]
                 if education_fact_query(query) and not source_ids:
                     terms = list(dict.fromkeys(["transcript", "transkript", "university", "universitesi", *terms]))
                 result = await self.store.read(context, terms, source_ids=source_ids,
@@ -286,7 +291,7 @@ class MemoryRuntime:
                 "salience": payload.get("salience", "normal"),
                 "verified_on": payload["verified_on"], "review_on": payload["review_on"],
                 "freshness": "review_due" if review_due else "confirmed",
-                "summary": summary[:600].decode("utf-8", errors="ignore") + ("…" if len(summary) > 600 else ""),
+                "summary": summary[:320].decode("utf-8", errors="ignore") + ("…" if len(summary) > 320 else ""),
             }
             for field in ("starts_on", "ends_on"):
                 if payload.get(field):
@@ -294,11 +299,11 @@ class MemoryRuntime:
             if payload.get("starts_on") and payload["starts_on"] > today.isoformat():
                 brief["timing"] = "upcoming"
             if payload.get("question") and (review_due or phase == "ended_unconfirmed" or (phase in {"active_now", "upcoming_soon"} and not payload.get("ends_on"))):
-                brief["question"] = str(payload["question"])[:240]
+                brief["question"] = str(payload["question"])[:180]
             # Keep the existing persisted packet shape so saved room runs can be restored across releases.
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
-            if selected + cost > min(2400, available):
+            if selected + cost > min(1600, max(900, int(available * 0.45))):
                 packet.omissions.append("Current state context reached its budget")
                 continue
             packet.blocks.append(block)
@@ -346,7 +351,7 @@ class MemoryRuntime:
                 brief["evidence_note"] = str(item["evidence_note"])[:200]
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
-            if selected + cost > min(3400, available):
+            if selected + cost > min(2000, max(1100, int(available * 0.55))):
                 packet.omissions.append("Current state context reached its budget")
                 continue
             packet.blocks.append(block)
@@ -398,8 +403,6 @@ class MemoryRuntime:
                 continue
             if family_match:
                 score += 350
-            if unit["key"].startswith("iacon:"):
-                score += 150
             title_relevance = sum(term in unit["folded_title"] for term in terms)
             for section, body, section_dates in zip(unit["sections"], unit["section_search"], unit["section_dates"]):
                 if deadline.remaining() <= 0:
@@ -417,6 +420,8 @@ class MemoryRuntime:
                     education_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
                 if names_only and family_match and not data_is_identity(section["text"]):
                     continue
+                iacon_bonus = (150 if not checked.historical else -120) if unit["key"].startswith("iacon:") else 0
+                dossier_heading_bonus = 40 if (unit["kind"] == "core" and re.match(r"\s*#{1,6}\s*DOSSIER:", section["text"], re.I)) else 0
                 identity_bonus = 50 if unit["kind"] == "person" and (exact or family_match) and data_is_identity(section["text"]) else 0
                 try:
                     entity = json.loads(section["text"])
@@ -445,7 +450,7 @@ class MemoryRuntime:
                           and not unit["key"].startswith("iacon:") and not section.get("historical"))
                 if unit["kind"] != "core" and not living and not family_match and not exact and not relevance and not title_relevance:
                     continue
-                candidates.append((score + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus, unit["key"],
+                candidates.append((score + iacon_bonus + dossier_heading_bonus + min(relevance, 10) + 10 * title_relevance + identity_bonus + recency_bonus, unit["key"],
                     unit["title"], section, unit["revision"]))
         for alias, keys in matched_aliases.items():
             if len(keys) > 1:
@@ -547,7 +552,7 @@ class MemoryRuntime:
             except (ValidationError, ValueError, TypeError):
                 packet.omissions.append(f"Invalid evidence in {key}: invalid source span or temporal interval withheld")
                 continue
-            if re.fullmatch(r"\s*(?:#{1,6}\s+[^\n]+|\*\*[^*]+\*\*:?)\s*", data.text):
+            if re.fullmatch(r"\s*(?:#{1,6}\s+[^\n]+|\*\*[^*]+\*\*:?)\s*", data.text) and not re.match(r"\s*#{1,6}\s*DOSSIER:", data.text, re.I):
                 continue
             if data.valid_from and data.valid_from > today:
                 packet.omissions.append(f"{key}: not valid at requested date")
@@ -610,4 +615,4 @@ def packet_json(packet: MemoryPacket) -> str:
 
 
 def data_is_identity(text: str) -> bool:
-    return bool(re.match(r"\s*(?:\*\*)?(?:Who|Identity)(?:\*\*)?\s*:", text, re.I))
+    return bool(re.search(r"(?m)^\s*(?:\*\*)?(?:Who|Identity)(?:\*\*)?\s*:", text, re.I))
