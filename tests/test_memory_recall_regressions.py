@@ -158,3 +158,21 @@ async def test_room_fact_then_siblings_then_names_uses_automatic_evidence(memory
     assert packet.status not in {'deadline','unavailable'}, packet.omissions
     topics=[json.loads(b)['topic'] for b in packet.blocks]
     assert 'Can Kaya' in topics and 'Nora Kaya' in topics
+
+
+async def test_unrelated_person_dossier_does_not_outrank_topic_evidence_on_non_person_query(memory):
+    await memory.seed(
+        "# Rumeysa Kurt\n\n**Who:** Latest person that the owner dated.\n**Events:**\n- [2026-03-03] Raised a boundary on their date.",
+        title="Rumeysa Kurt", kind="person", aliases=("Rumeysa",),
+    )
+    await memory.seed(
+        "Statistics I (MIS215) 2026 midterm exam score: 99/100. General Accounting (MIS243) 2026 midterm exam score: 100/100.",
+        title="2026 Midterm Scores", kind="course", aliases=(),
+    )
+    runtime = MemoryRuntime(memory.store, prepare_timeout=2.5)
+    packet = await runtime.lookup(
+        memory.context("what is my midterm scores so far speda"),
+        "Owner's 2026 midterm exam scores and grades by course",
+    )
+    topics = [json.loads(b)["topic"] for b in packet.blocks]
+    assert topics[0] == "2026 Midterm Scores"

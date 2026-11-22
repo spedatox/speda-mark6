@@ -456,3 +456,31 @@ async def test_planning_states_survive_competing_incidents_and_keep_dates(memory
         assert {s["title"] for s in states} == {"Midterm week", "Family trip", "Vacation"}
         assert all(s["starts_on"] == str(monday) and s["ends_on"] == str(sunday)
                    and s["timing"] == "upcoming" for s in states)
+
+
+async def test_orion_strips_markdown_json_fences_and_aligns_verbatim_quote_offsets(memory):
+    from app.services.iacon_worker import _parse_json_response, _align_evidence_spans
+
+    # 1. Markdown-fenced JSON arrays/objects parse cleanly
+    fenced = '```json\n[{"kind": "claim", "title": "Statistics I midterm score"}]\n```'
+    assert _parse_json_response(fenced) == [{"kind": "claim", "title": "Statistics I midterm score"}]
+    fenced_review = '```\n{"accept": true, "reason": "verbatim match"}\n```'
+    assert _parse_json_response(fenced_review) == {"accept": True, "reason": "verbatim match"}
+
+    # 2. Off-by-one offsets on a verbatim quote are deterministically aligned inside the slice
+    source_text = "My accounting midterm result released: 100 out of 100!"
+    candidate = {
+        "kind": "claim",
+        "evidence": [{"source_id": 42, "start": 35, "end": 55, "quote": "100 out of 100"}],
+    }
+    _align_evidence_spans(candidate, 42, source_text, 0, len(source_text))
+    ev = candidate["evidence"][0]
+    assert source_text[ev["start"]:ev["end"]] == "100 out of 100"
+
+    # 3. Fabricated quote not present verbatim in the slice is NOT silently repaired
+    fabricated = {
+        "kind": "claim",
+        "evidence": [{"source_id": 42, "start": 0, "end": 10, "quote": "95 out of 100"}],
+    }
+    _align_evidence_spans(fabricated, 42, source_text, 0, len(source_text))
+    assert fabricated["evidence"][0]["start"] == 0 and fabricated["evidence"][0]["end"] == 10

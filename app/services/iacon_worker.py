@@ -15,6 +15,54 @@ from app.services.iacon_budget import BudgetDenied
 from app.services.iacon_catalogue import Conflict
 
 
+def _parse_json_response(text: str):
+    """Parse JSON from an Orion response, stripping optional markdown code fences."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+    return json.loads(cleaned)
+
+
+def _align_evidence_spans(candidate: dict, source_id: int, source_text: str, slice_start: int, slice_end: int) -> None:
+    """Deterministically align verbatim quote offsets inside the current slice.
+
+    Never relaxes the verbatim-quote requirement: a quote that does not appear
+    byte-for-byte inside the slice is left untouched so validation rejects it.
+    """
+    evidence = candidate.get("evidence")
+    if not isinstance(evidence, list):
+        return
+    slice_text = source_text[slice_start:slice_end]
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("source_id") != source_id:
+            continue
+        quote = item.get("quote")
+        if not isinstance(quote, str) or not quote:
+            continue
+        start = item.get("start")
+        end = item.get("end")
+        if (isinstance(start, int) and isinstance(end, int)
+                and slice_start <= start < end <= slice_end
+                and source_text[start:end] == quote):
+            continue
+        # Find exact verbatim occurrences of quote inside the slice; pick closest to hinted start.
+        positions = []
+        pos = slice_text.find(quote)
+        while pos != -1:
+            positions.append(slice_start + pos)
+            pos = slice_text.find(quote, pos + 1)
+        if positions:
+            hint = start if isinstance(start, int) else slice_start
+            best = min(positions, key=lambda p: abs(p - hint))
+            item["start"] = best
+            item["end"] = best + len(quote)
+
+
 class Orion:
     def __init__(self, catalogue, budget, model_policy, prompts, *, enabled=True):
         self.catalogue, self.sessions = catalogue, catalogue.sessions
@@ -445,7 +493,7 @@ class Orion:
             max_tokens=4096)
         if response.stop_reason != "end_turn":
             raise ValueError("Truncated response; no automatic repair loop")
-        value = json.loads("\n".join(b.text for b in response.content if b.type == "text"))
+        value = _parse_json_response("\n".join(b.text for b in response.content if b.type == "text"))
         if job.kind == "review":
             if not isinstance(value, dict) or set(value) != {"accept", "reason"} or type(value["accept"]) is not bool:
                 raise ValueError("Invalid review contract")
@@ -469,6 +517,8 @@ class Orion:
             raise ValueError("Invalid interpretation contract")
         commands = []
         for index, candidate in enumerate(value):
+            if isinstance(candidate, dict):
+                _align_evidence_spans(candidate, source.id, source.content, job.payload["start"], job.payload["end"])
             command = Command.model_validate({**candidate, "command_id": f"orion:{job.id}:{index}"})
             if any(e.source_id != source.id or e.start < job.payload["start"] or e.end > job.payload["end"]
                    for e in command.evidence):

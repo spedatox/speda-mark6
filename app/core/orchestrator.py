@@ -201,10 +201,12 @@ class AgentOrchestrator:
             "because time passed or the owner was silent. Corrections use an existing ID and expected version. "
             "Do not rewrite native documents, financial ledgers, or Hisar documents. ")
         if stage == "interpret":
-            return common + ("Return ONLY a JSON array of at most 4 proposed commands (or []), conforming to this schema: "
+            return common + ("Return ONLY a raw JSON array of at most 4 proposed commands (or []) with no markdown code fences, conforming to this schema: "
                 + json.dumps(Command.model_json_schema()) + ". Evidence quotes must exactly match the supplied source; "
                 "start/end are absolute Unicode character offsets. Links use existing catalogue IDs. Set command_id "
-                "to a placeholder; the server assigns it. Keep useful events, people, preferences and open states. "
+                "to a placeholder; the server assigns it. Keep useful events, people, preferences, concrete owner-reported "
+                "results or milestones (e.g. exam scores, grades, outcomes — using prior_context_only to identify the subject "
+                "of short replies while quoting only the owner source), and open states. "
                 "Record a still-ongoing serious operational incident as an active state with high salience. "
                 "When owner evidence establishes an exam period, vacation or trip that affects availability across days, "
                 "propose a planned or active state with the supported starts_on and ends_on dates. Keep unknown bounds null. "

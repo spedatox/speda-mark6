@@ -132,7 +132,7 @@ class MemoryRuntime:
         already_elapsed = budget.elapsed_seconds
         packet, recent_read = await asyncio.gather(
             self._read(context, query, automatic=True, reserved_bytes=min(2200, budget.automatic_limit // 3)),
-            self._recent(context, query, min(.5, self.prepare_timeout, 5 - already_elapsed)),
+            self._recent(context, query, min(1.5, max(self.prepare_timeout, 1.2), 5 - already_elapsed)),
         )
         recent, packet.recent_coverage, packet.recent_elapsed_ms = recent_read
         byte_ceiling = min(2800, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
@@ -417,7 +417,7 @@ class MemoryRuntime:
                     education_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
                 if names_only and family_match and not data_is_identity(section["text"]):
                     continue
-                identity_bonus = 50 if unit["kind"] == "person" and data_is_identity(section["text"]) else 0
+                identity_bonus = 50 if unit["kind"] == "person" and (exact or family_match) and data_is_identity(section["text"]) else 0
                 try:
                     entity = json.loads(section["text"])
                 except (ValueError, TypeError):
@@ -437,7 +437,7 @@ class MemoryRuntime:
                         packet.catalogue_records.append(metadata)
                 if family_match and data_is_identity(section["text"]):
                     identity_bonus += 150
-                if unit["kind"] == "person" and re.search(r"\b(stance|boundar\w*|reconciliation|sibling bond|relationship status)\b", body):
+                if unit["kind"] == "person" and (exact or family_match) and re.search(r"\b(stance|boundar\w*|reconciliation|sibling bond|relationship status)\b", body):
                     identity_bonus += 30
                 dated = [day for day in section_dates if day <= today]
                 recency_bonus = max(0, 20 - (today - max(dated)).days / 2) if dated else 0
