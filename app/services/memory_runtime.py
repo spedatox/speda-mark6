@@ -110,7 +110,7 @@ def section_block(section, title, *, today: date, prior_context=None, supports=N
 
 
 class MemoryRuntime:
-    def __init__(self, store, *, prepare_timeout=0.8, lookup_timeout=2.5):
+    def __init__(self, store, *, prepare_timeout=4.0, lookup_timeout=6.0):
         self.store = store
         self.prepare_timeout = prepare_timeout
         self.lookup_timeout = lookup_timeout
@@ -132,7 +132,7 @@ class MemoryRuntime:
         already_elapsed = budget.elapsed_seconds
         packet, recent_read = await asyncio.gather(
             self._read(context, query, automatic=True, reserved_bytes=min(2200, budget.automatic_limit // 3)),
-            self._recent(context, query, min(1.5, max(self.prepare_timeout, 1.2), 5 - already_elapsed)),
+            self._recent(context, query, min(3.0, self.prepare_timeout, max(0, 12 - already_elapsed))),
         )
         recent, packet.recent_coverage, packet.recent_elapsed_ms = recent_read
         byte_ceiling = min(2800, budget.automatic_limit - packet.token_upper_bound, budget.turn_limit - budget.used)
@@ -191,7 +191,7 @@ class MemoryRuntime:
     async def restore_recent(self, context, ids):
         if context.triggered_by not in {"user", "n8n"} or not ids or "memory_lookup" not in (context.allowed_tools or ()):
             return []
-        seconds = min(.5, self.prepare_timeout, max(0, 5 - context.memory_budget.elapsed_seconds))
+        seconds = min(2.5, self.prepare_timeout, max(0, 12 - context.memory_budget.elapsed_seconds))
         rows, _, _ = await self._recent(context, turn_query(context), seconds, reference_ids=ids)
         return rows
 
@@ -206,8 +206,8 @@ class MemoryRuntime:
     async def _read(self, context, query, *, automatic, source_ids=(), as_of=None, reserved_bytes=0):
         started = monotonic()
         packet = MemoryPacket(request_id=context.request_id, user_id=context.user_id)
-        seconds = (self.prepare_timeout if self._ready else max(self.prepare_timeout, 0.5)) if automatic else self.lookup_timeout
-        seconds = min(seconds, max(0, 5 - context.memory_budget.elapsed_seconds))
+        seconds = (self.prepare_timeout if self._ready else max(self.prepare_timeout, 1.0)) if automatic else self.lookup_timeout
+        seconds = min(seconds, max(0, 12 - context.memory_budget.elapsed_seconds))
         deadline = Deadline.after(seconds)
         stage = "store_read"
         try:

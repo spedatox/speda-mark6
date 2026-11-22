@@ -141,9 +141,9 @@ async def test_default_automatic_deadlines_respect_the_remaining_turn_budget(mem
         packet = await runtime.prepare(memory.context())
         assert packet.status not in {'unavailable', 'deadline'}
     limited = memory.context()
-    limited.memory_budget.elapsed_seconds = 4.9
+    limited.memory_budget.elapsed_seconds = 11.9
     await runtime.prepare(limited)
-    assert budgets == pytest.approx([0.8, 0.8, 0.1])
+    assert budgets == pytest.approx([4.0, 4.0, 0.1])
 
 
 async def test_expired_review_is_unverified_not_completed(memory):
