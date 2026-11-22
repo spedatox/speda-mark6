@@ -480,6 +480,11 @@ class MemoryRuntime:
             if dossier and exact:
                 score += 220
             family_match = unit["key"] in result.get("relation_keys", ())
+            if (unit["kind"] == "person" and name_specificity >= 2
+                    and len(name_matches) < name_specificity
+                    and not exact and not family_match
+                    and not any(any(et in body for et in result.get("entity_terms", ())) for body in unit["section_search"])):
+                continue
             if names_only and result.get("relation_keys") and unit["kind"] in {"person", "situation"} and not family_match and not exact:
                 continue
             if family_match:
