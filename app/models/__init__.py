@@ -35,3 +35,7 @@ from app.models import mail_watch
 from app.models import comms
 
 from app.models import operation_wait
+from app.models.jarvis import (
+    JarvisControl, JarvisAllowance, JarvisGoal, JarvisInitiative, JarvisActionLease,
+    ACEPolicy, ACEPolicySnapshot, ACETrainingEvent,
+)

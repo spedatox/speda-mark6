@@ -250,6 +250,12 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     await registry.register_skill(ProjectCheckpointSkill())
 
     # ── 8. Inject into app.state ───────────────────────────────────────────────
+    from app.services.ace_engine import ACEPolicyEngine
+    from app.services.jarvis_engine import JarvisEngine
+    ace_engine = ACEPolicyEngine(AsyncSessionLocal)
+    jarvis_engine = JarvisEngine(AsyncSessionLocal, ace=ace_engine, global_budget=coordination_budget)
+    app.state.ace = ace_engine
+    app.state.jarvis = jarvis_engine
     app.state.registry = registry
     app.state.worker_control = worker_control
     app.state.connections = connections
@@ -436,6 +442,8 @@ def create_app() -> FastAPI:
     app.include_router(client_agent_settings_router)
     from app.routers.client_memory import router as client_memory_router
     app.include_router(client_memory_router)
+    from app.routers.jarvis import router as jarvis_router
+    app.include_router(jarvis_router)
     if settings.orchestration_rooms_enabled:
         from app.routers.coordination import router as coordination_router
         app.include_router(coordination_router)
