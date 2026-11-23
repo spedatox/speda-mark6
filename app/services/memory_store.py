@@ -144,14 +144,17 @@ class MemoryStore:
             if db.bind.dialect.name == "postgresql":
                 await self.postgres_search.rank(db, MemoryChange, "sources", 0, '"warm"', 1, False)
                 await self.postgres_search.rank(db, MemoryServingUnit, "units", 0, '"warm"', 1, False)
-        await self.semantic.warm()
         if self.semantic.enabled:
-            try:
-                async with self.sessions() as db, db.begin():
-                    await self.semantic.sync_units_for_user(db, 1, max_new=512)
-                    await self.semantic.sync_recent_sources(db, 1, scan_limit=250, max_new=128)
-            except Exception:
-                pass
+            import asyncio
+            async def _bg_warm():
+                try:
+                    await self.semantic.warm()
+                    async with self.sessions() as db, db.begin():
+                        await self.semantic.sync_units_for_user(db, 1, max_new=512)
+                        await self.semantic.sync_recent_sources(db, 1, scan_limit=250, max_new=128)
+                except Exception:
+                    pass
+            self._warm_task = asyncio.create_task(_bg_warm())
 
     async def epoch(self, context, deadline=None) -> int:
         async with self.reader(deadline) as db:
