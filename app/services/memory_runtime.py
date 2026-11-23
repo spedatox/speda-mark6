@@ -304,7 +304,7 @@ class MemoryRuntime:
             # Keep the existing persisted packet shape so saved room runs can be restored across releases.
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
-            if selected + cost > min(1100, int(available * 0.85)):
+            if selected + cost > min(1450, int(available * 0.92)):
                 packet.omissions.append("Current state context reached its budget")
                 continue
             packet.blocks.append(block)
