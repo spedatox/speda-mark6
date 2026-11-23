@@ -100,12 +100,51 @@ async def test_temporal_episode_skips_morning_briefing_and_newer_chat(memory):
     assert [item["message_id"] for item in packet["results"]] == [target]
 
 
-def test_calendar_source_quote_must_come_from_available_evidence(memory):
+def test_interactive_calendar_create_does_not_require_timing_evidence(memory):
+    class FakeCalendarClient:
+        _connected = True
+        server_name = "google_calendar"
+        allowed_agents = frozenset({"speda"})
+
+        @staticmethod
+        def read_only(name):
+            return False
+
     registry = CapabilityRegistry()
-    context = memory.context("Choose an open afternoon for my study session.")
-    registry._check_calendar_evidence({"timing_evidence": "Choose an open afternoon"}, context)
-    with pytest.raises(ProviderError, match="lacks supporting evidence"):
-        registry._check_calendar_evidence({"timing_evidence": "My return departs at 17:00"}, context)
+    tool_name = "mcp_google_calendar_calendar_create_event"
+    registry._mcp_clients["google_calendar"] = FakeCalendarClient()
+    registry._mcp_tool_map[tool_name] = "google_calendar"
+    registry._mcp_original_names[tool_name] = "calendar_create_event"
+    registry._mcp_definitions[tool_name] = {
+        "name": tool_name,
+        "description": "Creates a calendar event.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "start": {"type": "string"},
+                "end": {"type": "string"},
+            },
+            "required": ["summary", "start", "end"],
+            "additionalProperties": False,
+        },
+    }
+    context = memory.context("yup. 08:00 to 12:45 to calendar please.")
+    context.run_id = "run-1"
+    context.triggered_by = "user"
+    context.extra["loaded_tools"] = {tool_name}
+    listed = next(tool for tool in registry.list_tools(context, include_deferred=True) if tool["name"] == tool_name)
+    assert "timing_evidence" not in listed["input_schema"]["properties"]
+    assert "timing_evidence" not in listed["input_schema"]["required"]
+    registry.validate_call(
+        Block(
+            type="tool_use",
+            id="call-1",
+            name=tool_name,
+            input={"summary": "Meeting", "start": "2026-11-25T08:00:00", "end": "2026-11-25T12:45:00"},
+        ),
+        context,
+    )
 
 
 async def test_maintenance_model_is_priced_locally_and_rollback_compatible(memory):
