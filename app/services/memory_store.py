@@ -148,14 +148,9 @@ class MemoryStore:
             import asyncio
             async def _bg_warm():
                 try:
+                    # Keep startup strictly read-only on the database (required for zero-mutation
+                    # deployment rehearsal); unit embeddings are synced on publish().
                     await self.semantic.warm()
-                    for _ in range(32):
-                        async with self.sessions() as db, db.begin():
-                            added = await self.semantic.sync_units_for_user(db, 1, max_new=128)
-                        if added == 0:
-                            break
-                    async with self.sessions() as db, db.begin():
-                        await self.semantic.sync_recent_sources(db, 1, scan_limit=250, max_new=128)
                 except Exception:
                     pass
             self._warm_task = asyncio.create_task(_bg_warm())
