@@ -271,6 +271,13 @@ class MemoryStore:
                     async with self.sessions() as sdb, sdb.begin():
                         sem_unit_hits = await self.semantic.search_units(sdb, context.user_id, query_vec, limit=32)
                         sem_source_hits = await self.semantic.search_sources(sdb, context.user_id, query_vec, limit=24)
+                        if not source_ids:
+                            from app.services.episodic_cortex import classify_enrollment_intent, _cached_query_vec
+                            if classify_enrollment_intent(semantic_query):
+                                prog_qvec = _cached_query_vec("Academic major, degree program, transcript, or field of study")
+                                if prog_qvec is not None:
+                                    extra_hits = await self.semantic.search_units(sdb, context.user_id, prog_qvec, limit=6)
+                                    sem_unit_hits = [*sem_unit_hits, *extra_hits]
                 except Exception:
                     sem_unit_hits, sem_source_hits = [], []
         async with self.reader(deadline) as db:
@@ -286,11 +293,11 @@ class MemoryStore:
             catalog_key = (context.user_id, epoch)
             if catalog_key not in self.catalog:
                 from app.models.user import User
-                from app.services.memory_query import owner_relations
+                from app.services.memory_query import extract_owner_relation_phrases
                 owner_name = await db.scalar(select(User.name).where(User.id == context.user_id)) or "Owner"
                 # Legacy users.name can be the assistant's display name. The
                 # owner dossier is the explicit identity authority for relative
-                # family routing; never rewrite the preserved legacy user row.
+                # relation routing; never rewrite the preserved legacy user row.
                 dossier_names = {match[1].strip() for unit in core for match in re.finditer(
                     r"(?m)^\s*#{1,6}\s*DOSSIER:\s*([^\n—–]+)",
                     "\n".join(s.get("text", "") for s in unit.sections))}
@@ -300,36 +307,19 @@ class MemoryStore:
                     MemoryServingUnit.id, MemoryServingUnit.title, MemoryServingUnit.aliases, MemoryServingUnit.sections
                 ).where(MemoryServingUnit.user_id == context.user_id,
                         MemoryServingUnit.kind == "person").limit(10000))).all()
-                self.catalog[catalog_key] = [(pid, title, aliases, owner_relations(sections, owner_name))
+                self.catalog[catalog_key] = [(pid, title, aliases, extract_owner_relation_phrases(sections, owner_name))
                                             for pid, title, aliases, sections in people]
                 while len(self.catalog) > 16:
                     self.catalog.popitem(last=False)
-            from app.services.memory_query import relations
-            requested = relations(" ".join(terms))
-            # Specific sister/mother requests must not expand to every sibling/parent,
-            # except when no catalog entry carries the gendered tag (e.g. Turkish "kardeşi").
-            excluded_opposite = None
-            if len(requested.intersection({"sister", "brother"})) == 1:
-                specific = next(iter(requested.intersection({"sister", "brother"})))
-                if any(specific in family for _, _, _, family in self.catalog[catalog_key]):
-                    requested.discard("sibling")
-                else:
-                    excluded_opposite = "brother" if specific == "sister" else "sister"
-            if len(requested.intersection({"mother", "father"})) == 1:
-                specific = next(iter(requested.intersection({"mother", "father"})))
-                if any(specific in family for _, _, _, family in self.catalog[catalog_key]):
-                    requested.discard("parent")
-                else:
-                    excluded_opposite = "father" if specific == "mother" else "mother"
+            from app.services.episodic_cortex import match_owner_relations
+            rel_query = (raw_query or "").strip() or " ".join(terms)
             person_ids, name_terms, relation_ids = set(), set(), set()
             named_candidates = []
-            for person_id, title, aliases, family in self.catalog[catalog_key]:
+            for person_id, title, aliases, _rel_phrases in self.catalog[catalog_key]:
                 words = set(re.findall(r"\w+", fold(title + " " + " ".join(aliases))))
                 matches = words.intersection(terms)
                 if matches:
                     named_candidates.append((person_id, matches))
-                if requested.intersection(family) and (not excluded_opposite or excluded_opposite not in family):
-                    relation_ids.add(person_id)
             if named_candidates:
                 # A shared surname must not flood a named person's dossier
                 # retrieval with every family member. Keep the most specific
@@ -341,9 +331,9 @@ class MemoryStore:
                                for _, matches in specific for term in matches}
                 rarest = min(frequencies.values())
                 name_terms.update(term for term, count in frequencies.items() if count == rarest)
-            if name_terms:
-                # A named person's sister is not automatically the owner's sister.
-                relation_ids.clear()
+            if not name_terms and rel_query:
+                # A named person's relation is not automatically the owner's relation.
+                relation_ids = match_owner_relations(rel_query, self.catalog[catalog_key])
             person_ids.update(relation_ids)
             units, hits = list(core), []
             state_candidates = []
@@ -399,7 +389,8 @@ class MemoryStore:
                          if rec.payload.get("starts_on") or rec.payload.get("ends_on")),
                         default=0.0,
                     )
-                    if explicit_window or max_dated_sim >= 0.38:
+                    from app.services.episodic_cortex import CALIBRATED_DATED_STATE_THRESHOLD
+                    if explicit_window or max_dated_sim >= CALIBRATED_DATED_STATE_THRESHOLD:
                         ranked_pairs = sorted(
                             enumerate(zip(state_candidates, sims)),
                             key=lambda item: (

@@ -12,17 +12,10 @@ from app.schemas.memory_runtime import Deadline, EvidenceSection, MemoryPacket, 
 from app.services.memory_store import fold
 from app.services.semantic_index import rrf_fuse, mmr_order
 from app.services.memory_query import (
-    SCHOOL_TERM, conversation_content, education_fact_query, query_terms, relations, turn_query, withdrawal_reply,
+    conversation_content, query_terms, turn_query, withdrawal_reply,
 )
 
 logger = logging.getLogger(__name__)
-
-_ENROLLMENT = re.compile(
-    r"\b(?:enroll(?:ed|s|ing)? (?:at|in)|attends?|student at|stud(?:y|ies|ying) .*?\bat|okuyor\w*|ogrencisi)\b"
-)
-_PLACEMENT = re.compile(r"\b(?:placement\s*:|yerlestir\w*|yerlesti\w*)")
-_FORMER_ENROLLMENT = re.compile(r"\b(?:old|former|previous|used to|graduated|completed|eski|mezun)\b")
-_PROGRAM_LINE = re.compile(r"(?im)^[ \t]*\*{0,2}(?:program|bölüm)\*{0,2}:\*{0,2}[ \t]+[^\r\n]+")
 
 
 def _parse_iso_day(value) -> date | None:
@@ -67,29 +60,6 @@ def classify_state_phase(payload: dict, today: date) -> tuple[str, int]:
 
 def _salience_rank(value) -> int:
     return {"high": 0, "normal": 1, "low": 2}.get(str(value or "normal"), 1)
-
-
-def education_section(unit, section, today):
-    """Use exact spans from the owner profile and transcript for enrollment recall."""
-    if (section.attribution != "canonical_record" or section.historical
-            or (section.valid_from and section.valid_from > today)
-            or (section.valid_until and section.valid_until <= today)):
-        return None
-    if unit["kind"] == "core":
-        statements = [line for line in re.split(r"\n|(?<=[.!?])\s+", fold(section.text))
-                      if SCHOOL_TERM.search(line) and not _FORMER_ENROLLMENT.search(line)]
-        if any(_ENROLLMENT.search(line) for line in statements):
-            return "institution", 2, section
-        if any(_PLACEMENT.search(line) for line in statements):
-            return "institution", 1, section
-    if re.search(r"\b(?:transcript|transkript)\b", unit["folded_title"]):
-        if match := _PROGRAM_LINE.search(section.text):
-            value = match[0].strip()
-            start = section.start + match.start() + len(match[0]) - len(match[0].lstrip())
-            return "program", 1, section.model_copy(update={
-                "start": start, "end": start + len(value), "text": value,
-            })
-    return None
 
 
 def section_block(section, title, *, today: date, prior_context=None, supports=None) -> tuple[str, str]:
@@ -219,8 +189,6 @@ class MemoryRuntime:
                     primary_folded = fold(query.partition("\n")[0]).strip()
                     if re.search(rf"(?:^(?:hey|hi|hello|selam|merhaba)?\s*{re.escape(aid_term)}\b|\b{re.escape(aid_term)}[\s?!.,]*$)", primary_folded):
                         terms = [t for t in terms if t != aid_term]
-                if education_fact_query(query) and not source_ids:
-                    terms = list(dict.fromkeys(["transcript", "transkript", "university", "universitesi", *terms]))
                 result = await self.store.read(context, terms, source_ids=source_ids,
                                                include_recent=automatic, deadline=deadline, raw_query=query)
             self._ready = True
@@ -442,19 +410,17 @@ class MemoryRuntime:
         return selected
 
     def _select(self, context, packet, result, query, *, automatic, as_of, deadline, requested_sources=(), reserved_bytes=0):
+        from app.services.episodic_cortex import classify_enrollment_intent, score_canonical_field_support
         today = as_of or datetime.now(ZoneInfo(context.timezone)).date()
         terms = query_terms(query)
-        education_query = education_fact_query(query) and not requested_sources
-        family_query = bool(relations(query))
-        names_only = family_query and bool(re.search(r"\b(names?|adlari|isimleri|adi)\b", fold(query))) and not bool(
-            re.search(r"\b(where|when|why|happened|relationship|nerede|ne zaman|neden)\b", fold(query)))
-        personal_fact = not terms and bool(re.search(r"\b(fact|facts|about me|hakkimda)\b", fold(query)))
+        requested_fields = classify_enrollment_intent(query) if not requested_sources else []
+        relation_matched = bool(result.get("relation_keys"))
         folded_query = " " + fold(query) + " "
         budget = context.memory_budget
         ceiling = min(budget.automatic_limit - reserved_bytes if automatic else budget.lookup_limit,
                       budget.turn_limit - budget.used)
         available = max(0, ceiling - 512)
-        education_candidates = []
+        field_candidates = []
         candidates = []
         sem_unit_scores = result.get("semantic_unit_scores") or {}
         sem_source_scores = result.get("semantic_source_scores") or {}
@@ -488,7 +454,7 @@ class MemoryRuntime:
                     and not exact and not family_match
                     and not any(any(et in body for et in result.get("entity_terms", ())) for body in unit["section_search"])):
                 continue
-            if names_only and result.get("relation_keys") and unit["kind"] in {"person", "situation"} and not family_match and not exact:
+            if relation_matched and unit["kind"] == "person" and not family_match and not exact:
                 continue
             if family_match:
                 score += 350
@@ -505,11 +471,21 @@ class MemoryRuntime:
                     future_spans.append((section["source_id"], section["start"], section["end"]))
                 relevance = sum(t in body for t in terms)
                 sem_score = float(sem_unit_scores.get((unit["key"], sidx), 0.0))
-                if education_query and (match := education_section(unit, checked, today)):
-                    field, rank, evidence = match
-                    education_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
-                if names_only and family_match and not data_is_identity(section["text"]):
-                    continue
+                if (requested_fields and checked.attribution == "canonical_record" and not checked.historical
+                        and not (checked.valid_from and checked.valid_from > today)
+                        and not (checked.valid_until and checked.valid_until <= today)):
+                    if match := score_canonical_field_support(unit["kind"], checked.text, ["institution", "program"]):
+                        field, rank, line_span = match
+                        if line_span is not None:
+                            rel_start, rel_end, val = line_span
+                            evidence = checked.model_copy(update={
+                                "start": checked.start + rel_start,
+                                "end": checked.start + rel_end,
+                                "text": val,
+                            })
+                        else:
+                            evidence = checked
+                        field_candidates.append((field, rank, evidence, unit["key"], unit["title"], unit["revision"]))
                 iacon_bonus = (150 if not checked.historical else -120) if unit["key"].startswith("iacon:") else 0
                 dossier_heading_bonus = 40 if (unit["kind"] == "core" and re.match(r"\s*#{1,6}\s*DOSSIER:", section["text"], re.I)) else 0
                 identity_bonus = 50 if unit["kind"] == "person" and (exact or family_match) and data_is_identity(section["text"]) else 0
@@ -532,11 +508,9 @@ class MemoryRuntime:
                         packet.catalogue_records.append(metadata)
                 if family_match and data_is_identity(section["text"]):
                     identity_bonus += 150
-                if unit["kind"] == "person" and (exact or family_match) and re.search(r"\b(stance|boundar\w*|reconciliation|sibling bond|relationship status)\b", body):
-                    identity_bonus += 30
                 dated = [day for day in section_dates if day <= today]
                 recency_bonus = max(0, 20 - (today - max(dated)).days / 2) if dated else 0
-                living = (automatic and not family_query and not personal_fact and unit["kind"] == "situation"
+                living = (automatic and not relation_matched and bool(terms) and unit["kind"] == "situation"
                           and not unit["key"].startswith("iacon:") and not section.get("historical"))
                 ppr_score = float(ppr_record_scores.get(unit["key"][6:], 0.0)) if unit["key"].startswith("iacon:") else 0.0
                 sem_hit = sem_score >= 0.26 and not checked.historical
@@ -613,11 +587,14 @@ class MemoryRuntime:
                 fused[i] = fused.get(i, 0.0) + 0.90 / (40.0 + rank)
             sem_index = getattr(self.store, "semantic", None)
             mmr_inputs = []
+            rel_keys = set(result.get("relation_keys") or ())
             for i, c in indexed:
-                lex_sc, sem_sc, ppr_sc, is_hist, attr, vec_ref, key, _, _, _ = c
+                lex_sc, sem_sc, ppr_sc, is_hist, attr, vec_ref, key, _, sec_obj, _ = c
                 # Proper temporal & epistemic handling: no arbitrary freshness penalty on PPR-reached biographical nodes.
                 base = fused.get(i, 0.0)
-                if lex_sc >= 300:
+                if key in rel_keys and data_is_identity(sec_obj.get("text", "")):
+                    base += 0.045  # Direct owner-anchored identity clause match
+                elif lex_sc >= 300:
                     base += 0.015  # Exact identity / explicit relation anchor
                 if is_hist and ppr_sc == 0.0:
                     base *= 0.35
@@ -664,8 +641,8 @@ class MemoryRuntime:
 
         # Give the best exact span for each requested field room before standing states.
         packed_fields = set()
-        education_candidates.sort(key=lambda c: (c[0], -c[1], c[2].start))
-        for field, _, data, key, title, revision in education_candidates:
+        field_candidates.sort(key=lambda c: (c[0], -c[1], c[2].start))
+        for field, _, data, key, title, revision in field_candidates:
             if field in packed_fields:
                 continue
             handle, block, cost = pack(data, title, supports=field)

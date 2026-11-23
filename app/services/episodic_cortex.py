@@ -51,6 +51,203 @@ _VEC_CACHE_LOCK = threading.Lock()
 _QUERY_VEC_CACHE: OrderedDict[str, np.ndarray] = OrderedDict()
 _PASSAGE_VEC_CACHE: OrderedDict[str, np.ndarray] = OrderedDict()
 _PROTOTYPE_MATRIX: tuple[list[str], np.ndarray] | None = None
+_INTENT_PROTOTYPES: dict[str, np.ndarray] | None = None
+
+# Calibrated on multilingual (EN/TR/mixed/paraphrase) evaluation pairs against
+# intfloat/multilingual-e5-small (see evaluation report):
+# - Dated states: max_neg=0.316, min_pos=0.410 -> midpoint 0.36
+CALIBRATED_DATED_STATE_THRESHOLD = 0.36
+# - Direct owner-relation phrases: max_neg=0.338, min_pos=0.498 (clean phrases) -> floor 0.44, band 0.21
+CALIBRATED_RELATION_FLOOR = 0.44
+CALIBRATED_RELATION_BAND = 0.21
+# - Travel disruption / schedule change (combined with travel_mobility domain)
+CALIBRATED_JOURNEY_CHANGE_THRESHOLD = 0.45
+# - Contrastive owner enrollment intent: min_pos=0.505, contrastive margin=0.02
+CALIBRATED_ENROLLMENT_FLOOR = 0.48
+CALIBRATED_CONTRAST_MARGIN = 0.02
+
+_INTENT_TEXTS: dict[str, str] = {
+    "enroll_current": "Which university, college, major, or degree program am I currently enrolled in or studying right now?",
+    "enroll_past": "Where did I previously study, attend school in the past, or graduate from earlier?",
+    "enroll_other": "Which university, college, or school does my sister, brother, friend, or another person attend?",
+    "enroll_referent": "You are currently at your university, college, or school.",
+    "enroll_referent_past": "That was your old, former, or previous school or college.",
+    "enroll_referent_other": "Your sister, brother, or friend attends a university or school.",
+    "enroll_institution": "Which university, college, or institution do I attend?",
+    "enroll_program": "What is my academic major, degree program, department, or field of study?",
+    "journey_change": "My bus, flight, train, or travel itinerary was changed, delayed, moved, rescheduled, booked, or confirmed.",
+    "journey_non_travel": "My office meeting, call, or work appointment was rescheduled or moved.",
+    "sec_institution": "Current university or college enrollment or academic placement of the owner",
+    "sec_program": "Academic major, degree program, or department field of study",
+    "sec_past": "Previously completed or former graduated degree or old school",
+    "sec_student_id": "Student identification number or registration ID code",
+}
+
+
+def _intent_prototypes() -> dict[str, np.ndarray] | None:
+    global _INTENT_PROTOTYPES
+    if _INTENT_PROTOTYPES is not None:
+        return _INTENT_PROTOTYPES
+    if not _semantic_enabled():
+        return None
+    try:
+        from app.services.semantic_index import NeuralEmbedder
+        keys = list(_INTENT_TEXTS.keys())
+        mat = NeuralEmbedder.shared().embed_passages_sync([_INTENT_TEXTS[k] for k in keys])
+        _INTENT_PROTOTYPES = {keys[i]: mat[i] for i in range(len(keys))}
+        return _INTENT_PROTOTYPES
+    except Exception:
+        return None
+
+
+def classify_enrollment_intent(query: str) -> list[str]:
+    """Contrastive multilingual neural classification for current owner enrollment queries.
+
+    Returns a non-empty subset of ['institution', 'program'] when the query asks about
+    the owner's own current university/program (rejecting past education and other people's
+    schools without hardcoded keyword lists).
+    """
+    if not (query or "").strip():
+        return []
+    protos = _intent_prototypes()
+    qv = _cached_query_vec(query)
+    if protos is None or qv is None:
+        return []
+    s_cur = float(np.dot(qv, protos["enroll_current"]))
+    s_past = float(np.dot(qv, protos["enroll_past"]))
+    s_other = float(np.dot(qv, protos["enroll_other"]))
+    matched = (
+        s_cur >= CALIBRATED_ENROLLMENT_FLOOR
+        and s_cur > s_past + CALIBRATED_CONTRAST_MARGIN
+        and s_cur > s_other + CALIBRATED_CONTRAST_MARGIN
+    )
+    if not matched and "\n" in query:
+        # Check borrowed referent line from a referential follow-up (e.g. 'What would the name be?').
+        borrowed = query.partition("\n")[2].partition("\n")[0].strip()
+        if borrowed:
+            bv = _cached_query_vec(borrowed)
+            if bv is not None:
+                r_cur = float(np.dot(bv, protos["enroll_referent"]))
+                r_past = float(np.dot(bv, protos["enroll_referent_past"]))
+                r_other = float(np.dot(bv, protos["enroll_referent_other"]))
+                if r_cur >= 0.44 and r_cur > r_past + 0.04 and r_cur > r_other + 0.04:
+                    return ["institution"]
+    if not matched:
+        return []
+    s_inst = float(np.dot(qv, protos["enroll_institution"]))
+    s_prog = float(np.dot(qv, protos["enroll_program"]))
+    # If both institution and program are strongly signaled, require both; otherwise pick the dominant one.
+    fields: list[str] = []
+    if s_inst >= s_prog - 0.08:
+        fields.append("institution")
+    if s_prog >= s_inst - 0.17 and s_prog >= 0.48:
+        fields.append("program")
+    return fields or ["institution"]
+
+
+def is_changed_journey(query: str) -> bool:
+    """Contrastive multilingual neural detection for travel itinerary changes/delays (zero regex verbs)."""
+    if not (query or "").strip():
+        return False
+    protos = _intent_prototypes()
+    qv = _cached_query_vec(query)
+    if protos is None or qv is None:
+        return False
+    s_jc = float(np.dot(qv, protos["journey_change"]))
+    s_non_travel = float(np.dot(qv, protos["journey_non_travel"]))
+    return s_jc >= CALIBRATED_JOURNEY_CHANGE_THRESHOLD and s_jc > s_non_travel
+
+
+def match_owner_relations(
+    query: str,
+    catalog: list[tuple[int, str, list[str], list[str]]],
+    *,
+    floor: float = CALIBRATED_RELATION_FLOOR,
+    band: float = CALIBRATED_RELATION_BAND,
+) -> set[int]:
+    """Match a multilingual query against structurally extracted direct owner-relation phrases.
+
+    Replaces hardcoded _RELATIONS dictionaries with general-purpose neural similarity so any
+    relationship (family, advisor, roommate, dentist, colleague, etc.) works across languages.
+    """
+    if not (query or "").strip() or not catalog:
+        return set()
+    qv = _cached_query_vec(query)
+    if qv is None:
+        return set()
+    scored: list[tuple[int, float]] = []
+    for person_id, _title, _aliases, rel_phrases in catalog:
+        if not rel_phrases:
+            continue
+        best = 0.0
+        for phrase in rel_phrases:
+            pv = _cached_passage_vec(phrase)
+            if pv is not None:
+                sim = float(np.dot(qv, pv))
+                if sim > best:
+                    best = sim
+        if best >= floor:
+            scored.append((person_id, best))
+    if not scored:
+        return set()
+    top_sim = max(s for _, s in scored)
+    cutoff = max(floor, top_sim - band)
+    return {pid for pid, sim in scored if sim >= cutoff}
+
+
+_MARKDOWN_KV_LINE = re.compile(r"(?m)^[ \t]*\*{0,2}[^*\r\n:]{2,40}\*{0,2}:\*{0,2}[ \t]+[^\r\n]+")
+# Structural multi-word proper-noun detector (e.g. 'Örnek Technical University', 'Cedar University').
+_NAMED_ENTITY_PHRASE = re.compile(r"\b[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ]+(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ]+)+\b")
+
+
+def score_canonical_field_support(
+    unit_kind: str,
+    text: str,
+    requested_fields: list[str],
+) -> tuple[str, float, tuple[int, int, str] | None] | None:
+    """Semantically match a canonical section to requested enrollment fields without domain regexes.
+
+    For structured markdown key-value records (e.g., transcripts), isolates the single best
+    matching `**Key:** Value` line so unrelated sensitive fields (e.g. Student No) are not leaked.
+    """
+    if not requested_fields or not (text or "").strip():
+        return None
+    protos = _intent_prototypes()
+    if protos is None:
+        return None
+    if unit_kind == "core" and "institution" in requested_fields:
+        # Evaluate sentences to separate current enrollment/placement from former/graduated lines.
+        sentences = [s.strip() for s in re.split(r"\n|(?<=[.!?])\s+", text) if len(s.strip()) >= 8]
+        best_inst = 0.0
+        for sent in sentences:
+            sv = _cached_passage_vec(sent)
+            if sv is None:
+                continue
+            s_inst = float(np.dot(sv, protos["sec_institution"]))
+            s_past = float(np.dot(sv, protos["sec_past"]))
+            if s_inst >= 0.42 and s_inst > s_past + 0.04:
+                # Prefer sentences that name a concrete multi-word proper-noun entity over generic statements.
+                entity_bonus = 0.20 if _NAMED_ENTITY_PHRASE.search(sent) else 0.0
+                best_inst = max(best_inst, s_inst - 0.25 * s_past + entity_bonus)
+        if best_inst > 0.0:
+            return ("institution", best_inst, None)
+    if unit_kind != "person" and "program" in requested_fields:
+        best_line: tuple[float, int, int, str] | None = None
+        for m in _MARKDOWN_KV_LINE.finditer(text):
+            raw = m.group(0)
+            val = raw.strip()
+            lv = _cached_passage_vec(val)
+            if lv is None:
+                continue
+            s_prog = float(np.dot(lv, protos["sec_program"]))
+            s_id = float(np.dot(lv, protos["sec_student_id"]))
+            if s_prog >= 0.24 and s_prog > s_id + 0.05:
+                if best_line is None or s_prog > best_line[0]:
+                    lead_ws = len(raw) - len(raw.lstrip())
+                    best_line = (s_prog, m.start() + lead_ws, m.start() + lead_ws + len(val), val)
+        if best_line is not None:
+            return ("program", best_line[0], (best_line[1], best_line[2], best_line[3]))
+    return None
 
 
 def _semantic_enabled() -> bool:

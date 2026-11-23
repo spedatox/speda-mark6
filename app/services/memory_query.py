@@ -95,24 +95,27 @@ def planning_window(query, today):
 
 
 def referential(value):
-    """Detect short or pronoun-referential follow-up turns structurally (zero domain/topic word lists)."""
-    folded = fold(value)
+    """Detect elliptical fragments, grammatical anaphora/deixis, or definite bridging references.
+
+    Linguistic criteria (zero domain vocabulary):
+    1. Ultra-short elliptical fragments (<=3 words: 'names?', 'adları?', 'when?').
+    2. Explicit anaphoric/deictic pronouns within a short turn (<160 chars).
+    3. Short turns (<=6 words) using a definite bridging article ('the ...') without
+       a self-contained first-person anchor ('I'/'my'/'me'), e.g. 'What would the name be?'.
+    """
+    folded = fold(strip_reply_quote_prefix(value))
     words = re.findall(r"\w+", folded)
-    if len(words) <= 6:
+    if len(words) <= 3:
         return True
-    return len(value) < 160 and bool(re.search(
-        r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin)\b",
+    if len(folded) < 160 and re.search(
+        r"\b(her|him|their|theri|they|them|that|this|these|those|there|meant|she|he|it|its|"
+        r"onun|onlarin|bunu|sunu|orasi|oraya)\b",
         folded,
-    ))
-
-
-_NAME_QUESTION = re.compile(r"\b(?:names?|adlari|isimleri|adi)\b")
-SCHOOL_TERM = re.compile(r"\b(?:universit\w*|college|school|okul\w*)\b")
-_OWNER_SCHOOL = re.compile(
-    r"\b(?:my|your|owner(?:['’]s)?)\b(?:\W+\w+){0,3}\W+(?:universit\w*|college|school)\b"
-    r"|\b(?:universitem\w*|okulum\w*)\b"
-)
-_PAST_SCHOOL = re.compile(r"\b(?:old|former|previous|used to|graduated|once|eski|onceki|mezun)\b")
+    ):
+        return True
+    if len(words) <= 6 and re.search(r"\bthe\b", folded) and not re.search(r"\b(i|my|me|mine)\b", folded):
+        return True
+    return False
 
 
 def strip_reply_quote_prefix(text: str) -> str:
@@ -128,26 +131,43 @@ def strip_reply_quote_prefix(text: str) -> str:
     return body or text
 
 
-def education_fact_query(query):
-    """Recognize a current enrollment or program question from the owner turn."""
-    primary, _, borrowed = fold(strip_reply_quote_prefix(query)).partition("\n")
-    if _PAST_SCHOOL.search(primary):
-        return False
-    if re.search(r"\b(?:where (?:do i study|am i enrolled)|what (?:do i study|am i studying)|"
-                 r"(?:what|which) is my (?:major|degree|program|school)|my major|"
-                 r"ne okuyorum|bolumum|hangi bolum\w*)\b", primary):
-        return True
-    if SCHOOL_TERM.search(primary):
-        owner_subject = re.search(r"\b(?:i|owner|okuyorum|my (?:current )?(?:university|college|school))\b", primary)
-        if owner_subject and re.search(
-            r"\b(?:which|what|hangi|name|adi|attend|enroll\w*|okuyor\w*)\b", primary
-        ):
-            return True
-        if re.fullmatch(r"(?:my (?:university|college|school)|universitem\w*|okulum\w*)", primary.strip(" ?.?!")):
-            return True
-    referent = borrowed.partition("\n")[0]
-    return bool(_NAME_QUESTION.search(primary) and _OWNER_SCHOOL.search(referent)
-                and not _PAST_SCHOOL.search(referent))
+def _select_referent_sentence(prior: str, query: str) -> str:
+    """Select the most informative referent sentence from a multi-sentence prior turn."""
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", prior.strip()) if s.strip()]
+    if len(sentences) <= 1:
+        return prior
+    # Drop trivial <=3-word discourse fillers (e.g. 'My mistake.', 'Sure.', 'Tamam.')
+    substantive = [s for s in sentences if len(re.findall(r"\w+", fold(s))) > 3]
+    if not substantive:
+        return sentences[0]
+    if len(substantive) == 1:
+        return substantive[0]
+    # Rank substantive sentences semantically against the current turn (and prefer current-tense statements).
+    try:
+        import numpy as np
+        from app.services.episodic_cortex import _cached_passage_vec, _cached_query_vec, _intent_prototypes
+        qv = _cached_query_vec(query)
+        protos = _intent_prototypes()
+        if qv is not None:
+            best_sent = substantive[0]
+            best_score = -1e9
+            for idx, sent in enumerate(substantive):
+                sv = _cached_passage_vec(sent)
+                if sv is None:
+                    continue
+                sim = float(np.dot(qv, sv))
+                # Penalize past-tense correction clauses relative to present-tense statements.
+                past_pen = float(np.dot(sv, protos["sec_past"])) * 0.35 if protos else 0.0
+                # Slight preference for earlier core answer sentences over trailing meta-explanations.
+                pos_bonus = 0.03 * max(0, 2 - idx)
+                score = sim - past_pen + pos_bonus
+                if score > best_score:
+                    best_score = score
+                    best_sent = sent
+            return best_sent
+    except Exception:
+        pass
+    return substantive[0]
 
 
 def turn_query(context, query=None) -> str:
@@ -165,54 +185,23 @@ def turn_query(context, query=None) -> str:
     history = conversation_content(context)
     latest = next((i for i in range(len(history)-1, -1, -1) if history[i][0] in {"user", "query"}), None)
     value = query if query is not None else (history[latest][1] if latest is not None else "")
-    if latest is not None and referential(value) and not education_fact_query(value):
-        # Borrow nearby user and assistant context when the turn is short, referential, or deictic
-        # (e.g. "hey speda" -> "Im on my way still" -> "how far am I from the destination",
-        # or "You have a younger brother and a sister." -> "theri names?").
-        name_follow_up = bool(_NAME_QUESTION.search(fold(value)))
+    if latest is not None and referential(value):
+        # Borrow nearby user and assistant context when the turn is an elliptical fragment
+        # or contains explicit grammatical anaphora/deixis.
         borrowed = []
         for _, prior in reversed(history[max(0, latest-6):latest]):
             if not query_terms(prior):
                 continue
-            referent = prior[:1200]
-            if name_follow_up:
-                sentences = re.split(r"(?<=[.!?])\s+", referent)
-                first = sentences[0]
-                school = None
-                if not relations(first):
-                    school = next((sentence for sentence in sentences
-                                   if _OWNER_SCHOOL.search(fold(sentence))
-                                   and not _PAST_SCHOOL.search(fold(sentence))), None)
-                if not school and referential(prior) and not education_fact_query(prior):
-                    continue
-                referent = school or first
+            if referential(prior) and len(re.findall(r"\w+", fold(prior))) <= 3:
+                continue
+            referent = _select_referent_sentence(prior[:1200], value)
             borrowed.append(referent)
-            if name_follow_up or len(borrowed) >= 2:
+            if len(borrowed) >= 2:
                 break
         if borrowed:
             value += "\n" + "\n".join(borrowed)
     value += "\n" + str(context.extra.get("attachment_text", ""))[:2000]
     return value[:6000]
-
-
-_RELATIONS = {
-    "sister": r"\bsisters?\b|\bkiz kardes\w*",
-    "brother": r"\bbrothers?\b|\berkek kardes\w*|\babim\b|\babisi\b",
-    "sibling": r"\bsiblings?\b|\bkardes\w*",
-    "mother": r"\bmother\b|\bmom\b|\banne\w*",
-    "father": r"\bfather\b|\bdad\b|\bbaba\w*",
-    "parent": r"\bparents?\b|\bebeveyn\w*",
-    "spouse": r"\bspouse\b|\bwife\b|\bhusband\b|\besi\b|\besim\b",
-}
-
-
-def relations(text):
-    found = {kind for kind, pattern in _RELATIONS.items() if re.search(pattern, fold(text))}
-    if found.intersection({"sister", "brother"}):
-        found.add("sibling")
-    if found.intersection({"mother", "father"}):
-        found.add("parent")
-    return found
 
 
 def identity_text(text):
@@ -223,38 +212,58 @@ def identity_text(text):
     return re.split(r"\n|(?<=[.!?])\s", text.strip(), maxsplit=1)[0][:500]
 
 
-def owner_relations(sections, owner_name):
-    """Route by explicit identity assertions, never a family mention in an event."""
+_MODIFIER_PREFIX = re.compile(
+    r"^(?:(?:younger|older|elder|little|big|only|youngest|eldest|late|half|step|current|former|ex|"
+    r"kucuk|buyuk|en\s+kucuk|en\s+buyuk)\s+)+",
+    re.I,
+)
+# Structural 2-hop possessive guard (zero domain vocabulary):
+# rejects English "X's Y's Z" and Turkish nested genitives "...inin / ...unun / ...sının / ...sunun ..."
+_EN_SECOND_HOP = re.compile(r"^\w+(?:\s+\w+)?['’]s\b")
+_TR_SECOND_HOP = re.compile(r"^(?:\w+\s+){0,2}\w+(?:inin|unun|sinin|sunun|imin|umun)\b")
+
+
+def extract_owner_relation_phrases(sections, owner_name) -> list[str]:
+    """Structurally extract direct owner-anchored relationship phrases from identity clauses.
+
+    Preserves deterministic syntax boundaries (skips event bullets, requires owner anchor,
+    rejects 'of the owner's ...' and 2-hop possessive chains like 'owner's sister's friend')
+    and keeps original Unicode diacritics for accurate multilingual neural embeddings.
+    """
     names = fold(owner_name).split()
     anchors = [r"\b(?:the )?owner['’]s\b", r"\byour\b"]
     if names and names[0] != "owner":
-        # Both full and familiar given-name forms occur in the bilingual records.
+        # Both full and familiar given-name forms occur in bilingual records.
         anchors.append(r"\b" + re.escape(names[0]) + r"(?:\s+\w+){0,3}['’](?:s|in|un|nin|nun)\b")
-    result = set()
+    phrases: list[str] = []
+    seen: set[str] = set()
     for section in sections:
         text = section.get("text", "")
         if re.match(r"\s*(?:[-*] |\[\d{4}-)", text):
             continue
-        identity = fold(identity_text(text))
+        raw_id = identity_text(text)
+        folded_id = fold(raw_id)
         for anchor in anchors:
-            match = re.search(anchor, identity)
+            match = re.search(anchor, folded_id)
             if not match:
                 continue
-            if re.search(r"\bof\s+(?:the\s+)?$", identity[:match.start()]):
+            if re.search(r"\bof\s+(?:the\s+)?$", folded_id[:match.start()]):
                 continue
-            tail = identity[match.end():].lstrip()
-            tail = re.sub(r"^(?:(?:younger|older|elder|little|big|only|youngest|eldest|late|half|step)\s+)+", "", tail)
-            # Only the directly asserted relationship counts: an owner's sister's
-            # friend is not the owner's sister. Turkish genitives have the same trap.
-            if re.match(r"(?:sister|brother|sibling|mother|father|parent|wife|husband|spouse)['’]s\b", tail):
+            # Slice from raw_id at the same character offset (fold preserves length for Latin/Turkish).
+            tail_raw = raw_id[match.end():].lstrip() if len(raw_id) == len(folded_id) else folded_id[match.end():].lstrip()
+            tail_folded = folded_id[match.end():].lstrip()
+            mod_match = _MODIFIER_PREFIX.match(tail_folded)
+            if mod_match:
+                tail_raw = tail_raw[mod_match.end():].lstrip()
+                tail_folded = tail_folded[mod_match.end():].lstrip()
+            if not tail_folded:
                 continue
-            for kind, pattern in _RELATIONS.items():
-                if re.match(pattern, tail):
-                    result.add(kind)
-            if re.match(r"(?:kiz |erkek )?kardes(?:inin|imin)\b|(?:anne|baba)(?:sinin|min)\b", tail):
-                result.difference_update({"sister", "brother", "sibling", "mother", "father", "parent"})
-            if result.intersection({"sister", "brother"}):
-                result.add("sibling")
-            if result.intersection({"mother", "father"}):
-                result.add("parent")
-    return result
+            if _EN_SECOND_HOP.match(tail_folded) or _TR_SECOND_HOP.match(tail_folded):
+                continue
+            # Preserve the clean head relation clause (before sentence/semicolon/comma breaks).
+            clause = re.split(r"[.;,\n]", tail_raw, maxsplit=1)[0].strip()
+            clause_key = fold(clause)
+            if len(clause_key) >= 2 and clause_key not in seen:
+                seen.add(clause_key)
+                phrases.append(clause)
+    return phrases

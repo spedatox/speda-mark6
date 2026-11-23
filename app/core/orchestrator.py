@@ -51,8 +51,8 @@ class AgentOrchestrator:
     @staticmethod
     def _executive_goal(context):
         """Derive the decision from the admitted turn, including its scoped referent."""
-        from app.services.memory_query import education_fact_query, turn_query
-        from app.services.episodic_cortex import concept_vector
+        from app.services.memory_query import turn_query
+        from app.services.episodic_cortex import classify_enrollment_intent, is_changed_journey
         from app.services.memory_store import fold
 
         room = context.extra.get("room_state", {})
@@ -75,16 +75,11 @@ class AgentOrchestrator:
         else:
             return None
         primary = fold(query.partition("\n")[0])
-        if context.triggered_by != "n8n" and education_fact_query(query):
-            program = re.search(r"\b(?:major|program|degree|bolum\w*|ne okuyorum|what (?:do i study|am i studying))\b", primary)
-            school = re.search(r"\b(?:university|college|school|universite\w*)\b", primary)
-            fields = ["institution"] if school or not program else []
-            if program:
-                fields.append("program")
-            return ("owner_enrollment", fields)
-        concepts = concept_vector(query)
-        if concepts.get("travel_mobility") and re.search(
-                r"\b(?:changed|moved|rescheduled|booked|confirmed|delayed|degisti|ertelendi)\b", primary):
+        if context.triggered_by != "n8n":
+            fields = classify_enrollment_intent(query)
+            if fields:
+                return ("owner_enrollment", fields)
+        if is_changed_journey(query):
             return ("changed_journey", [])
         packet = context.memory_packet
         if context.triggered_by == "user" and packet and packet.recent_conversation:
