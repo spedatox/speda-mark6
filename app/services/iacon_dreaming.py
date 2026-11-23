@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from sqlalchemy import select
 
 from app.models.iacon import IaconEdge, IaconNarrative, IaconRecord
-from app.models.memory_serving import MemoryChange
+from app.models.memory_serving import MemoryChange, MemoryServingUnit
 from app.services.memory_store import digest, fold
 
 logger = logging.getLogger(__name__)
@@ -254,6 +254,10 @@ class OrionDreamer:
                     IaconNarrative.user_id == user_id,
                 ))).scalars().all()
             }
+            core_units = (await db.execute(select(MemoryServingUnit).where(
+                MemoryServingUnit.user_id == user_id,
+                MemoryServingUnit.kind == "core",
+            ).order_by(MemoryServingUnit.id).limit(4))).scalars().all()
             epoch = await self.store.epoch(SimpleNamespace(user_id=user_id))
             graph = await self.store.graph.load(db, user_id, epoch)
 
@@ -304,19 +308,77 @@ class OrionDreamer:
             )
             updated.append(slug)
 
-        # 1. Core Identity Card (owner identity, family entities, core claims)
+        # 1. Core Identity Card: anchor on canonical Owner Profile (core serving units) + non-empty identity records.
+        # Never pollute Core Identity with bare empty-description contact stubs (e.g., random professors).
+        def _has_substance(r: IaconRecord) -> bool:
+            p = r.payload or {}
+            return bool(str(p.get("description") or p.get("summary") or p.get("statement") or p.get("value") or "").strip())
+
+        core_profile_lines: list[str] = []
+        for cu in core_units:
+            if cu.stable_key.startswith("iacon:"):
+                continue  # Preferences have their own card
+            for sec in (cu.sections or []):
+                txt = str(sec.get("text") or "").strip()
+                if not txt or sec.get("historical") or txt.startswith("# Owner Profile"):
+                    continue
+                # Prioritize dossier heading, origins, education/university, and identity sections
+                lower_txt = fold(txt)
+                if any(k in lower_txt for k in ("dossier:", "origins", "universit", "ostim", "education", "major", "bolum", "department", "family", "ankara", "bursa")):
+                    core_profile_lines.append(txt[:360])
         core_recs = [
             r for r in records
-            if r.kind in {"entity", "claim"} and (
+            if r.kind in {"entity", "claim"} and _has_substance(r) and (
                 (r.payload or {}).get("salience") == "high"
                 or (r.payload or {}).get("entity_type") in {"person", "organization"}
                 or r.kind == "claim"
             )
-        ][:16]
+        ][:10]
         core_ids = {r.id for r in core_recs}
         core_edges = [e for e in edges if e.source_id in core_ids and e.target_id in core_ids and e.status == "accepted"]
-        if core_recs:
-            await _maybe_update("core_identity", "core:owner_identity", "Core Identity & Key People", core_recs, core_edges, 2.0)
+        if core_profile_lines or core_recs:
+            profile_digest_extra = digest("\n".join(core_profile_lines))[:12] if core_profile_lines else ""
+            src_digest = digest(compute_source_digest(core_recs, core_edges) + ":" + profile_digest_extra)
+            prev = existing_narratives.get("core:owner_identity")
+            if prev and prev.owner_locked:
+                skipped += 1
+            elif not force and prev and prev.status == "accepted" and prev.source_digest == src_digest:
+                skipped += 1
+            else:
+                if core_profile_lines:
+                    md_parts = ["### Core Owner Identity (Canonical Profile)"]
+                    for pl in core_profile_lines[:4]:
+                        md_parts.append(pl)
+                    if core_recs:
+                        md_parts.append("\n**Key Entities & Claims:**")
+                        for r in core_recs[:6]:
+                            md_parts.append(f"- {_record_summary_line(r)}")
+                    explicit_facts = [*core_profile_lines[:4], *(_record_summary_line(r) for r in core_recs[:6])]
+                    inferred_links = [_edge_summary_line(e, all_titles) for e in core_edges if e.epistemic_mode != "explicit"][:4]
+                    summary_md = "\n".join(md_parts)[:1800]
+                else:
+                    synth = await self._synthesize(
+                        user_id=user_id, timezone_name=timezone_name,
+                        work_id=f"dream:{user_id}:core:owner_identity:{src_digest[:12]}",
+                        tier="core_identity", title="Core Identity & Key People",
+                        records=core_recs, edges=core_edges, all_titles=all_titles, use_llm=use_llm,
+                    )
+                    summary_md = synth["summary_markdown"]
+                    explicit_facts = synth["explicit_facts"]
+                    inferred_links = synth["inferred_links"]
+                await self.catalogue.upsert_narrative(
+                    user_id, tier="core_identity", slug="core:owner_identity",
+                    title="Core Owner Identity",
+                    summary_markdown=summary_md,
+                    explicit_facts=explicit_facts,
+                    inferred_links=inferred_links,
+                    source_record_ids=[r.id for r in core_recs],
+                    source_edge_ids=[e.id for e in core_edges],
+                    source_digest=src_digest,
+                    priority_weight=2.0,
+                    actor="orion_review",
+                )
+                updated.append("core:owner_identity")
 
         # 2. Preferences Card
         pref_recs = [r for r in records if r.kind == "preference"][:16]
