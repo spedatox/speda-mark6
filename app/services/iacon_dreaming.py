@@ -315,6 +315,7 @@ class OrionDreamer:
             return bool(str(p.get("description") or p.get("summary") or p.get("statement") or p.get("value") or "").strip())
 
         core_profile_lines: list[str] = []
+        high_priority_profile: list[str] = []
         for cu in core_units:
             if cu.stable_key.startswith("iacon:"):
                 continue  # Preferences have their own card
@@ -322,10 +323,12 @@ class OrionDreamer:
                 txt = str(sec.get("text") or "").strip()
                 if not txt or sec.get("historical") or txt.startswith("# Owner Profile"):
                     continue
-                # Prioritize dossier heading, origins, education/university, and identity sections
                 lower_txt = fold(txt)
-                if any(k in lower_txt for k in ("dossier:", "origins", "universit", "ostim", "education", "major", "bolum", "department", "family", "ankara", "bursa")):
-                    core_profile_lines.append(txt[:360])
+                if any(k in lower_txt for k in ("dossier:", "ostim", "enrolled", "management information", "current university", "bolum", "department")):
+                    high_priority_profile.append(txt[:360])
+                elif any(k in lower_txt for k in ("origins", "universit", "education", "major", "family", "ankara", "bursa")):
+                    core_profile_lines.append(txt[:300])
+        core_profile_lines = [*high_priority_profile, *core_profile_lines]
         core_recs = [
             r for r in records
             if r.kind in {"entity", "claim"} and _has_substance(r) and (
