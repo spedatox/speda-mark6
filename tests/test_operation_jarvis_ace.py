@@ -135,6 +135,10 @@ async def test_hierarchical_budget_ceiling_and_reboot_safe_kill_switch(tmp_path)
         with pytest.raises(JarvisBudgetDenied, match="exhausted"):
             await jarvis.reserve_tree_budget(1, timezone_name="Europe/Istanbul", calls=1, microdollars=60_000)
 
+        # Phase 0 server-side Shadow Mode lock cannot be disabled via save_control
+        with pytest.raises(ValueError, match="Phase 0 Shadow Mode lock"):
+            await jarvis.save_control(1, shadow_mode=False)
+
         # Pause kill switch persists in DB across a brand-new JarvisEngine instance (restart-safe)
         await jarvis.save_control(1, enabled=False)
         restarted_jarvis = JarvisEngine(sessions, ace=ACEPolicyEngine(sessions))

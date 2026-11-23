@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
+import os
 from time import perf_counter
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -17,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.database import write_session
-from app.models.iacon import IaconRecord
+from app.models.iacon import IaconRecord, IaconWork
 from app.models.jarvis import (
     JarvisActionLease, JarvisAllowance, JarvisControl, JarvisGoal, JarvisInitiative,
 )
@@ -25,6 +26,11 @@ from app.services.ace_engine import ACEPolicyEngine
 from app.services.memory_store import digest
 
 logger = logging.getLogger(__name__)
+
+
+def _live_execution_allowed() -> bool:
+    """Phase 0 server-side hard lock: live L0-L3 execution stays disabled unless explicitly unlocked."""
+    return os.getenv("SPEDA_JARVIS_ALLOW_LIVE_EXECUTION", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 INTENTION_TIERS = frozenset({"confirmed_commitment", "inferred_intention", "speculative_interest"})
 DOMAINS = frozenset({"academic", "siberay", "engineering", "health", "travel", "comms", "finance", "personal"})
@@ -182,6 +188,8 @@ class JarvisEngine:
         quiet_end_hour: int | None = None,
     ) -> dict:
         """Persist reboot-safe control & hard hierarchical budget policy."""
+        if shadow_mode is False and not _live_execution_allowed():
+            raise ValueError("Phase 0 Shadow Mode lock is active server-side; live autonomous execution is disabled.")
         now = datetime.now(timezone.utc)
         async with write_session(self.sessions) as db:
             row = await db.get(JarvisControl, user_id)
@@ -401,7 +409,12 @@ class JarvisEngine:
                 IaconRecord.user_id == user_id,
                 IaconRecord.kind == "state",
                 IaconRecord.status == "accepted",
-            ).limit(30))).scalars().all()
+            ).limit(40))).scalars().all()
+            observed_works = (await db.execute(select(IaconWork).where(
+                IaconWork.user_id == user_id,
+                IaconWork.kind == "observed_state",
+                IaconWork.status == "observed",
+            ).limit(20))).scalars().all()
 
         # 1. Goal deadline cues (72h / 24h / 4h windows)
         for g in goals:
@@ -432,36 +445,72 @@ class JarvisEngine:
                 action_plan={"goal_id": g.id, "action_kind": action_kind, "bucket": bucket},
             ))
 
-        # 2. Active Iacon situational states with upcoming starts_on / review_on
+        # 2. Active Iacon situational states (starts_on / ends_on / review_on within 72h)
         for st in states:
             p = st.payload or {}
             if p.get("closed_on"):
                 continue
-            starts_on = p.get("starts_on")
-            if not starts_on:
+            target_iso = p.get("starts_on") or p.get("ends_on") or p.get("review_on")
+            cue_label = "starts" if p.get("starts_on") else ("ends" if p.get("ends_on") else "review_due")
+            if not target_iso:
                 continue
             try:
-                st_dt = datetime.fromisoformat(str(starts_on)[:10]).replace(tzinfo=timezone.utc)
+                st_dt = datetime.fromisoformat(str(target_iso)[:10]).replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
             hrs = (st_dt - now).total_seconds() / 3600.0
-            if 0 <= hrs <= 48.0:
+            if -24.0 <= hrs <= 72.0:
+                bucket = "overdue" if hrs < 0 else ("24h" if hrs <= 24.0 else "72h")
                 cues.append(CandidateCue(
-                    dedupe_key=f"state:{st.id}:v{st.version}:48h",
+                    dedupe_key=f"state:{st.id}:v{st.version}:{cue_label}:{bucket}",
                     goal_id=None,
                     domain="personal",
                     assigned_agent="speda",
-                    title=f"Upcoming situation prep: {st.title}",
-                    rationale=f"Iacon situational state '{st.title}' starts within {int(round(hrs))}h.",
-                    action_kind="conflict_analysis",
+                    title=f"Situational prep ({cue_label}): {st.title}",
+                    rationale=f"Iacon state '{st.title}' ({cue_label}) is {int(round(hrs))}h from now.",
+                    action_kind="conflict_analysis" if hrs >= 0 else "hisar_prepared_doc",
                     intention_tier="confirmed_commitment",
                     grounding_confidence=0.85,
                     evidence_count=max(1, len(st.evidence or [])),
-                    hours_to_deadline=hrs,
+                    hours_to_deadline=max(0.0, hrs),
                     est_time_saved_min=15.0,
                     estimated_microdollars=1000,
                     source_authority="iacon_state",
-                    action_plan={"state_id": st.id, "action_kind": "conflict_analysis"},
+                    action_plan={"state_id": st.id, "cue_label": cue_label, "bucket": bucket},
+                ))
+
+        # 2b. Observed provisional states awaiting confirmation
+        for ow in observed_works:
+            op = ow.payload or {}
+            st_p = op.get("state") or {}
+            if st_p.get("closed_on"):
+                continue
+            target_iso = st_p.get("starts_on") or st_p.get("ends_on") or st_p.get("review_on")
+            if not target_iso:
+                continue
+            try:
+                st_dt = datetime.fromisoformat(str(target_iso)[:10]).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            hrs = (st_dt - now).total_seconds() / 3600.0
+            if -12.0 <= hrs <= 72.0:
+                title = str(op.get("title") or "Observed situation")
+                cues.append(CandidateCue(
+                    dedupe_key=f"observed:{ow.id}:{str(target_iso)[:10]}",
+                    goal_id=None,
+                    domain="personal",
+                    assigned_agent="speda",
+                    title=f"Provisional state check: {title}",
+                    rationale=f"Observed provisional state '{title}' is {int(round(hrs))}h away; L0/L1 prep only.",
+                    action_kind="hisar_prepared_doc",
+                    intention_tier="inferred_intention",
+                    grounding_confidence=0.72,
+                    evidence_count=1,
+                    hours_to_deadline=max(0.0, hrs),
+                    est_time_saved_min=15.0,
+                    estimated_microdollars=1000,
+                    source_authority="iacon_state",
+                    action_plan={"observed_work_id": ow.id, "action_kind": "hisar_prepared_doc"},
                 ))
 
         # 3. External untrusted sensor / mail_watch events (strictly tagged untrusted_evidence!)
@@ -594,8 +643,9 @@ class JarvisEngine:
                 action_decision = "execute_l2"
             else:
                 action_decision = "await_l3"
-            # Phase 0 invariant: shadow_mode forces status='shadow' — ZERO live execution or push!
-            status = "shadow" if ctrl.shadow_mode else action_decision
+            # Phase 0 server-side invariant: shadow_mode is enforced unless explicitly unlocked.
+            effective_shadow = bool(ctrl.shadow_mode) or (not _live_execution_allowed())
+            status = "shadow" if effective_shadow else action_decision
 
         # --- GATE 2: INTERRUPTION GATE (Independent decision: notify_now | defer_window | stage_inbox | silent_only) ---
         if action_decision == "reject":

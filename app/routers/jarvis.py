@@ -90,7 +90,10 @@ async def get_control(request: Request):
 
 @router.put("/control")
 async def update_control(request: Request, body: ControlUpdateRequest):
-    return await request.app.state.jarvis.save_control(1, **body.model_dump(exclude_none=True))
+    try:
+        return await request.app.state.jarvis.save_control(1, **body.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/goals")
