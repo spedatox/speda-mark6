@@ -304,7 +304,7 @@ class MemoryRuntime:
             # Keep the existing persisted packet shape so saved room runs can be restored across releases.
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
-            if selected + cost > min(1600, max(900, int(available * 0.45))):
+            if selected + cost > min(1100, int(available * 0.85)):
                 packet.omissions.append("Current state context reached its budget")
                 continue
             packet.blocks.append(block)
@@ -352,7 +352,7 @@ class MemoryRuntime:
                 brief["evidence_note"] = str(item["evidence_note"])[:200]
             block = json.dumps({"current_state": brief}, ensure_ascii=False, separators=(",", ":"))
             cost = token_upper_bound(block) + 1
-            if selected + cost > min(2000, max(1100, int(available * 0.55))):
+            if selected + cost > min(1350, available):
                 packet.omissions.append("Current state context reached its budget")
                 continue
             packet.blocks.append(block)
@@ -370,7 +370,9 @@ class MemoryRuntime:
         if available <= 0 or (not narratives and not chains):
             return 0
         selected = 0
-        nar_budget = min(2800, max(1200, int(available * 0.48)))
+        # Keep narratives + chains strictly within their allocated slice so Tier-3 evidence is never starved.
+        has_chains = bool(chains)
+        nar_budget = min(2200, int(available * (0.72 if has_chains else 1.0)))
         tier1 = [n for n in narratives if n.get("tier") in {"core_identity", "preferences"}]
         tier2 = [n for n in narratives if n.get("tier") not in {"core_identity", "preferences"}]
         tier2.sort(key=lambda n: (
@@ -385,8 +387,9 @@ class MemoryRuntime:
             if handle in budget.seen:
                 continue
             summary = str(nar.get("summary_markdown") or "")
-            if len(summary) > 1100:
-                summary = summary[:1100] + "…"
+            max_sum = min(900, max(240, nar_budget - selected - 260))
+            if len(summary) > max_sum:
+                summary = summary[:max_sum] + "…"
             card = {
                 "tier": nar["tier"],
                 "slug": nar["slug"],
@@ -407,7 +410,7 @@ class MemoryRuntime:
             budget.seen.add(handle)
             selected += cost
 
-        chain_budget = min(1400, max(600, int(available * 0.25)))
+        chain_budget = min(1000, max(0, available - selected))
         chain_used = 0
         for idx, ch in enumerate(chains[:4]):
             if not ch:
@@ -672,17 +675,23 @@ class MemoryRuntime:
                 append(data, key, revision, handle, block)
                 packed_fields.add(field)
                 selected += cost
+        # Guarantee a hard evidence floor (45% of available budget) so states + narratives never starve evidence.
+        evidence_reserve = int(available * 0.45) if candidates else 0
+        non_evidence_cap = max(0, available - selected - evidence_reserve)
+        has_auto = bool(result.get("autobiographical_narratives") or result.get("associative_chains"))
+        state_budget = int(non_evidence_cap * (0.48 if has_auto else 1.0))
         selected += self._select_current_states(
             packet, result.get("current_states", ()), budget=budget,
-            today=today, available=available - selected,
+            today=today, available=state_budget,
             provisional_states=result.get("provisional_states", ()),
         )
+        auto_budget = max(0, available - selected - evidence_reserve)
         selected += self._select_autobiographical_context(
             packet,
             narratives=result.get("autobiographical_narratives", ()),
             chains=result.get("associative_chains", ()),
             budget=budget,
-            available=available - selected,
+            available=auto_budget,
         )
         for _, key, title, section, revision in candidates:
             if deadline.remaining() <= 0:

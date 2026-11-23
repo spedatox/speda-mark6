@@ -116,9 +116,22 @@ _OWNER_SCHOOL = re.compile(
 _PAST_SCHOOL = re.compile(r"\b(?:old|former|previous|used to|graduated|once|eski|onceki|mezun)\b")
 
 
+def strip_reply_quote_prefix(text: str) -> str:
+    """Strip client-prepended 'Reply context (selected chat excerpts):' quote blocks so line 1 is the owner's actual turn."""
+    stripped = (text or "").lstrip()
+    if not stripped.lower().startswith("reply context"):
+        return text
+    lines = stripped.splitlines()
+    idx = 1
+    while idx < len(lines) and (not lines[idx].strip() or lines[idx].lstrip().startswith(">")):
+        idx += 1
+    body = "\n".join(lines[idx:]).strip()
+    return body or text
+
+
 def education_fact_query(query):
     """Recognize a current enrollment or program question from the owner turn."""
-    primary, _, borrowed = fold(query).partition("\n")
+    primary, _, borrowed = fold(strip_reply_quote_prefix(query)).partition("\n")
     if _PAST_SCHOOL.search(primary):
         return False
     if re.search(r"\b(?:where (?:do i study|am i enrolled)|what (?:do i study|am i studying)|"
