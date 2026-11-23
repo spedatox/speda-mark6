@@ -526,8 +526,11 @@ class SemanticIndex:
         if not self.enabled or query_vec is None:
             return []
         async with self._lock:
-            await self.sync_units_for_user(db, user_id, max_new=64)
             bucket = await self._ensure_loaded(db, user_id, "unit")
+            # Only perform bounded inline sync when the index is completely empty (e.g. fresh test DB or model swap).
+            # Ongoing unit updates are synced on publish() and bulk legacy backfill runs in background warm_search().
+            if bucket.matrix.shape[0] == 0:
+                await self.sync_units_for_user(db, user_id, max_new=32)
             hits = bucket.search(query_vec, limit=limit, min_score=min_score)
         return [(tid, sidx, sc) for (tid, sidx), sc in hits]
 
@@ -543,8 +546,9 @@ class SemanticIndex:
         if not self.enabled or query_vec is None:
             return []
         async with self._lock:
-            await self.sync_recent_sources(db, user_id, scan_limit=250, max_new=32)
             bucket = await self._ensure_loaded(db, user_id, "source")
+            if bucket.matrix.shape[0] == 0:
+                await self.sync_recent_sources(db, user_id, scan_limit=64, max_new=16)
             hits = bucket.search(query_vec, limit=limit, min_score=min_score)
         return [(tid, sc) for (tid, _), sc in hits]
 

@@ -10,7 +10,7 @@ import argparse
 import asyncio
 import json
 
-from app.database import Base, async_session, engine
+from app.database import AsyncSessionLocal, Base, engine
 from app.services.iacon_catalogue import Catalogue
 from app.services.iacon_dreaming import OrionDreamer
 from app.services.memory_store import MemoryStore
@@ -19,7 +19,7 @@ from app.services.memory_store import MemoryStore
 async def run_backfill(user_id: int, *, use_llm: bool = False, force: bool = False) -> dict:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    store = MemoryStore(async_session)
+    store = MemoryStore(AsyncSessionLocal)
     catalogue = Catalogue(store)
     dreamer = OrionDreamer(catalogue)
     bf = await catalogue.backfill_links_and_aliases(user_id)

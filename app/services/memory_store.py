@@ -149,8 +149,12 @@ class MemoryStore:
             async def _bg_warm():
                 try:
                     await self.semantic.warm()
+                    for _ in range(32):
+                        async with self.sessions() as db, db.begin():
+                            added = await self.semantic.sync_units_for_user(db, 1, max_new=128)
+                        if added == 0:
+                            break
                     async with self.sessions() as db, db.begin():
-                        await self.semantic.sync_units_for_user(db, 1, max_new=512)
                         await self.semantic.sync_recent_sources(db, 1, scan_limit=250, max_new=128)
                 except Exception:
                     pass
