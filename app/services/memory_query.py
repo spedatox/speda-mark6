@@ -95,16 +95,15 @@ def planning_window(query, today):
 
 
 def referential(value):
+    """Detect short or pronoun-referential follow-up turns structurally (zero domain/topic word lists)."""
     folded = fold(value)
-    return len(value) < 180 and (
-        bool(re.search(
-            r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin|"
-            r"destination|still|way|there|bus|exam|result|score|time|changed)\b|"
-            r"^\s*(?:names?|adlari|isimleri)\s*\??\s*$",
-            folded,
-        ))
-        or len(re.findall(r"\w+", folded)) <= 5
-    )
+    words = re.findall(r"\w+", folded)
+    if len(words) <= 6:
+        return True
+    return len(value) < 160 and bool(re.search(
+        r"\b(her|him|their|theri|they|that|this|meant|she|he|it|onun|onlarin)\b",
+        folded,
+    ))
 
 
 _NAME_QUESTION = re.compile(r"\b(?:names?|adlari|isimleri|adi)\b")

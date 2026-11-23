@@ -315,7 +315,8 @@ class OrionDreamer:
             return bool(str(p.get("description") or p.get("summary") or p.get("statement") or p.get("value") or "").strip())
 
         core_profile_lines: list[str] = []
-        high_priority_profile: list[str] = []
+        raw_profile_sections: list[str] = []
+        dossier_headings: list[str] = []
         for cu in core_units:
             if cu.stable_key.startswith("iacon:"):
                 continue  # Preferences have their own card
@@ -323,12 +324,29 @@ class OrionDreamer:
                 txt = str(sec.get("text") or "").strip()
                 if not txt or sec.get("historical") or txt.startswith("# Owner Profile"):
                     continue
-                lower_txt = fold(txt)
-                if any(k in lower_txt for k in ("dossier:", "ostim", "enrolled", "management information", "current university", "bolum", "department")):
-                    high_priority_profile.append(txt[:360])
-                elif any(k in lower_txt for k in ("origins", "universit", "education", "major", "family", "ankara", "bursa")):
-                    core_profile_lines.append(txt[:300])
-        core_profile_lines = [*high_priority_profile, *core_profile_lines]
+                if txt.lstrip().startswith("##") and "DOSSIER:" in txt.upper():
+                    dossier_headings.append(txt[:200])
+                else:
+                    raw_profile_sections.append(txt)
+        if raw_profile_sections:
+            # Rank canonical owner-profile sections by multilingual neural semantic similarity
+            # to an owner-agnostic identity concept (zero hardcoded proper nouns or topic lists).
+            sem = getattr(self.store, "semantic", None)
+            if sem is not None and sem.enabled:
+                try:
+                    anchor_vec = await sem.embedder.embed_query(
+                        "Person's full name, current university enrollment and degree program, current city and residence, family members, and current work."
+                    )
+                    sec_vecs = await sem.embedder.embed_passages([s[:600] for s in raw_profile_sections])
+                    sims = (sec_vecs @ anchor_vec).tolist() if sec_vecs.shape[0] else [0.0] * len(raw_profile_sections)
+                    ranked_secs = [s for s, _ in sorted(zip(raw_profile_sections, sims), key=lambda p: -float(p[1]))]
+                except Exception:
+                    ranked_secs = raw_profile_sections
+            else:
+                ranked_secs = raw_profile_sections
+            core_profile_lines = [*dossier_headings[:1], *(s[:360] for s in ranked_secs[:4])]
+        elif dossier_headings:
+            core_profile_lines = dossier_headings[:1]
         core_recs = [
             r for r in records
             if r.kind in {"entity", "claim"} and _has_substance(r) and (

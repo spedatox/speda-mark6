@@ -355,12 +355,11 @@ class MemoryStore:
                 today = local_day.isoformat()
                 query = turn_query(context)
                 start_day, end_day = planning_window(query, local_day)
-                primary = fold(query.partition("\n")[0])
-                planning = (start_day != local_day or end_day != local_day or bool(re.search(
-                    r"\b(plan\w*|schedule|calendar|travel\w*|trip|vacation|holiday|midterm\w*|exam\w*|"
-                    r"study|bus|flight|takvim\w*|tatil\w*|seyahat\w*|gezi\w*|vize\w*|sinav\w*|"
-                    r"agenda|briefing|good morning|gunaydin|what should i focus on|haftalik plan)\b", primary))
-                    or bool(context.trigger_payload.get("include_attention_digest") or context.trigger_payload.get("attention_only")))
+                # Explicit date-window or briefing flag — no hardcoded topic/domain keyword regexes.
+                explicit_window = (
+                    start_day != local_day or end_day != local_day
+                    or bool(context.trigger_payload.get("include_attention_digest") or context.trigger_payload.get("attention_only"))
+                )
                 payload = IaconRecord.payload
                 status = payload["status"].as_string()
                 high = payload["salience"].as_string() == "high"
@@ -368,7 +367,7 @@ class MemoryStore:
                 verified = payload["verified_on"].as_string()
                 starts, ends = payload["starts_on"].as_string(), payload["ends_on"].as_string()
                 state_order = []
-                if planning:
+                if explicit_window:
                     dated = or_(starts.is_not(None), ends.is_not(None))
                     state_order.append(case((and_(starts.is_not(None), ends.is_not(None)), 0),
                                             (dated, 1), else_=2))
@@ -385,9 +384,9 @@ class MemoryStore:
                            case((status == "active", 0), (status == "waiting", 1), else_=2),
                            IaconRecord.updated_at.desc(),
                            MemoryServingUnit.id).limit(12))).all()
-                if planning and state_candidates and query_vec is not None and self.semantic.enabled:
-                    # Rank dated planning states by multilingual neural cosine similarity on clean title + summary
-                    # (zero hardcoded topic keywords, zero JSON-wrapper noise).
+                has_dated = any(rec.payload.get("starts_on") or rec.payload.get("ends_on") for _, rec in state_candidates)
+                if state_candidates and has_dated and query_vec is not None and self.semantic.enabled:
+                    # Adaptive neural semantic scoring over dated states (zero hardcoded topic keywords).
                     texts = [
                         rec.title if (rec.payload.get("summary", "").strip() == rec.title.strip())
                         else f"{rec.title}: {rec.payload.get('summary', '')}".strip()
@@ -395,16 +394,22 @@ class MemoryStore:
                     ]
                     state_vecs = await self.semantic.embedder.embed_passages(texts)
                     sims = (state_vecs @ query_vec).tolist() if state_vecs.shape[0] else [0.0] * len(state_candidates)
-                    ranked_pairs = sorted(
-                        enumerate(zip(state_candidates, sims)),
-                        key=lambda item: (
-                            0 if (item[1][0][1].payload.get("starts_on") and item[1][0][1].payload.get("ends_on")) else (
-                                1 if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else 2
-                            ),
-                            -float(item[1][1]) if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else item[0],
-                        ),
+                    max_dated_sim = max(
+                        (float(sim) for (_, rec), sim in zip(state_candidates, sims)
+                         if rec.payload.get("starts_on") or rec.payload.get("ends_on")),
+                        default=0.0,
                     )
-                    state_candidates = [pair for _, (pair, _) in ranked_pairs]
+                    if explicit_window or max_dated_sim >= 0.38:
+                        ranked_pairs = sorted(
+                            enumerate(zip(state_candidates, sims)),
+                            key=lambda item: (
+                                0 if (item[1][0][1].payload.get("starts_on") and item[1][0][1].payload.get("ends_on")) else (
+                                    1 if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else 2
+                                ),
+                                -float(item[1][1]) if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else item[0],
+                            ),
+                        )
+                        state_candidates = [pair for _, (pair, _) in ranked_pairs]
                 units.extend(unit for unit, _ in state_candidates)
                 work_rows = (await db.execute(select(IaconWork).where(
                     IaconWork.user_id == context.user_id,
