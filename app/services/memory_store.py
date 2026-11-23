@@ -370,23 +370,6 @@ class MemoryStore:
                 state_order = []
                 if planning:
                     dated = or_(starts.is_not(None), ends.is_not(None))
-                    # Promote matching titles before the database candidate cutoff.
-                    # A dated commitment can matter even when its title shares no word with the question.
-                    from app.services.memory_query import query_terms
-                    generic_terms = {"next", "week", "tomorrow", "today", "should", "plan", "calendar",
-                                     "schedule", "hangi", "hafta", "gelecek", "onumuzdeki", "yarin"}
-                    title_terms = {word for word in query_terms(primary) if len(word) >= 4} - generic_terms
-                    for cue, labels in (
-                        (r"\b(?:study|studying|midterm\w*|exam\w*|vize\w*|sinav\w*)", ("exam", "midterm", "vize", "sınav")),
-                        (r"\b(?:trip|travel\w*|flight|bus|seyahat\w*|yolculuk\w*)", ("trip", "travel", "seyahat", "yolculuk")),
-                        (r"\b(?:vacation|holiday|tatil\w*)", ("vacation", "holiday", "tatil")),
-                    ):
-                        if re.search(cue, primary):
-                            title_terms.update(labels)
-                    if title_terms:
-                        title_matches = or_(*(func.lower(IaconRecord.title).contains(word, autoescape=True)
-                                              for word in sorted(title_terms)))
-                        state_order.append(case((title_matches, 0), else_=1))
                     state_order.append(case((and_(starts.is_not(None), ends.is_not(None)), 0),
                                             (dated, 1), else_=2))
                 state_candidates = (await db.execute(select(MemoryServingUnit, IaconRecord).join(IaconRecord,
@@ -402,6 +385,26 @@ class MemoryStore:
                            case((status == "active", 0), (status == "waiting", 1), else_=2),
                            IaconRecord.updated_at.desc(),
                            MemoryServingUnit.id).limit(12))).all()
+                if planning and state_candidates and query_vec is not None and self.semantic.enabled:
+                    # Rank dated planning states by multilingual neural cosine similarity on clean title + summary
+                    # (zero hardcoded topic keywords, zero JSON-wrapper noise).
+                    texts = [
+                        rec.title if (rec.payload.get("summary", "").strip() == rec.title.strip())
+                        else f"{rec.title}: {rec.payload.get('summary', '')}".strip()
+                        for _, rec in state_candidates
+                    ]
+                    state_vecs = await self.semantic.embedder.embed_passages(texts)
+                    sims = (state_vecs @ query_vec).tolist() if state_vecs.shape[0] else [0.0] * len(state_candidates)
+                    ranked_pairs = sorted(
+                        enumerate(zip(state_candidates, sims)),
+                        key=lambda item: (
+                            0 if (item[1][0][1].payload.get("starts_on") and item[1][0][1].payload.get("ends_on")) else (
+                                1 if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else 2
+                            ),
+                            -float(item[1][1]) if (item[1][0][1].payload.get("starts_on") or item[1][0][1].payload.get("ends_on")) else item[0],
+                        ),
+                    )
+                    state_candidates = [pair for _, (pair, _) in ranked_pairs]
                 units.extend(unit for unit, _ in state_candidates)
                 work_rows = (await db.execute(select(IaconWork).where(
                     IaconWork.user_id == context.user_id,
