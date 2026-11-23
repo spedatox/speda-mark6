@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { formatToolName } from '../toolName'
+
 /**
  * English dictionary — the fallback/reference locale.
  *
@@ -416,7 +418,7 @@ const en = {
       graph_path: 'Tracing the codebase graph',
       graph_overview: 'Mapping the codebase graph',
     },
-    usingTool: (toolName: string) => `Using ${toolName.replace(/_/g, ' ')}`,
+    usingTool: (toolName: string) => `Using ${formatToolName(toolName)}`,
     thinking: 'Thinking',
     // Waiting lines, escalating with how long the turn has stayed silent. One
     // band per 5s (THINKING_BAND_MS in Message.tsx), rolled every 2s, last band

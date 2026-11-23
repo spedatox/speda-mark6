@@ -17,8 +17,42 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 object ToolStatus {
 
+    private val MCP_HASH_SUFFIX = Regex("_[0-9a-fA-F]{10}$")
+    private val WORD_SEP = Regex("[_\\-\\s]+")
+
+    /**
+     * Turn an internal tool identifier into a human-readable lowercase label.
+     * Literal port of `formatToolName` in Heartbreaker (`lib/toolName.ts`):
+     * strips `mcp_<server>_<slug>_<10-hex-hash>` (and `mcp__<server>__<tool>`)
+     * framing and collapses adjacent duplicate words (`google tasks tasks list`
+     * -> `google tasks list`).
+     */
+    fun formatToolName(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return ""
+        val isMcp = trimmed.startsWith("mcp_")
+        var body = when {
+            trimmed.startsWith("mcp__") -> trimmed.drop(5)
+            isMcp -> trimmed.drop(4)
+            else -> trimmed
+        }
+        if (isMcp) {
+            body = body.replace(MCP_HASH_SUFFIX, "")
+        }
+        val words = body.split(WORD_SEP).filter { it.isNotEmpty() }
+        val deduped = ArrayList<String>(words.size)
+        for (w in words) {
+            if (deduped.isNotEmpty() && deduped.last().equals(w, ignoreCase = true)) continue
+            deduped.add(w)
+        }
+        return deduped.joinToString(" ")
+    }
+
+    fun displayName(raw: String): String =
+        formatToolName(raw).replaceFirstChar { it.uppercase() }
+
     fun statusLabel(toolName: String, t: AppStrings): String =
-        t.toolStatus.labels[toolName] ?: t.toolStatus.usingTool(toolName)
+        t.toolStatus.labels[toolName] ?: t.toolStatus.usingTool(formatToolName(toolName))
 
     /** Keep the last two path segments so long paths stay readable. */
     fun shortPath(p: String): String {

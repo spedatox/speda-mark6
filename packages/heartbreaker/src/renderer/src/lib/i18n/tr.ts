@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Ahmet Erol Bayrak
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { formatToolName } from '../toolName'
+
 /**
  * Turkish dictionary — the app's primary/default locale.
  *
@@ -410,7 +412,7 @@ const tr: Dict = {
       graph_path: 'Kod tabanı grafiği izleniyor',
       graph_overview: 'Kod tabanı grafiği haritalanıyor',
     },
-    usingTool: (toolName: string) => `${toolName.replace(/_/g, ' ')} kullanılıyor`,
+    usingTool: (toolName: string) => `${formatToolName(toolName)} kullanılıyor`,
     thinking: 'Düşünüyor',
     thinkingPhases: [
       ['Düşünüyor…', 'İşleniyor…', 'Mantık yürütülüyor…', 'Noktalar birleştiriliyor…'],

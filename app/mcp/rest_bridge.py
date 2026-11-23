@@ -5,6 +5,7 @@ grants, schema pins and effect receipts with MCP tools without a second registry
 """
 import asyncio
 import json
+import httpx
 from jsonschema import Draft202012Validator
 from app.mcp.client import MCPClient, fingerprint
 from app.schemas.llm import ProviderError
@@ -15,6 +16,32 @@ READ_ONLY_TOOLS = frozenset({
     'tasks_list_lists', 'tasks_list', 'drive_search', 'drive_read', 'contacts_search',
     'outlook_search', 'outlook_read', 'outlook_list_folders',
 })
+
+
+def _vendor_http_error(name: str, exc: httpx.HTTPStatusError) -> str:
+    response = exc.response
+    status = response.status_code
+    detail = ""
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    if isinstance(payload, dict):
+        err = payload.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message")
+            code = err.get("code")
+            if isinstance(msg, str) and msg.strip():
+                detail = msg.strip()
+            elif isinstance(code, str) and code.strip():
+                detail = code.strip()
+        elif isinstance(err, str) and err.strip():
+            detail = err.strip()
+        elif isinstance(payload.get("message"), str) and payload["message"].strip():
+            detail = payload["message"].strip()
+    if not detail:
+        detail = (response.reason_phrase or "").strip() or "Request rejected by vendor"
+    return f"Error: Vendor rejected {name} (HTTP {status}): {detail[:300]}"
 
 
 class RestCapabilityClient(MCPClient):
@@ -75,8 +102,24 @@ class RestCapabilityClient(MCPClient):
             except asyncio.CancelledError:
                 self.failures += 1
                 raise
+            except ProviderError:
+                self.failures += 1
+                raise
+            except httpx.HTTPStatusError as exc:
+                self.failures += 1
+                status = exc.response.status_code
+                # A definite 4xx rejection (except 408 timeout) or any failure on a
+                # read-only tool has no uncertain side effect; return an error result
+                # to the model so it can self-correct instead of aborting the turn.
+                if (400 <= status < 500 and status != 408) or self.read_only(name):
+                    return _vendor_http_error(name, exc)
+                raise ProviderError("vendor_outcome_unknown", "Vendor call did not return a confirmed result; inspect before retrying") from exc
             except Exception as exc:
                 self.failures += 1
+                if self.read_only(name):
+                    if isinstance(exc, httpx.TimeoutException):
+                        return f"Error: Vendor request timed out for {name}."
+                    return f"Error: Vendor read failed for {name} ({type(exc).__name__})."
                 raise ProviderError("vendor_outcome_unknown", "Vendor call did not return a confirmed result; inspect before retrying") from exc
             finally:
                 self.inflight -= 1

@@ -104,3 +104,66 @@ async def test_inherited_dispatch_shapes_remain_compatible(monkeypatch):
     assert isinstance(await google._calendar_dispatch('calendar_list_events', {'calendar_id':'primary'}, 'fixture'), str)
     assert isinstance(await microsoft._outlook_dispatch('outlook_search', {'query':'fixture'}, 'fixture'), str)
     assert len(calls) == 2 and all(c[0] == 'GET' for c in calls)
+
+
+async def test_rest_definite_4xx_and_read_only_errors_return_tool_error_not_unknown_outcome(memory, credentials):
+    class Token:
+        async def get(self): return 'fixture-token'
+    clients = build_google_clients(token_provider=Token())
+    registry = CapabilityRegistry(memory.sessions)
+    for client in clients:
+        client.allowed_agents = frozenset({'speda'})
+        await registry.register_mcp(client)
+    context = memory.context(agent_id='speda')
+    tasks_list_name = next(n for n, original in registry._mcp_original_names.items() if original == 'tasks_list')
+    gmail_send_name = next(n for n, original in registry._mcp_original_names.items() if original == 'gmail_send')
+    context.extra['loaded_tools'] = {tasks_list_name, gmail_send_name}
+
+    tasks_client = registry._mcp_clients['google_tasks']
+    req = httpx.Request('GET', 'https://tasks.googleapis.com/tasks/v1/lists/Mark%20VI/tasks')
+    resp_400 = httpx.Response(400, json={'error': {'code': 400, 'message': 'Invalid task list ID'}}, request=req)
+    async def bad_list(name, args, token):
+        resp_400.raise_for_status()
+    tasks_client._dispatch = bad_list
+    out = await registry.execute_recorded(
+        Block(type='tool_use', id='t-bad-list', name=tasks_list_name, input={'tasklist_id': 'Mark VI'}),
+        context,
+    )
+    assert out == 'Error: Vendor rejected tasks_list (HTTP 400): Invalid task list ID'
+
+    async def read_timeout(name, args, token):
+        raise httpx.ReadTimeout('read timed out')
+    tasks_client._dispatch = read_timeout
+    out_timeout = await registry.execute_recorded(
+        Block(type='tool_use', id='t-read-timeout', name=tasks_list_name, input={'tasklist_id': '@default'}),
+        context,
+    )
+    assert out_timeout == 'Error: Vendor request timed out for tasks_list.'
+
+    gmail_client = registry._mcp_clients['google_gmail']
+    send_req = httpx.Request('POST', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send')
+    resp_400_send = httpx.Response(400, json={'error': {'message': 'Invalid To header'}}, request=send_req)
+    async def bad_send(name, args, token):
+        resp_400_send.raise_for_status()
+    gmail_client._dispatch = bad_send
+    out_send = await registry.execute_recorded(
+        Block(type='tool_use', id='t-send-400', name=gmail_send_name,
+              input={'to': 'not-an-email', 'subject': 'Hi', 'body': 'Test'}),
+        context,
+    )
+    assert out_send == 'Error: Vendor rejected gmail_send (HTTP 400): Invalid To header'
+
+    # 5xx and 408 on mutating tools remain unknown outcomes requiring reconciliation.
+    for code, call_id in ((500, 't-send-500'), (408, 't-send-408')):
+        resp_uncertain = httpx.Response(code, json={'error': {'message': 'transient'}}, request=send_req)
+        async def uncertain_send(name, args, token, _r=resp_uncertain):
+            _r.raise_for_status()
+        gmail_client._dispatch = uncertain_send
+        with pytest.raises(ProviderError, match='inspect'):
+            await registry.execute_recorded(
+                Block(type='tool_use', id=call_id, name=gmail_send_name,
+                      input={'to': 'ok@example.test', 'subject': 'Hi', 'body': 'Test'}),
+                context,
+            )
+
+    await registry.shutdown_adapters()

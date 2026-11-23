@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.speda.heartbreaker.domain.ToolBadge
+import com.speda.heartbreaker.domain.ToolStatus
 import com.speda.heartbreaker.domain.ToolStepState
 import com.speda.heartbreaker.domain.inputRows
 import com.speda.heartbreaker.domain.primaryArg
@@ -164,8 +165,8 @@ private fun ToolRow(tool: ToolBadge, live: Boolean) {
                 ToolStepState.Done -> HbGlyphs.Check(palette.green, size = 13.dp)
             }
 
-            // The tool's real name — searchable when something goes wrong.
-            HbText(tool.name, style = HbType.read.copy(fontSize = 13.5.sp), color = palette.text, maxLines = 1)
+            // Humanized tool name — strips internal MCP prefix & hash suffix.
+            HbText(ToolStatus.displayName(tool.name), style = HbType.read.copy(fontSize = 13.5.sp), color = palette.text, maxLines = 1)
             if (arg != null) {
                 HbText(
                     arg,

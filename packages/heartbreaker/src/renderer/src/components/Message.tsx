@@ -9,6 +9,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { ChatMessage, FileMeta, ToolBadge, SubagentRun, ReportMeta } from '../lib/types'
 import { stepState } from '../lib/types'
+import { formatToolName } from '../lib/toolName'
 import { TurnError } from './TurnError'
 import { SubagentPanel } from './SubagentPanel'
 import { useSidePane } from './SidePane'
@@ -94,7 +95,7 @@ function isSearchTool(name: string): boolean {
 /* ── Tool disclosure — "Searched the web ▸" collapsible ─────────────────── */
 /* Per-tool detail: friendly name + what it did (input) + what came back (result). */
 function ToolDetail({ tool }: { tool: ToolBadge }) {
-  const name = tool.name.replace(/_/g, ' ').replace(/-/g, ' ')
+  const name = formatToolName(tool.name)
 
   // Pull the most meaningful fields out of the tool input.
   const inputRows: [string, string][] = []
@@ -179,7 +180,7 @@ export function toolSummary(tool: ToolBadge, t: Dict, running: boolean): { verb:
     case 'graph_overview': return { verb: running ? t.message.verbMappingGraph : t.message.verbMappedGraph }
     case 'Task':           return { verb: running ? t.message.verbDeploying : t.message.verbDeployed, target: str('description') || str('legionnaire') }
     default: {
-      const friendly = tool.name.replace(/_/g, ' ').replace(/-/g, ' ')
+      const friendly = formatToolName(tool.name)
       if (isSearchTool(tool.name)) return { verb: running ? t.message.verbSearching : t.message.verbSearched, target: str('query') || str('question') }
       return { verb: friendly.charAt(0).toUpperCase() + friendly.slice(1) }
     }

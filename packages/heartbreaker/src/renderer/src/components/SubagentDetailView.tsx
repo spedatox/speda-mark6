@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { SubagentRun, SubagentStep } from '../lib/types'
+import { formatToolName } from '../lib/toolName'
 import { foldLegionEvent, workerLabel } from '../lib/subagentFold'
 import { attachLegionStream, attachWorkerExecution, inspectWorkerExecution, interruptWorker, messageWorker, newRequestId } from '../lib/api'
 import { useChatContext } from '../store/chat'
@@ -89,7 +90,7 @@ function MarkdownSegment({ text }: { text: string }) {
 /* ── Tool step renderer ──────────────────────────────────────────────────── */
 
 function ToolStep({ step }: { step: SubagentStep }) {
-  const name = (step.tool ?? '').replace(/_/g, ' ').replace(/-/g, ' ')
+  const name = formatToolName(step.tool ?? '')
 
   // Format input as key: value pairs
   const inputEntries: [string, string][] = []
