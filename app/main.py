@@ -209,8 +209,9 @@ async def application_lifespan(app: FastAPI, incident_tasks):
     await registry.register_skill(lookup)
     from app.skills.resolve_followup import ResolveFollowup
     await registry.register_skill(ResolveFollowup(AsyncSessionLocal))
-    from app.skills.course_memory import ReadCourseMemorySkill
+    from app.skills.course_memory import ReadCourseMemorySkill, UpdateCourseMemorySkill
     await registry.register_skill(ReadCourseMemorySkill(catalogue))
+    await registry.register_skill(UpdateCourseMemorySkill(catalogue))
     from app.skills.search_history import SearchHistorySkill
     await registry.register_skill(SearchHistorySkill(lookup))
     await registry.register_skill(IaconProposeSkill(preparer))

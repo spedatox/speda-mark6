@@ -105,3 +105,59 @@ async def test_course_name_uses_timetable_and_archive_heading(memory):
         result = json.loads(await skill.execute({"course_name": "Financial Accounting", "term": term}, context))
         assert result["record_id"] == saved["id"]
         assert json.loads(await skill.execute({"course_name": "Accounting"}, context))["status"] == "no_matches"
+
+
+async def test_ultron_can_update_course_memory_preserving_notes_and_enforcing_owner_gate(memory):
+    from app.services.iacon_catalogue import Catalogue
+    from app.skills.course_memory import UpdateCourseMemorySkill
+
+    catalogue = Catalogue(memory.store)
+    reader = ReadCourseMemorySkill(catalogue)
+    writer = UpdateCourseMemorySkill(catalogue)
+    term = "2026-2027-fall"
+    initial = (
+        "# MIS243 — Financial Accounting\n\n"
+        "## Overview\n\n- Instructor: Doç. Dr. Melike Aktaş Bozkurt.\n\n"
+        "## Assessments\n\n- Midterm exam: 2026-11-20 at 09:00.\n\n"
+        "## Lecture Log\n\n### 2026-09-28\n- Accounting Equation.\n"
+    )
+    saved = await save_course(memory, catalogue, term, initial, code="MIS243")
+
+    # 1. Background / n8n trigger must be refused
+    bg_ctx = memory.context("note score", agent_id="ultron")
+    bg_ctx.triggered_by = "n8n"
+    refused = json.loads(await writer.execute({
+        "course_code": "MIS243", "expected_version": 1, "section": "Assessments",
+        "entry": "Midterm score: 100/100 (owner-reported, 2026-11-23).",
+    }, bg_ctx))
+    assert refused["status"] == "refused"
+
+    # 2. Stale version must be rejected with version_conflict
+    user_ctx = memory.context("note accounting 100", agent_id="ultron")
+    conflict = json.loads(await writer.execute({
+        "course_code": "MIS243", "expected_version": 99, "section": "Assessments",
+        "entry": "Midterm score: 100/100 (owner-reported, 2026-11-23).",
+    }, user_ctx))
+    assert conflict["status"] == "version_conflict"
+    assert conflict["current_version"] == 1
+
+    # 3. Valid interactive owner update appends cleanly under Assessments & preserves all other sections
+    updated = json.loads(await writer.execute({
+        "course_code": "MIS243", "expected_version": saved["version"], "section": "Assessments",
+        "entry": "Midterm score: 100/100 (owner-reported, 2026-11-23).",
+    }, user_ctx))
+    assert updated["status"] == "updated"
+    assert updated["version"] == 2
+
+    # 4. Read back via read_course_memory and verify preservation + new score + revision history
+    async with memory.sessions() as db:
+        user_ctx.db = db
+        after = json.loads(await reader.execute({"course_code": "MIS243"}, user_ctx))
+    assert after["status"] == "found"
+    assert after["version"] == 2
+    assert "Midterm score: 100/100 (owner-reported, 2026-11-23)." in after["text"]
+    assert "Midterm exam: 2026-11-20 at 09:00." in after["text"]
+    assert "Doç. Dr. Melike Aktaş Bozkurt" in after["text"]
+    assert "Accounting Equation." in after["text"]
+    rec_with_hist = await catalogue.get(1, saved["id"], history=True)
+    assert len(rec_with_hist["revisions"]) == 2

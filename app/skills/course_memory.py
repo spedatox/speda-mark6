@@ -144,3 +144,182 @@ class ReadCourseMemorySkill(Skill):
             "text": body[offset:end],
             "next_offset": end if end < len(body) else None,
         }, ensure_ascii=False)
+
+
+_ALLOWED_SECTIONS = ("Overview", "Materials", "Assessments", "Lecture Log")
+
+
+def _apply_section_update(body: str, section: str, entry: str, mode: str) -> str:
+    """Append to or replace one named `## <section>` block while preserving all other sections."""
+    cleaned_entry = entry.strip()
+    if mode == "append" and not cleaned_entry.startswith(("-", "*", "###")):
+        cleaned_entry = f"- {cleaned_entry}"
+    header_re = re.compile(rf"(?m)^##[ \t]+{re.escape(section)}[ \t]*$")
+    match = header_re.search(body)
+    if not match:
+        sep = "\n\n" if body.endswith("\n") else "\n\n"
+        return body.rstrip() + f"{sep}## {section}\n\n{cleaned_entry}\n"
+    next_sec = re.search(r"(?m)^##[ \t]+\S", body[match.end():])
+    sec_end = match.end() + next_sec.start() if next_sec else len(body)
+    existing_block = body[match.end():sec_end].strip()
+    if mode == "replace_section":
+        new_block = cleaned_entry
+    else:
+        new_block = f"{existing_block}\n{cleaned_entry}" if existing_block else cleaned_entry
+    prefix = body[:match.end()].rstrip()
+    suffix = body[sec_end:].lstrip("\n")
+    rebuilt = f"{prefix}\n\n{new_block}\n"
+    if suffix:
+        rebuilt += f"\n{suffix}"
+    return rebuilt
+
+
+class UpdateCourseMemorySkill(Skill):
+    name = "update_course_memory"
+    restricted_to = frozenset({"ultron"})
+    read_only = False
+    description = (
+        "Update one of the owner's saved course records (e.g. adding exam scores, assessments, "
+        "materials, overview details, or lecture log entries) while preserving all existing notes. "
+        "Use ONLY when the owner explicitly asks to record or update a course note in the current "
+        "interactive user conversation; automatic and agent-triggered calls are refused. "
+        "Read the record with read_course_memory first to get its current version (expected_version). "
+        "Writes through the canonical Iacon catalogue with full revision history."
+    )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "course_code": {"type": "string", "maxLength": 32, "description": "Course code, e.g. MIS243 or MIS 215."},
+            "term": {"type": "string", "maxLength": 24, "description": "Optional academic term, e.g. 2026-2027-fall."},
+            "expected_version": {"type": "integer", "minimum": 1, "description": "Current record version from read_course_memory."},
+            "section": {
+                "type": "string",
+                "enum": list(_ALLOWED_SECTIONS),
+                "description": "Target markdown section inside the course record.",
+            },
+            "entry": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "Concise factual entry to append (or replace the section with).",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["append", "replace_section"],
+                "default": "append",
+                "description": "Default 'append' preserves all existing notes in the section; use 'replace_section' only for explicit corrections.",
+            },
+        },
+        "required": ["course_code", "expected_version", "section", "entry"],
+        "additionalProperties": False,
+    }
+
+    def __init__(self, catalogue):
+        self.catalogue = catalogue
+
+    async def execute(self, args, context):
+        if getattr(context, "triggered_by", None) != "user" or getattr(context, "task_role", "interactive") != "interactive":
+            return json.dumps({
+                "status": "refused",
+                "reason": "Course record edits require an explicit request in an interactive owner conversation.",
+            })
+        code = "".join(str(args.get("course_code", "")).upper().split())
+        term = str(args.get("term", "")).strip().lower().replace(" ", "-")
+        section = str(args.get("section", "")).strip()
+        entry = str(args.get("entry", "")).strip()
+        mode = str(args.get("mode", "append")).strip()
+        expected_version = int(args.get("expected_version", 0))
+
+        if not code or not re.fullmatch(_CODE, code):
+            return '{"status":"invalid_arguments","reason":"Use a course code such as MIS243."}'
+        if term and not re.fullmatch(_TERM, term):
+            return '{"status":"invalid_arguments","reason":"Use a term such as 2026-2027-fall."}'
+        if section not in _ALLOWED_SECTIONS:
+            return '{"status":"invalid_arguments","reason":"Choose Overview, Materials, Assessments, or Lecture Log."}'
+        if not entry or len(entry) > 2000:
+            return '{"status":"invalid_arguments","reason":"Entry must be 1..2000 characters."}'
+        if mode not in {"append", "replace_section"}:
+            return '{"status":"invalid_arguments","reason":"Mode must be append or replace_section."}'
+
+        title_col = IaconRecord.title
+        query = select(IaconRecord.id, title_col).where(
+            IaconRecord.user_id == context.user_id,
+            IaconRecord.kind == "document",
+            IaconRecord.status == "accepted",
+            title_col.startswith(_ROOT),
+            title_col.regexp_match(rf"^{_ROOT}{term or _TERM}/{code}\.md$"),
+        ).order_by(title_col.desc(), IaconRecord.id)
+
+        async with self.catalogue.sessions() as db:
+            rows = (await db.execute(query.limit(2))).all()
+        if not rows:
+            return json.dumps({"status": "not_found", "reason": f"No saved course record found for {code}."})
+        if len(rows) > 1:
+            return json.dumps({
+                "status": "select_term",
+                "reason": "Multiple terms match; pass the exact term.",
+                "records": [{"path": p, "record_id": rid} for rid, p in rows],
+            })
+
+        record_id, path = rows[0]
+        try:
+            current = await self.catalogue.get(context.user_id, record_id)
+        except KeyError:
+            return '{"status":"unavailable"}'
+        if current["version"] != expected_version:
+            return json.dumps({
+                "status": "version_conflict",
+                "current_version": current["version"],
+                "reason": "Course record changed since you last read it; call read_course_memory again.",
+            })
+
+        old_body = current["payload"]["content"]
+        new_body = _apply_section_update(old_body, section, entry, mode)
+        if new_body == old_body:
+            return json.dumps({
+                "status": "unchanged",
+                "record_id": record_id,
+                "version": current["version"],
+                "path": path,
+            })
+
+        from app.schemas.iacon import Command
+        from app.services.iacon_catalogue import Conflict
+        from app.services.memory_store import digest
+
+        content_hash = digest(new_body)[:16]
+        intake = await self.catalogue.intake_source(
+            context.user_id,
+            key=f"course:{record_id}:v{expected_version}:{content_hash}",
+            content=new_body,
+        )
+        new_payload = {**current["payload"], "content": new_body}
+        cmd = Command(
+            command_id=f"course-update:{record_id}:v{expected_version}:{content_hash}",
+            record_id=record_id,
+            expected_version=expected_version,
+            kind="document",
+            title=path,
+            payload=new_payload,
+            evidence=[{
+                "source_id": intake["source_id"],
+                "start": 0,
+                "end": len(new_body),
+                "quote": new_body,
+            }],
+        )
+        try:
+            saved = await self.catalogue.apply(context.user_id, cmd, actor="owner")
+        except Conflict as exc:
+            return json.dumps({"status": "version_conflict", "reason": str(exc)})
+        except ValueError as exc:
+            return json.dumps({"status": "error", "reason": str(exc)})
+
+        return json.dumps({
+            "status": "updated",
+            "record_id": saved["id"],
+            "version": saved["version"],
+            "path": path,
+            "section": section,
+            "mode": mode,
+        }, ensure_ascii=False)

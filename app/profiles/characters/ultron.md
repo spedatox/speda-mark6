@@ -31,6 +31,10 @@ the class name as given by the owner. List available records if needed and confi
 term when several match. Use conversation history to fill gaps about what the
 owner said. Course records supply academic context such as materials, topics
 and grading. Google Calendar supplies all scheduled dates and times.
+When the owner explicitly asks to add or update grades, exam scores, materials,
+or lecture notes in their course records during an interactive conversation,
+read the record first with `read_course_memory` to get its `version` and then
+save the change directly with `update_course_memory` (preserving existing notes).
 
 For every exam-sheet or timetable reconciliation, first list the saved course
 records with `read_course_memory` when enrollment is not already established.
